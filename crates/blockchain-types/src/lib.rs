@@ -55,11 +55,107 @@ pub type Hash256 = [u8; 32];
 /// 固定大小的 SHA-512 哈希（64 字节）
 pub type Hash512 = [u8; 64];
 
-/// 公钥类型（Ed25519，32 字节）
-pub type PublicKey = [u8; 32];
-/// 私钥类型（Ed25519，64 字节，包含种子和公钥）
-pub type SecretKey = [u8; 64];
-/// 签名类型（Ed25519，64 字节）
+/// 公钥类型（支持 Ed25519 32 字节 和 SM2 64 字节）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum PublicKey {
+    /// Ed25519 公钥（32 字节）
+    Ed25519([u8; 32]),
+    /// SM2 公钥（64 字节，未压缩 x || y）
+    Sm2([u8; 64]),
+}
+
+impl PublicKey {
+    /// 获取公钥长度（字节）
+    pub fn len(&self) -> usize {
+        match self {
+            PublicKey::Ed25519(bytes) => bytes.len(),
+            PublicKey::Sm2(bytes) => bytes.len(),
+        }
+    }
+
+    /// 是否为 Ed25519 公钥
+    pub fn is_ed25519(&self) -> bool {
+        matches!(self, PublicKey::Ed25519(_))
+    }
+
+    /// 是否为 SM2 公钥
+    pub fn is_sm2(&self) -> bool {
+        matches!(self, PublicKey::Sm2(_))
+    }
+
+    /// 转换为字节 slice
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            PublicKey::Ed25519(bytes) => bytes,
+            PublicKey::Sm2(bytes) => bytes,
+        }
+    }
+
+    /// 尝试从字节数组构造（自动判断算法）
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        match bytes.len() {
+            32 => {
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(bytes);
+                Some(PublicKey::Ed25519(arr))
+            }
+            64 => {
+                let mut arr = [0u8; 64];
+                arr.copy_from_slice(bytes);
+                Some(PublicKey::Sm2(arr))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// 私钥类型（支持 Ed25519 64 字节 和 SM2 32 字节）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum SecretKey {
+    /// Ed25519 私钥（64 字节，包含 seed+public）
+    Ed25519([u8; 64]),
+    /// SM2 私钥（32 字节，d 值）
+    Sm2([u8; 32]),
+}
+
+impl SecretKey {
+    /// 获取私钥长度
+    pub fn len(&self) -> usize {
+        match self {
+            SecretKey::Ed25519(bytes) => bytes.len(),
+            SecretKey::Sm2(bytes) => bytes.len(),
+        }
+    }
+
+    /// 转换为字节 slice
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            SecretKey::Ed25519(bytes) => bytes,
+            SecretKey::Sm2(bytes) => bytes,
+        }
+    }
+
+    /// 尝试从字节数组构造
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        match bytes.len() {
+            64 => {
+                let mut arr = [0u8; 64];
+                arr.copy_from_slice(bytes);
+                Some(SecretKey::Ed25519(arr))
+            }
+            32 => {
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(bytes);
+                Some(SecretKey::Sm2(arr))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// 签名类型（Ed25519 和 SM2 均为 64 字节）
 pub type Signature = [u8; 64];
 
 /// 时间戳（Unix 时间戳，秒）

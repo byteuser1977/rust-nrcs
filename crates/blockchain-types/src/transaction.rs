@@ -4,6 +4,10 @@ use super::*;
 use serde::{Deserialize, Serialize};
 use chrono::Utc;
 
+// 密码学依赖
+use ed25519_dalek;
+use sm2;
+
 /// 交易结构体
 ///
 /// 交易是区块链中的基本操作单元，代表账户间的价值转移或合约调用。
@@ -174,12 +178,27 @@ impl Transaction {
     /// 验证交易签名（需要公钥）
     pub fn verify_signature(&self, public_key: &PublicKey) -> Result<()> {
         let data_to_sign = self.serialize_for_signing();
-        use ed25519_dalek::{PublicKey, Signature as EdSignature};
 
-        let pk = PublicKey::from_bytes(public_key).map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
-        let sig = EdSignature::from_bytes(&self.signature).map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+        match public_key {
+            PublicKey::Ed25519(bytes) => {
+                let pk = ed25519_dalek::PublicKey::from_bytes(bytes)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+                let sig = ed25519_dalek::Signature::from_bytes(&self.signature)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+                pk.verify(&data_to_sign, &sig)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+            }
+            PublicKey::Sm2(bytes) => {
+                let pk = sm2::PublicKey::from_bytes(bytes)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+                let sig = sm2::Signature::from_bytes(&self.signature)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+                sm2::verify(&pk, &data_to_sign, &sig)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+            }
+        }
 
-        pk.verify(&data_to_sign, &sig).map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))
+        Ok(())
     }
 
     /// 序列化为二进制（bincode）用于网络传输

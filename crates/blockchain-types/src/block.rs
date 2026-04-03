@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 use chrono::Utc;
 
+// 密码学依赖
+use ed25519_dalek;
+use sm2;
+
 /// 区块结构体
 ///
 /// 区块是区块链的基本组成单元，包含区块头部和交易列表。
@@ -96,12 +100,27 @@ impl Block {
     /// 验证区块签名
     pub fn verify_signature(&self, public_key: &PublicKey) -> Result<()> {
         let header_data = self.serialize_header_for_signing();
-        use ed25519_dalek::{PublicKey, Signature as EdSignature};
 
-        let pk = PublicKey::from_bytes(public_key).map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
-        let sig = EdSignature::from_bytes(&self.block_signature).map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+        match public_key {
+            PublicKey::Ed25519(bytes) => {
+                let pk = ed25519_dalek::PublicKey::from_bytes(bytes)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+                let sig = ed25519_dalek::Signature::from_bytes(&self.block_signature)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+                pk.verify(&header_data, &sig)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+            }
+            PublicKey::Sm2(bytes) => {
+                let pk = sm2::PublicKey::from_bytes(bytes)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+                let sig = sm2::Signature::from_bytes(&self.block_signature)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+                sm2::verify(&pk, &header_data, &sig)
+                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+            }
+        }
 
-        pk.verify(&header_data, &sig).map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))
+        Ok(())
     }
 
     /// 序列化区块头（用于哈希计算）

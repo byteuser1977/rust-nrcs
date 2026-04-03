@@ -11,6 +11,7 @@ members = [
     "crates/account",
     "crates/http-api",
     "apps/node",
+    "tools",
 ]
 
 [profile.release]

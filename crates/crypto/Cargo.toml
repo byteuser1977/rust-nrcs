@@ -16,6 +16,27 @@ blake3 = "1.0"
 thiserror = "1.0"
 zeroize = "1.6" # 安全内存清除
 
+# 配置管理
+config = { version = "0.13", default-features = false, features = ["toml"] }
+serde = { version = "1.0", features = ["derive"] }
+once_cell = "1.19"
+
+# 国密算法库
+sm2 = "0.14.0-rc.8"
+sm3 = "0.5.0"
+sm4 = "0.6.0-rc.3"
+
+# SM4-GCM 模式支持
+sm4-gcm = "0.1.2"
+
+# 块密码和 AEAD 支持
+block-cipher-trait = "0.11"
+
+# AES 及其模式
+aes = "0.8"
+aes-gcm = "0.10"
+cbc = { version = "0.1", features = ["aes"] } # AES-CBC 使用 cbc crate
+
 [dev-dependencies]
 criterion = "0.5"
 hex = "0.4"

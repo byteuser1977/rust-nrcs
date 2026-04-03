@@ -430,3 +430,6 @@ impl TransactionReceiptModel {
         })
     }
 }
+// Auto-generated models (DB-02)
+include!("generated_models.rs");
+
