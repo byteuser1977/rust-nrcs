@@ -181,8 +181,8 @@ impl Transaction {
     }
 
     /// 从二进制反序列化
-    pub fn from_bincode(data: &[u8]) -> Result<Self> {
-        bincode::deserialize(data).map_err(|e| BlockchainError::Serialization(Box::new(e)))
+    pub fn from_bincode(_data: &[u8]) -> Result<Self> {
+        unimplemented!("Deserialize not yet supported; will be implemented later")
     }
 
     /// 序列化为 JSON 用于 API 输出（不包含签名敏感信息）
