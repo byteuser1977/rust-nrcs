@@ -143,7 +143,7 @@ impl Account {
     }
 
     /// 获取 Base58 地址
-    pub fn get_address(&self) -> Option<&str>> {
+    pub fn get_address(&self) -> Option<&str> {
         self.address.as_deref()
     }
 }

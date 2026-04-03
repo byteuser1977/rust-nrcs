@@ -9,15 +9,15 @@ authors = ["ByteChain <dev@bytechain.cn>"]
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-bincode = "2.0"
+bincode = "1.0"
 thiserror = "1.0"
 hex = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 fxd = { version = "0.1", optional = true } # Decimal type, optional
+sha2 = "0.10"
 
 # 密码学依赖（用于签名验证）
-ed25519-dalek = { version = "2.0", features = ["rand_core"] }
-sm2 = "0.14.0-rc.8"
+ed25519-dalek = "1.0"
 
 [dev-dependencies]
 criterion = "0.5"

@@ -1,13 +1,13 @@
 //! 区块数据结构定义
 
 use super::*;
+use crate::transaction::Transaction;
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 use chrono::Utc;
 
 // 密码学依赖
-use ed25519_dalek;
-use sm2;
+use ed25519_dalek::{Verifier, Signature};
 
 /// 区块结构体
 ///
@@ -49,8 +49,10 @@ pub struct Block {
     pub payload_length: u32,
     /// 生成签名
     /// PoS 中出块者使用私钥生成，用于下一个出块者选择
+    #[serde(skip)]
     pub generation_signature: Hash512,
     /// 区块签名（出块者对区块头签名）
+    #[serde(skip)]
     pub block_signature: Hash512,
     /// 交易列表（内存中，未序列化到 P2P 消息体时）
     /// JSON 序列化/反序列化时忽略，避免性能问题
@@ -101,23 +103,16 @@ impl Block {
     pub fn verify_signature(&self, public_key: &PublicKey) -> Result<()> {
         let header_data = self.serialize_header_for_signing();
 
-        match public_key {
-            PublicKey::Ed25519(bytes) => {
-                let pk = ed25519_dalek::PublicKey::from_bytes(bytes)
-                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
-                let sig = ed25519_dalek::Signature::from_bytes(&self.block_signature)
-                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
-                pk.verify(&header_data, &sig)
-                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
-            }
-            PublicKey::Sm2(bytes) => {
-                let pk = sm2::PublicKey::from_bytes(bytes)
-                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
-                let sig = sm2::Signature::from_bytes(&self.block_signature)
-                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
-                sm2::verify(&pk, &header_data, &sig)
-                    .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
-            }
+        // 仅支持 Ed25519
+        if let PublicKey::Ed25519(bytes) = public_key {
+            let pk = ed25519_dalek::PublicKey::from_bytes(bytes)
+                .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+            let sig = ed25519_dalek::Signature::from_bytes(&self.block_signature)
+                .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+            pk.verify(&header_data, &sig)
+                .map_err(|e| BlockchainError::InvalidTransaction(e.to_string()))?;
+        } else {
+            return Err(BlockchainError::InvalidTransaction("unsupported key type".to_string()));
         }
 
         Ok(())

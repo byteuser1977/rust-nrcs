@@ -55,14 +55,12 @@ pub type Hash256 = [u8; 32];
 /// 固定大小的 SHA-512 哈希（64 字节）
 pub type Hash512 = [u8; 64];
 
-/// 公钥类型（支持 Ed25519 32 字节 和 SM2 64 字节）
+/// 公钥类型（目前仅支持 Ed25519 32 字节）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum PublicKey {
     /// Ed25519 公钥（32 字节）
     Ed25519([u8; 32]),
-    /// SM2 公钥（64 字节，未压缩 x || y）
-    Sm2([u8; 64]),
 }
 
 impl PublicKey {
@@ -70,7 +68,6 @@ impl PublicKey {
     pub fn len(&self) -> usize {
         match self {
             PublicKey::Ed25519(bytes) => bytes.len(),
-            PublicKey::Sm2(bytes) => bytes.len(),
         }
     }
 
@@ -79,45 +76,31 @@ impl PublicKey {
         matches!(self, PublicKey::Ed25519(_))
     }
 
-    /// 是否为 SM2 公钥
-    pub fn is_sm2(&self) -> bool {
-        matches!(self, PublicKey::Sm2(_))
-    }
-
     /// 转换为字节 slice
     pub fn as_bytes(&self) -> &[u8] {
         match self {
             PublicKey::Ed25519(bytes) => bytes,
-            PublicKey::Sm2(bytes) => bytes,
         }
     }
 
-    /// 尝试从字节数组构造（自动判断算法）
+    /// 尝试从字节数组构造（仅 Ed25519）
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        match bytes.len() {
-            32 => {
-                let mut arr = [0u8; 32];
-                arr.copy_from_slice(bytes);
-                Some(PublicKey::Ed25519(arr))
-            }
-            64 => {
-                let mut arr = [0u8; 64];
-                arr.copy_from_slice(bytes);
-                Some(PublicKey::Sm2(arr))
-            }
-            _ => None,
+        if bytes.len() == 32 {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(bytes);
+            Some(PublicKey::Ed25519(arr))
+        } else {
+            None
         }
     }
 }
 
-/// 私钥类型（支持 Ed25519 64 字节 和 SM2 32 字节）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// 私钥类型（目前仅支持 Ed25519 64 字节）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SecretKey {
     /// Ed25519 私钥（64 字节，包含 seed+public）
     Ed25519([u8; 64]),
-    /// SM2 私钥（32 字节，d 值）
-    Sm2([u8; 32]),
 }
 
 impl SecretKey {
@@ -125,7 +108,6 @@ impl SecretKey {
     pub fn len(&self) -> usize {
         match self {
             SecretKey::Ed25519(bytes) => bytes.len(),
-            SecretKey::Sm2(bytes) => bytes.len(),
         }
     }
 
@@ -133,24 +115,17 @@ impl SecretKey {
     pub fn as_bytes(&self) -> &[u8] {
         match self {
             SecretKey::Ed25519(bytes) => bytes,
-            SecretKey::Sm2(bytes) => bytes,
         }
     }
 
-    /// 尝试从字节数组构造
+    /// 尝试从字节数组构造（仅 Ed25519）
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        match bytes.len() {
-            64 => {
-                let mut arr = [0u8; 64];
-                arr.copy_from_slice(bytes);
-                Some(SecretKey::Ed25519(arr))
-            }
-            32 => {
-                let mut arr = [0u8; 32];
-                arr.copy_from_slice(bytes);
-                Some(SecretKey::Sm2(arr))
-            }
-            _ => None,
+        if bytes.len() == 64 {
+            let mut arr = [0u8; 64];
+            arr.copy_from_slice(bytes);
+            Some(SecretKey::Ed25519(arr))
+        } else {
+            None
         }
     }
 }
