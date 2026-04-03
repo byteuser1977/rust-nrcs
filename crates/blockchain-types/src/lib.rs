@@ -42,7 +42,7 @@ pub enum BlockchainError {
     InsufficientBalance { have: u64, need: u64 },
 
     #[error("serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
+    Serialization(Box<dyn std::error::Error + Send + Sync>),
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -56,7 +56,7 @@ pub type Hash256 = [u8; 32];
 pub type Hash512 = [u8; 64];
 
 /// 公钥类型（目前仅支持 Ed25519 32 字节）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum PublicKey {
     /// Ed25519 公钥（32 字节）
