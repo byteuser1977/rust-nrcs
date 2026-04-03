@@ -14,7 +14,7 @@
 //! - 时间戳使用 `u32`（Unix 秒），与 Java 原版兼容
 //! - 所有字段均使用驼峰命名（snake_case），Rust 惯例
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 pub mod block;
 pub mod transaction;
@@ -180,7 +180,7 @@ impl From<TransactionType> for u8 {
 }
 
 /// 交易收据（Transaction Receipt）
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct TxReceipt {
     /// 交易 ID
     pub transaction_id: TransactionId,
