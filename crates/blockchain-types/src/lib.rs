@@ -15,7 +15,6 @@
 //! - 所有字段均使用驼峰命名（snake_case），Rust 惯例
 
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
 pub mod block;
 pub mod transaction;
@@ -129,7 +128,7 @@ pub type BlockId = u64;
 pub type TransactionId = u64;
 
 /// 交易类型枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Hash)]
 #[repr(u8)]
 pub enum TransactionType {
     /// 常规支付（0）

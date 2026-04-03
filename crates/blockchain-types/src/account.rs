@@ -11,7 +11,7 @@ use chrono::Utc;
 /// 账户 ID 通常由公钥的 SHA-256 哈希得出。
 ///
 /// 参考 Java: `BaseAccount`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Account {
     /// 账户 ID（唯一标识，64 位整数）
     pub id: AccountId,
@@ -152,7 +152,7 @@ impl Account {
 ///
 /// 账户可以将其余额租赁给他人，让他人获得出块权。
 /// 原版 Java: `BaseAccountLease`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AccountLease {
     /// 被租赁者账户 ID
     pub lessee_id: AccountId,

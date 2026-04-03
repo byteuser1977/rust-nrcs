@@ -11,7 +11,7 @@ use chrono::Utc;
 /// 支持整数数量，可设置小数精度。
 ///
 /// 参考 Java: `BaseAsset`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Asset {
     /// 资产 ID（全局唯一）
     pub id: AssetId,
@@ -100,7 +100,7 @@ impl Asset {
 /// 账户资产持仓记录
 ///
 /// 快速查询账户持有某资产的数量，避免 HashMap 重复计算
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AccountAsset {
     /// 账户 ID
     pub account_id: AccountId,
