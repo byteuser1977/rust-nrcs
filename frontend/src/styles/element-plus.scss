@@ -1,0 +1,205 @@
+// Element Plus 主题变量覆盖
+
+// 覆盖主色调为区块链蓝
+$--color-primary: #2962ff;
+$--color-primary-light-1: #448aff;
+$--color-primary-light-2: #6eb3ff;
+$--color-primary-light-3: #91ccff;
+$--color-primary-light-4: #b3e0ff;
+$--color-primary-light-5: #d5ecff;
+$--color-primary-light-6: #e6f4ff;
+$--color-primary-light-7: #f0f8ff;
+$--color-primary-light-8: #f8fcff;
+$--color-primary-light-9: #fcfeff;
+$--color-primary-dark-1: #1e4bd1;
+$--color-primary-dark-2: #0d3ab3;
+
+// 覆盖 Success 色
+$--color-success: #00c853;
+$--color-success-light: #33ff8f;
+$--color-success-dark: #009624;
+
+// 覆盖 Warning 色
+$--color-warning: #ffab00;
+$--color-warning-light: #ffc947;
+$--color-warning-dark: #ff8f00;
+
+// 覆盖 Danger 色
+$--color-danger: #ff1744;
+$--color-danger-light: #ff5c6c;
+$--color-danger-dark: #d50000;
+
+// 覆盖 Info 色
+$--color-info: #536dfe;
+
+// 隐藏 Element Plus 默认的蓝色高亮边框，自定义主题色
+.el-button--primary {
+  background-color: $--color-primary;
+  border-color: $--color-primary;
+
+  &:hover,
+  &:focus {
+    background-color: $--color-primary-light-1;
+    border-color: $--color-primary-light-1;
+  }
+
+  &:active {
+    background-color: $--color-primary-dark-1;
+    border-color: $--color-primary-dark-1;
+  }
+}
+
+// 表格样式优化
+.el-table {
+  --el-table-header-bg-color: #f5f7fa;
+  --el-table-row-hover-bg-color: #f0f5ff;
+  --el-table-border-color: #e4e7ed;
+
+  th.el-table__cell {
+    background-color: var(--el-table-header-bg-color);
+    color: #303133;
+    font-weight: 600;
+  }
+
+  .cell {
+    word-break: break-word;
+  }
+
+  // 地址列样式
+  .address-cell {
+    font-family: 'Roboto Mono', 'Courier New', monospace;
+    font-size: 0.9em;
+    color: #409eff;
+  }
+
+  // 哈希列样式
+  .hash-cell {
+    font-family: 'Roboto Mono', 'Courier New', monospace;
+    font-size: 0.85em;
+    color: #606266;
+  }
+
+  // 状态标签样式
+  .status-tag {
+    font-size: 12px;
+
+    &.success {
+      --el-tag-bg-color: #f0f9eb;
+      --el-tag-border-color: #e1f3d8;
+      --el-tag-text-color: #67c23a;
+    }
+
+    &.warning {
+      --el-tag-bg-color: #fdf6ec;
+      --el-tag-border-color: #faecd8;
+      --el-tag-text-color: #e6a23c;
+    }
+
+    &.danger {
+      --el-tag-bg-color: #fef0f0;
+      --el-tag-border-color: #fde2e2;
+      --el-tag-text-color: #f56c6c;
+    }
+
+    &.info {
+      --el-tag-bg-color: #f4f4f5;
+      --el-tag-border-color: #e9e9eb;
+      --el-tag-text-color: #909399;
+    }
+  }
+}
+
+// 表单样式优化
+.el-form-item__label {
+  font-weight: 500;
+}
+
+.el-input__inner,
+.el-textarea__inner {
+  font-family: 'Roboto Mono', 'Courier New', monospace;
+}
+
+// 钱包地址输入框
+.el-input.wallet-address {
+  .el-input__inner {
+    font-family: 'Roboto Mono', 'Courier New', monospace;
+    font-size: 0.9em;
+    letter-spacing: 0.5px;
+  }
+}
+
+// 下拉框样式
+.el-select-dropdown__item.selected {
+  color: $--color-primary;
+  font-weight: 600;
+}
+
+// 分页样式
+.el-pagination {
+  --el-pagination-button-color: #606266;
+  --el-pagination-button-bg-color: #fff;
+  --el-pagination-button-disabled-color: #c0c4cc;
+  --el-pagination-button-disabled-bg-color: #f4f4f5;
+  --el-pagination-hover-color: $--color-primary;
+
+  .el-pager li {
+    &.is-active {
+      background-color: $--color-primary;
+      color: #fff;
+    }
+  }
+}
+
+// 消息提示样式
+.el-message {
+  --el-message-bg-color: #fff;
+  --el-message-border-color: #e4e7ed;
+  --el-message-text-color: #303133;
+
+  &.el-message--success {
+    --el-message-bg-color: #f0f9eb;
+    --el-message-border-color: #e1f3d8;
+    --el-message-text-color: #67c23a;
+  }
+
+  &.el-message--warning {
+    --el-message-bg-color: #fdf6ec;
+    --el-message-border-color: #faecd8;
+    --el-message-text-color: #e6a23c;
+  }
+
+  &.el-message--error {
+    --el-message-bg-color: #fef0f0;
+    --el-message-border-color: #fde2e2;
+    --el-message-text-color: #f56c6c;
+  }
+}
+
+// 暗色模式支持
+html.dark {
+  --el-table-header-bg-color: #1f2937;
+  --el-table-row-hover-bg-color: #1e293b;
+  --el-table-border-color: #374151;
+  --el-text-color-regular: #d1d5db;
+
+  .el-table {
+    background-color: #111827;
+    color: var(--el-text-color-regular);
+
+    th.el-table__cell {
+      background-color: var(--el-table-header-bg-color);
+    }
+  }
+
+  .el-input__inner,
+  .el-textarea__inner {
+    background-color: #1f2937;
+    border-color: #374151;
+    color: #d1d5db;
+  }
+
+  .el-select-dropdown {
+    background-color: #1f2937;
+    border-color: #374151;
+  }
+}

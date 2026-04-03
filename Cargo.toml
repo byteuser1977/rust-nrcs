@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/blockchain-types",
+    "crates/crypto",
+    "crates/consensus",
+    "crates/p2p",
+    "crates/contract",
+    "crates/orm",
+    "crates/tx-engine",
+    "crates/account",
+    "crates/http-api",
+    "apps/node",
+]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+lto = "thin"
+codegen-units = 1
+
+[profile.dev]
+opt-level = 0
+debug = true
+overflow-checks = true
+
+[profile.test]
+opt-level = 0
+debug = true

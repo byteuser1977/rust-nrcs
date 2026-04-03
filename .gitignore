@@ -1,0 +1,67 @@
+# Rust
+/target/
+**/*.rs.bk
+**/Cargo.lock
+!**/Cargo.toml
+.rustfmt.toml
+.cargo/
+.toml
+
+# Node.js / Vue
+frontend/node_modules/
+frontend/dist/
+frontend/.temp/
+frontend/.cache/
+frontend/.vite
+frontend/*.log
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.env.local
+frontend/.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+loki.log
+
+# Database
+*.db
+*.sqlite
+*.h2.db
+*.mv.db
+
+# Build outputs
+docker/build/
+docker/.context/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Secrets (keep examples only)
+config/production.toml
+config/secrets.toml
+frontend/.env.production.local
+
+# Test coverage
+coverage/
+*.profraw
+*.profdata
+
+# Backup files
+backup/
+*.bak
+
+# OS
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,50 @@
+{
+  "name": "NRCS Backend Performance Benchmark",
+  "description": "Performance targets for the Rust-based NRCS blockchain node",
+  "targets": {
+    "tps": {
+      "description": "Transactions per second",
+      "target": 500,
+      "threshold": 400,
+      "baseline": 625
+    },
+    "latency_p50": {
+      "description": "50th percentile latency for account query (ms)",
+      "target": 50,
+      "threshold": 100
+    },
+    "latency_p95": {
+      "description": "95th percentile latency (ms)",
+      "target": 200,
+      "threshold": 500
+    },
+    "latency_p99": {
+      "description": "99th percentile latency (ms)",
+      "target": 500,
+      "threshold": 1000
+    },
+    "block_sync_rate": {
+      "description": "Blocks per second during sync",
+      "target": 1,
+      "threshold": 0.5
+    }
+  },
+  "scenarios": {
+    "read_heavy": {
+      "vus": 100,
+      "duration": "60s",
+      "requests": [
+        { "method": "GET", "endpoint": "/api/v1/accounts/:address", "weight": 50 },
+        { "method": "GET", "endpoint": "/api/v1/blocks/latest", "weight": 30 },
+        { "method": "GET", "endpoint": "/api/v1/transactions/:txid", "weight": 20 }
+      ]
+    },
+    "write_heavy": {
+      "vus": 50,
+      "duration": "60s",
+      "requests": [
+        { "method": "POST", "endpoint": "/api/v1/transactions", "weight": 100 }
+      ]
+    }
+  }
+}

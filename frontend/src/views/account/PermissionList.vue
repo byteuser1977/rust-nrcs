@@ -1,0 +1,2 @@
+<template><el-card><template #header><span>权限管理</span></template><el-table :data="[]"><el-table-column prop="code" label="权限码"/><el-table-column prop="name" label="权限名"/><el-table-column prop="resource" label="资源"/></el-table></el-card></template>
+<script setup lang="ts"></script>

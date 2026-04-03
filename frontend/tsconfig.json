@@ -1,0 +1,65 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["env.d.ts", "src/**/*", "src/**/*.vue"],
+  "exclude": ["node_modules", "dist"],
+  "compilerOptions": {
+    // 严格模式
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // 路径别名
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@assets/*": ["src/assets/*"],
+      "@components/*": ["src/components/*"],
+      "@composables/*": ["src/composables/*"],
+      "@stores/*": ["src/stores/*"],
+      "@api/*": ["src/api/*"],
+      "@types/*": ["src/types/*"],
+      "@utils/*": ["src/utils/*"],
+      "@locales/*": ["src/locales/*"]
+    },
+
+    // Vue 配置
+    "jsx": "preserve",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment",
+
+    // 实验性功能
+    "experimentalDecorators": true,
+    "useDefineForClassFields": true,
+
+    // 库配置
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+
+    // 模块解析
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ES2020",
+    "skipLibCheck": true,
+
+    // 输出配置
+    "isolatedModules": true,
+    "noEmit": true,
+
+    // 类型检查
+    "types": ["vite/client", "element-plus/global"]
+  },
+  "vueCompilerOptions": {
+    // Vue 3 模式
+    "target": 3,
+    // 启用严格模板类型检查
+    "strictTemplates": true,
+    // 允许 SFC 中的任意 props 类型
+    "jsxTemplates": true
+  }
+}

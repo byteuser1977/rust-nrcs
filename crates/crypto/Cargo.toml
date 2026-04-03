@@ -1,0 +1,21 @@
+[package]
+name = "crypto"
+version = "0.1.0"
+edition = "2021"
+description = "Cryptographic primitives for NRCS blockchain (signatures, hashing)"
+license = "Apache-2.0"
+authors = ["ByteChain <dev@bytechain.cn>"]
+
+[dependencies]
+blockchain-types = { path = "../blockchain-types" }
+ed25519-dalek = { version = "2.0", features = ["rand_core"] }
+rand = "0.8"
+rand_core = "0.6"
+sha2 = "0.10"
+blake3 = "1.0"
+thiserror = "1.0"
+zeroize = "1.6" # 安全内存清除
+
+[dev-dependencies]
+criterion = "0.5"
+hex = "0.4"

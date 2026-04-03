@@ -1,0 +1,111 @@
+// SCSS 变量定义 - Element Plus 主题定制
+
+// 主色调
+$--color-primary: #409eff;
+$--color-primary-light-1: #66b1ff;
+$--color-primary-light-2: #79bbff;
+$--color-primary-light-3: #a0cfff;
+$--color-primary-light-4: #b3d8ff;
+$--color-primary-light-5: #c6e2ff;
+$--color-primary-light-6: #d9ecff;
+$--color-primary-light-7: #ecf5ff;
+$--color-primary-light-8: #f0f9ff;
+$--color-primary-light-9: #f5faff;
+$--color-primary-dark-1: #3a8ee6;
+$--color-primary-dark-2: #2d6dbb;
+
+// 成功色
+$--color-success: #67c23a;
+$--color-success-light: #85ce61;
+$--color-success-dark: #529b2e;
+
+// 警告色
+$--color-warning: #e6a23c;
+$--color-warning-light: #ebb563;
+$--color-warning-dark: #cf9236;
+
+// 危险色
+$--color-danger: #f56c6c;
+$--color-danger-light: #f78989;
+$--color-danger-dark: #dd6161;
+
+// 错误色
+$--color-error: #f56c6c;
+
+// 信息色
+$--color-info: #909399;
+
+// 文本颜色
+$--color-text-primary: #303133;
+$--color-text-regular: #606266;
+$--color-text-secondary: #909399;
+$--color-text-placeholder: #a8abb2;
+
+// 边框颜色
+$--color-border: #dcdfe6;
+$--color-border-light: #e4e7ed;
+$--color-border-lighter: #ebeef5;
+$--color-border-extra-light: #f2f6fc;
+
+// 背景颜色
+$--color-bg: #ffffff;
+$--color-bg-page: #f2f3f5;
+$--color-bg-overlay: #ffffff;
+
+// 字体
+$--font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
+  'Microsoft YaHei', Arial, sans-serif;
+$--font-size-base: 14px;
+$--font-size-small: 12px;
+$--font-size-large: 16px;
+
+// 圆角
+$--border-radius-base: 4px;
+$--border-radius-small: 2px;
+$--border-radius-round: 20px;
+$--border-radius-circle: 50%;
+
+// 间距
+$--spacing-base: 8px;
+$--spacing-small: $spacing-base / 2;
+$--spacing-medium: $spacing-base;
+$--spacing-large: $spacing-base * 2;
+
+// 阴影
+$--box-shadow-base: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+$--box-shadow-light: 0 2px 4px 0 rgba(0, 0, 0, 0.12),
+  0 0 6px 0 rgba(0, 0, 0, 0.04);
+$--box-shadow-dark: 0 2px 12px 0 rgba(0, 0, 0, 0.15);
+
+// 过渡
+$--transition-duration: 0.3s;
+$--transition-function: cubic-bezier(0.645, 0.045, 0.355, 1);
+
+// z-index
+$--index-normal: 1;
+$--index-top: 1000;
+$--index-popper: 2000;
+
+// 区块链特定颜色
+$--blockchain-color-primary: #2962ff;
+$--blockchain-color-success: #00c853;
+$--blockchain-color-warning: #ffab00;
+$--blockchain-color-error: #ff1744;
+$--blockchain-color-bg-dark: #0a192f;
+$--blockchain-color-bg-light: #112240;
+$--blockchain-color-card: #1e293b;
+$--blockchain-color-border: #334155;
+
+// 区块链主题
+$theme-colors: (
+  primary: $--blockchain-color-primary,
+  success: $--blockchain-color-success,
+  warning: $--blockchain-color-warning,
+  error: $--blockchain-color-error,
+  background: (
+    dark: $--blockchain-color-bg-dark,
+    light: $--blockchain-color-bg-light,
+    card: $--blockchain-color-card
+  ),
+  border: $--blockchain-color-border
+);

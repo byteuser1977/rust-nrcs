@@ -1,0 +1,180 @@
+// 全局样式入口
+
+// 1. 导入变量
+@use 'variables.scss' as *;
+
+// 2. 重置样式（基于 normalize.css）
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: $font-family-base;
+  font-size: $font-size-base;
+  line-height: $line-height-base;
+  color: $text-primary;
+  background-color: $bg-color;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+// 3. 滚动条样式
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: $sidebar-bg;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+}
+
+// 4. Element Plus 暗色主题覆盖
+.el-button--default {
+  --el-button-bg-color: rgba(255, 255, 255, 0.05);
+  --el-button-border-color: rgba(255, 255, 255, 0.1);
+  --el-button-text-color: #{$text-regular};
+  --el-button-hover-bg-color: rgba(255, 255, 255, 0.1);
+  --el-button-hover-border-color: rgba(255, 255, 255, 0.2);
+}
+
+.el-card {
+  background-color: $card-bg;
+  border-color: $border-color;
+}
+
+.el-table {
+  background-color: transparent;
+  th.el-table__cell {
+    background-color: rgba(255, 255, 255, 0.02);
+  }
+  tr.el-table__row {
+    background-color: transparent;
+    &:hover > td {
+      background-color: rgba(255, 255, 255, 0.03) !important;
+    }
+  }
+}
+
+.el-menu {
+  background-color: transparent;
+  border-color: transparent;
+  .el-menu-item {
+    color: $text-regular;
+    &:hover {
+      background-color: rgba($primary-color, 0.05);
+    }
+    &.is-active {
+      background-color: rgba($primary-color, 0.1);
+      color: $primary-color;
+    }
+  }
+}
+
+.el-pagination {
+  --el-pagination-bg-color: transparent;
+  --el-pagination-button-color: $text-regular;
+  button {
+    background-color: transparent !important;
+  }
+}
+
+.el-input__inner,
+.el-textarea__inner {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: $border-color;
+  color: $text-primary;
+  &:hover {
+    border-color: $primary-color;
+  }
+  &:focus {
+    border-color: $primary-color;
+  }
+  &::placeholder {
+    color: $text-placeholder;
+  }
+}
+
+.el-select .el-input__inner {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.el-dialog,
+.el-popover {
+  background-color: $header-bg;
+  border-color: $border-color;
+}
+
+.el-tooltip__trigger {
+  outline: none;
+}
+
+// 5. 通用工具类
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+// 6. 动画
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(-100%);
+}
+
+// 7. 打印样式
+@media print {
+  .app-header,
+  .sidebar,
+  .app-footer {
+    display: none;
+  }
+
+  .content {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

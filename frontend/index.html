@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="NRCS Blockchain Platform - Neo Rapid BlockChain EcoSystem" />
+    <meta name="theme-color" content="#1a1a1a" />
+
+    <!-- 预加载关键资源 -->
+    <link rel="preload" href="/src/assets/fonts/Inter.var.woff2" as="font" type="font/woff2" crossorigin />
+
+    <!-- 页面标题 -->
+    <title>NRCS Blockchain Platform</title>
+
+    <!-- 加载进度条样式 -->
+    <style>
+      /* NProgress 进度条 */
+      #nprogress {
+        pointer-events: none;
+      }
+      #nprogress .bar {
+        background: #409eff;
+        position: fixed;
+        z-index: 99999;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 2px;
+      }
+      #nprogress .peg {
+        display: block;
+        position: absolute;
+        right: 0px;
+        width: 100px;
+        height: 100%;
+        box-shadow: 0 0 10px #409eff, 0 0 5px #409eff;
+        opacity: 1.0;
+        transform: rotate(3deg) translate(0px, -4px);
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- 加载占位符（SEO 友好） -->
+    <div id="app">
+      <div class="loading-container">
+        <div class="loading-spinner"></div>
+        <p>Loading NRCS Platform...</p>
+      </div>
+    </div>
+
+    <!-- 全局样式重置 -->
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background: #0a0a0a;
+        color: #e5e5e5;
+      }
+
+      /* 加载动画 */
+      .loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        color: #666;
+      }
+
+      .loading-spinner {
+        width: 48px;
+        height: 48px;
+        border: 3px solid #333;
+        border-top-color: #409eff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      /* 隐藏滚动条但保留功能 */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1a1a1a;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #333;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #444;
+      }
+    </style>
+
+    <!-- Vite 注入点 -->
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

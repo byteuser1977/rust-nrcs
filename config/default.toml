@@ -1,0 +1,104 @@
+# NRCS Node Default Configuration
+# 复制此文件为 production.toml 并根据生产环境调整
+
+[database]
+# 数据库连接
+url = "postgres://nrcs:password@localhost:5432/nrcs_db"
+pool_size = 10
+min_connections = 5
+max_connections = 50
+connect_timeout = "30s"
+idle_timeout = "10m"
+
+# 数据库迁移
+migrations_path = "./migrations"
+
+[redis]
+# Redis 连接
+url = "redis://:password@localhost:6379"
+pool_size = 10
+connection_timeout = "5s"
+
+[api]
+# HTTP API 服务器
+host = "0.0.0.0"
+port = 8080
+cors_allowed_origins = ["*"]
+debug = false
+
+# 请求限流
+rate_limit_enabled = true
+rate_limit_requests = 100
+rate_limit_window_secs = 60
+
+[websocket]
+# WebSocket 服务器
+enabled = true
+port = 8081
+ping_interval_secs = 30
+
+[p2p]
+# P2P 网络配置
+listen_addr = "/ip4/0.0.0.0/tcp/30000"
+external_addr = "/ip4/0.0.0.0/tcp/30000"
+bootstrap_nodes = [
+    "/ip4/123.45.67.89/tcp/30000/p2p/12D3KooW...", # 示例引导节点
+]
+max_connections = 100
+connection_ttl_secs = 600
+protocol_id = "/nrcs/1.0.0"
+
+[mining]
+# 挖矿配置
+enabled = false
+miner_address = ""
+threads = 4
+block_interval_secs = 10
+
+[consensus]
+# 共识算法配置
+algorithm = "pos"  # pos / pow
+epoch_length = 1000
+checkpoint_interval = 100
+finalization_threshold = 2  # 2/3 投票通过
+minimum_stake = 1000000  # 最小质押量（单位：最小代币单位）
+
+[storage]
+# 存储配置
+data_dir = "./data"
+blockchain_db = "blockchain"
+mempool_cache_size_mb = 256
+prune_enabled = false
+prune_keep_blocks = 10000
+
+[logging]
+# 日志配置
+level = "info"  # trace / debug / info / warn / error
+format = "json"  # json / text
+output = "stdout"  # stdout / file
+
+[telemetry]
+# 遥测与监控
+metrics_enabled = true
+metrics_port = 9090
+pprof_enabled = false
+pprof_port = 6060
+
+[api_docs]
+# OpenAPI 文档
+enabled = true
+path = "/docs"
+ui_path = "/docs/ui"
+
+[contract]
+# 智能合约配置
+gas_limit_per_contract = 10000000
+max_contract_size_bytes = 1048576  # 1MB
+storage_gas_price = 1
+compute_gas_price = 1
+
+[account]
+# 账户配置
+min_balance_for_account_creation = 1000  # 防止垃圾账户
+account_creation_fee = 100
+nonce_cache_size = 10000

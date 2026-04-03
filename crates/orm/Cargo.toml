@@ -1,0 +1,28 @@
+[package]
+name = "orm"
+version = "0.1.0"
+edition = "2021"
+description = "SQLx ORM layer for NRCS blockchain"
+license = "Apache-2.0"
+authors = ["ByteChain <dev@bytechain.cn>"]
+
+[dependencies]
+# 核心依赖
+sqlx = { version = "0.7", features = [ "runtime-tokio-rustls", "postgres", "macros", "chrono", "bigdecimal" ] }
+async-trait = "0.1"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# 区块链核心类型
+blockchain-types = { path = "../blockchain-types" }
+
+# 日志
+tracing = "0.1"
+
+[features]
+default = []
+postgres = ["sqlx/postgres"]
+mysql = ["sqlx/mysql"]
+sqlite = ["sqlx/sqlite"]

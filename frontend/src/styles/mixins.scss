@@ -1,0 +1,183 @@
+// SCSS Mixins - 通用样式 mixin
+
+// 清除浮动
+@mixin clearfix {
+  &::after {
+    content: '';
+    display: table;
+    clear: both;
+  }
+}
+
+// 文本溢出省略
+@mixin text-ellipsis($lines: 1) {
+  @if $lines == 1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  } @else {
+    display: -webkit-box;
+    -webkit-line-clamp: $lines;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+// 居中定位
+@mixin absolute-center($width: auto, $height: auto) {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: $width;
+  height: $height;
+}
+
+// Flex 布局
+@mixin flex($direction: row, $justify: flex-start, $align: stretch, $wrap: nowrap) {
+  display: flex;
+  flex-direction: $direction;
+  justify-content: $justify;
+  align-items: $align;
+  flex-wrap: $wrap;
+}
+
+// 响应式字体大小
+@mixin responsive-font($min-size, $max-size) {
+  font-size: $min-size;
+
+  @media (min-width: 768px) {
+    font-size: $max-size;
+  }
+}
+
+// 边框圆角
+@mixin border-radius($radius) {
+  border-radius: $radius;
+}
+
+// 卡片样式
+@mixin card($padding: 16px, $bg: #fff, $shadow: true) {
+  background: $bg;
+  border-radius: 8px;
+  padding: $padding;
+
+  @if $shadow {
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  }
+}
+
+// 按钮样式
+@mixin button($bg, $color, $hover-bg, $hover-color) {
+  background: $bg;
+  color: $color;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all 0.3s;
+
+  &:hover {
+    background: $hover-bg;
+    color: $hover-color;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+// 表格行
+@mixin table-row($hover-bg: #f5f7fa) {
+  &:hover {
+    background: $hover-bg;
+  }
+}
+
+// 动画
+@mixin transition($property: all, $duration: 0.3s, $timing: ease) {
+  transition: $property $duration $timing;
+}
+
+// 绝对定位填充
+@mixin absolute-fill($offset: 0) {
+  position: absolute;
+  top: $offset;
+  left: $offset;
+  right: $offset;
+  bottom: $offset;
+}
+
+// 渐变背景
+@mixin gradient-bg($direction, $colors...) {
+  background: linear-gradient($direction, $colors);
+}
+
+// 单行文本
+@mixin single-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 多行文本
+@mixin multi-line($lines: 2) {
+  display: -webkit-box;
+  -webkit-line-clamp: $lines;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// 移动端隐藏
+@mixin hide-on-mobile {
+  @media (max-width: 768px) {
+    display: none !important;
+  }
+}
+
+// 桌面端隐藏
+@mixin hide-on-desktop {
+  @media (min-width: 769px) {
+    display: none !important;
+  }
+}
+
+// 暗色模式支持
+@mixin dark-mode {
+  @media (prefers-color-scheme: dark) {
+    @content;
+  }
+}
+
+// 高DPI屏幕适配
+@mixin retina {
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    @content;
+  }
+}
+
+// 禁用文本选择
+@mixin no-select {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+// 加载动画
+@mixin spinning($duration: 1s) {
+  animation: spin $duration linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}

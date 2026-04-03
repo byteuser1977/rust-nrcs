@@ -1,0 +1,107 @@
+# NRCS 生产环境配置文件示例
+# 复制为 production.toml 并根据实际环境修改
+
+[database]
+# 生产数据库：建议使用托管 RDS 或独立 PostgreSQL 实例
+url = "postgres://nrcs:YOUR_PASSWORD@postgres:5432/nrcs_db"
+pool_size = 20
+min_connections = 10
+max_connections = 100
+
+[redis]
+# 生产 Redis：建议使用托管 Redis 或哨兵模式
+url = "redis://:YOUR_PASSWORD@redis:6379"
+pool_size = 20
+
+[api]
+# API 服务器
+host = "0.0.0.0"
+port = 8080
+# CORS 配置 - 严格限制来源
+cors_allowed_origins = [
+    "https://nrcs.blockchain",
+    "https://app.nrcs.blockchain"
+]
+debug = false
+
+# 请求限流（启用）
+rate_limit_enabled = true
+rate_limit_requests = 60
+rate_limit_window_secs = 60
+
+[websocket]
+enabled = true
+port = 8081
+ping_interval_secs = 30
+
+[p2p]
+# P2P 网络 - 公网节点配置
+listen_addr = "/ip4/0.0.0.0/tcp/30000"
+# 公网 IP 地址（如有 Nat 需配置端口转发）
+external_addr = "/ip4/YOUR_PUBLIC_IP/tcp/30000"
+# 生产环境引导节点（可从社区获取）
+bootstrap_nodes = [
+    "/ip4/123.45.67.89/tcp/30000/p2p/12D3KooW...",
+    "/ip4/98.76.54.32/tcp/30000/p2p/12D3KooX..."
+]
+max_connections = 200
+connection_ttl_secs = 1800
+
+[mining]
+# 生产矿工配置（如果启用）
+enabled = false
+miner_address = "your-validator-address"
+threads = 8
+block_interval_secs = 10
+
+[consensus]
+# 共识参数
+algorithm = "pos"
+epoch_length = 1000
+checkpoint_interval = 100
+finalization_threshold = 2
+minimum_stake = 1000000
+
+[storage]
+data_dir = "/var/lib/nrcs"
+blockchain_db = "blockchain"
+mempool_cache_size_mb = 512
+# 启用修剪以控制磁盘增长
+prune_enabled = true
+prune_keep_blocks = 50000
+
+[logging]
+# 生产日志级别
+level = "info"
+format = "json"
+output = "file"
+log_file = "/var/log/nrcs/node.log"
+log_rotation = "daily"
+log_max_files = 30
+
+[telemetry]
+# 监控指标
+metrics_enabled = true
+metrics_port = 9090
+# 在生产环境，通常将 metrics 端点通过 sidecar 或 service mesh 处理
+
+[api_docs]
+# API 文档在生产环境应限制访问或禁用
+enabled = false
+
+[contract]
+gas_limit_per_contract = 10000000
+max_contract_size_bytes = 1048576
+storage_gas_price = 1
+compute_gas_price = 1
+
+[account]
+min_balance_for_account_creation = 1000
+account_creation_fee = 100
+nonce_cache_size = 10000
+
+# TLS 配置（如果需要 HTTPS）
+# [tls]
+# enabled = true
+# cert_file = "/path/to/cert.pem"
+# key_file = "/path/to/key.pem"

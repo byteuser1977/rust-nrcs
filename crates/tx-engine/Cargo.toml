@@ -1,0 +1,35 @@
+[package]
+name = "tx-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Transaction processing engine for NRCS blockchain"
+license = "Apache-2.0"
+authors = ["ByteChain <dev@bytechain.cn>"]
+
+[dependencies]
+# 区块链核心类型
+blockchain-types = { path = "../blockchain-types" }
+
+# 数据访问层
+orm = { path = "../orm" }
+
+# 错误处理
+thiserror = "1.0"
+anyhow = "1.0"
+
+# 并发
+tokio = { version = "1.0", features = ["sync", "time", "rt-multi-thread"] }
+dashmap = "5.0"  # 并发 HashMap
+parking_lot = "0.12"  # Mutex
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# 时间
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+criterion = "0.5"
+tokio-test = "0.4"
+futures = "0.3"

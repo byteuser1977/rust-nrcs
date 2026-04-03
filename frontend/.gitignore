@@ -1,0 +1,42 @@
+# 依赖
+node_modules/
+pnpm_modules/
+yarn-debug.log*
+yarn-error.log*
+
+# 构建输出
+dist/
+build/
+*.tsbuildinfo
+
+# 开发环境
+.env.local
+.env.*.local
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 日志
+logs/
+*.log
+npm-debug.log*
+
+# 测试
+coverage/
+
+# 临时文件
+tmp/
+temp/
+
+# 自动导入生成文件（开发时生成，无需提交）
+src/auto-imports.d.ts
+src/components.d.ts

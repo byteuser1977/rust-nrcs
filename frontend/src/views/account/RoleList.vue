@@ -1,0 +1,2 @@
+<template><el-card><template #header><span>角色管理</span></template><el-table :data="[]"><el-table-column prop="name" label="角色名"/><el-table-column prop="desc" label="描述"/></el-table></el-card></template>
+<script setup lang="ts"></script>

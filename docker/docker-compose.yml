@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: nrcs-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nrcs_db
+      POSTGRES_USER: nrcs
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nrcs_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - nrcs-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nrcs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: nrcs-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_password}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - nrcs-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+
+  # 区块链节点（后端）
+  node:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+    container_name: nrcs-node
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # 数据库配置
+      DATABASE_URL: postgres://nrcs:${POSTGRES_PASSWORD:-nrcs_password}@postgres:5432/nrcs_db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_password}@redis:6379
+      
+      # API 配置
+      NRCS_HOST: 0.0.0.0
+      NRCS_PORT: 8080
+      NRCS_WS_PORT: 8081
+      
+      # 日志
+      RUST_LOG: ${RUST_LOG:-info}
+      RUST_BACKTRACE: ${RUST_BACKTRACE:-0}
+      
+      # 网络
+      P2P_BOOTSTRAP_NODES: ${P2P_BOOTSTRAP_NODES:-}
+    volumes:
+      - node_data:/app/data
+      - ./config:/app/config:ro
+    ports:
+      - "8080:8080"   # HTTP API
+      - "8081:8081"   # WebSocket
+      - "30000:30000/tcp" # P2P
+    networks:
+      - nrcs-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 前端应用
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend.Dockerfile
+    container_name: nrcs-frontend
+    restart: unless-stopped
+    depends_on:
+      - node
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+      VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8081}
+      VITE_APP_TITLE: ${VITE_APP_TITLE:-NRCS Blockchain}
+      VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - nrcs-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  nrcs-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  node_data:

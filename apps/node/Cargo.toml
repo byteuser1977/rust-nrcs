@@ -1,0 +1,59 @@
+[package]
+name = "nrcs-node"
+version = "0.1.0"
+edition = "2021"
+description = "NRCS blockchain node application"
+license = "Apache-2.0"
+authors = ["ByteChain <dev@bytechain.cn>"]
+
+[[bin]]
+name = "nrcs-node"
+path = "src/main.rs"
+
+[dependencies]
+# 区块链核心模块
+blockchain-types = { path = "../../crates/blockchain-types" }
+orm = { path = "../../crates/orm" }
+tx-engine = { path = "../../crates/tx-engine" }
+account = { path = "../../crates/account" }
+http-api = { path = "../../crates/http-api" }
+p2p = { path = "../../crates/p2p" }
+contract = { path = "../../crates/contract" }
+consensus = { path = "../../crates/consensus" }
+crypto = { path = "../../crates/crypto" }
+
+# 运行时
+tokio = { version = "1.0", features = ["full"] }
+async-trait = "0.1"
+
+# 配置
+config = "0.13"
+figment = { version = "0.10", features = ["env", "json", "toml", "yaml"] }
+clap = { version = "4.0", features = ["derive"] }
+
+# 数据库
+sqlx = { version = "0.7", features = [ "runtime-tokio-rustls", "postgres", "macros", "chrono" ] }
+bb8 = "0.8"
+bb8-postgres = "0.8"
+
+# 日志
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# 错误处理
+thiserror = "1.0"
+anyhow = "1.0"
+
+# 网络
+libp2p = "0.52"
+multiaddr = "0.18"
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# 时间
+chrono = "0.4"
+
+[dev-dependencies]
+criterion = "0.5"

@@ -1,0 +1,18 @@
+[package]
+name = "consensus"
+version = "0.1.0"
+edition = "2021"
+description = "Consensus algorithms for NRCS blockchain (PoW, PoS)"
+license = "Apache-2.0"
+authors = ["ByteChain <dev@bytechain.cn>"]
+
+[dependencies]
+blockchain-types = { path = "../blockchain-types" }
+thiserror = "1.0"
+num-bigint = "0.4"
+num-traits = "0.2"
+rand = "0.8"
+hex = "0.4"
+
+[dev-dependencies]
+criterion = "0.5"
