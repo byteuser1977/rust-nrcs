@@ -1,5 +1,9 @@
 //! # NRCS Blockchain Core Types
 //!
+#![allow(warnings)]
+
+//! # NRCS Blockchain Core Types
+//!
 //! 核心区块链数据结构定义，包括：
 //! - `Block`: 区块结构
 //! - `Transaction`: 交易结构
