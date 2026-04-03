@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::transaction::Transaction;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::ops::{Deref, DerefMut};
 use chrono::Utc;
 

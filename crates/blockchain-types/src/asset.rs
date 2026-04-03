@@ -1,7 +1,7 @@
 //! 资产数据结构定义
 
 use super::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashSet;
 use chrono::Utc;
 

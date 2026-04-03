@@ -1,7 +1,7 @@
 //! 账户与资产相关数据结构
 
 use super::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use chrono::Utc;
 

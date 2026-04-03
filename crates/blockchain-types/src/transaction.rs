@@ -1,7 +1,7 @@
 //! 交易数据结构定义
 
 use super::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use chrono::Utc;
 
 // 密码学依赖
