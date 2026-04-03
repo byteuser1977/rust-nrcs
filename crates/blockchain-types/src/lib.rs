@@ -128,7 +128,7 @@ pub type BlockId = u64;
 pub type TransactionId = u64;
 
 /// 交易类型枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 // #[repr(u8)]  // temporarily removed to avoid compiler ICE
 pub enum TransactionType {
     /// 常规支付（0）
