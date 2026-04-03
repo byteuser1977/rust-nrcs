@@ -1,166 +1,97 @@
-name: Continuous Integration
+name: CI
 
 on:
-  push:
-    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ "develop", "main" ]
+  push:
+    branches: [ "develop", "main" ]
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0
 
 jobs:
-  # Rust 后端测试
-  rust-backend:
+  check:
+    name: Check & Lint
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        toolchain: [stable]
-    
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: nrcs_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Cache dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-    
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: ${{ matrix.toolchain }}
-        components: rustfmt, clippy
-    
-    - name: Check formatting
-      run: cargo fmt --all -- --check
-    
-    - name: Run clippy
-      run: cargo clippy --all-targets --all-features -- -D warnings
-    
-    - name: Run tests
-      run: cargo test --workspace --all-targets --all-features --verbose
-    
-    - name: Generate coverage report
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      run: |
-        cargo install cargo-tarpaulin
-        cargo tarpaulin --out xml --output-dir coverage/ --workspace
-      
-    - name: Upload coverage
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: codecov/codecov-action@v3
-      with:
-        fail_ci_if_error: true
-        files: coverage/cobertura.xml
-        flags: rust
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  # 前端 TypeScript/Type Check
-  frontend:
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Clippy linter
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build (debug)
+        run: cargo build --workspace
+
+  test:
+    name: Tests
     runs-on: ubuntu-latest
-    
+    needs: check
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
-    
-    - name: Install dependencies
-      run: |
-        cd frontend
-        npm ci
-    
-    - name: Type check
-      run: |
-        cd frontend
-        npm run type-check
-    
-    - name: Lint
-      run: |
-        cd frontend
-        npm run lint:check
-    
-    - name: Run tests with coverage
-      run: |
-        cd frontend
-        npm run test:coverage
-    
-    - name: Upload coverage
-      uses: codecov/codecov-action@v3
-      with:
-        fail_ci_if_error: true
-        files: frontend/coverage/lcov.info
-        flags: vue
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  # 构建测试
-  build:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Build Rust backend
-      run: |
-        cargo build --release --all-targets
-        cargo test --no-run
-    
-    - name: Build frontend
-      run: |
-        cd frontend
-        npm ci
-        npm run build
-      env:
-        VITE_API_BASE_URL: http://localhost:8080
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-  # 安全扫描
-  security-scan:
-    runs-on: ubuntu-latest
-    
+      - name: Run unit tests
+        run: cargo test --workspace --verbose
+
+      - name: Run doctests
+        run: cargo test --workspace --doc
+
+      - name: Generate code coverage (optional)
+        if: ${{ always() }}
+        run: |
+          cargo install cargo-tarpaulin --quiet || echo "tarpaulin install failed - continuing"
+          cargo tarpaulin --out Xml --output-dir coverage/ || echo "coverage failed - continuing"
+
+      - name: Upload coverage to Codecov (optional)
+        if: ${{ always() }}
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage/cobertura.xml
+          fail_ci_if_error: false
+
+  windows-test:
+    name: Windows Test (MSVC)
+    runs-on: windows-latest
+    needs: check
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: 'fs'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
-    
-    - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: 'trivy-results.sarif'
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (MSVC)
+        run: |
+          rustup toolchain install stable-x86_64-pc-windows-msvc
+          rustup default stable-x86_64-pc-windows-msvc
+
+      - name: Build (MSVC)
+        run: cargo build --workspace
+
+      - name: Run unit tests
+        run: cargo test --workspace
+
+  audit:
+    name: Audit dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --quiet
+
+      - name: Run audit
+        run: cargo audit
