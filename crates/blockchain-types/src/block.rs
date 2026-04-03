@@ -15,7 +15,7 @@ use ed25519_dalek::{Verifier, Signature as EdSignature};
 /// 区块头部信息用于共识验证、链式连接等。
 ///
 /// 参考 Java: `BaseBlock`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Block {
     /// 区块版本
     pub version: u32,

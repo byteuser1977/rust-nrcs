@@ -12,7 +12,7 @@ use ed25519_dalek::{Verifier, Signature as EdSignature};
 /// 交易是区块链中的基本操作单元，代表账户间的价值转移或合约调用。
 ///
 /// 参考 Java: `BaseTransaction`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Transaction {
     /// 交易版本
     pub version: u8,
