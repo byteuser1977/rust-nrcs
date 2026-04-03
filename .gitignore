@@ -48,6 +48,10 @@ tmp/
 temp/
 *.tmp
 
+# Documentation (to be added later after review)
+/docs/
+!docs/.gitkeep
+
 # Secrets (keep examples only)
 config/production.toml
 config/secrets.toml
