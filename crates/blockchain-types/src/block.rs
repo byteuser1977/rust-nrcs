@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 use chrono::Utc;
 
 // 密码学依赖
-use ed25519_dalek::{Verifier, Signature};
+use ed25519_dalek::{Verifier, Signature as EdSignature};
 
 /// 区块结构体
 ///
@@ -235,27 +235,7 @@ impl Block {
     }
 }
 
-impl Default for Block {
-    fn default() -> Self {
-        Self {
-            version: BLOCK_VERSION,
-            timestamp: 0,
-            height: 0,
-            previous_block_hash: [0u8; 32],
-            payload_hash: [0u8; 32],
-            generator_id: 0,
-            nonce: 0,
-            base_target: 1_000_000,
-            cumulative_difficulty: vec![],
-            total_amount: 0,
-            total_fee: 0,
-            payload_length: 0,
-            generation_signature: [0u8; 64],
-            block_signature: [0u8; 64],
-            transactions: vec![],
-        }
-    }
-}
+
 
 #[cfg(test)]
 mod tests {

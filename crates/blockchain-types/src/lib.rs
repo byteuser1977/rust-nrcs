@@ -83,16 +83,6 @@ impl PublicKey {
         }
     }
 
-    /// 尝试从字节数组构造（仅 Ed25519）
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() == 32 {
-            let mut arr = [0u8; 32];
-            arr.copy_from_slice(bytes);
-            Some(PublicKey::Ed25519(arr))
-        } else {
-            None
-        }
-    }
 }
 
 /// 私钥类型（目前仅支持 Ed25519 64 字节）
@@ -118,16 +108,6 @@ impl SecretKey {
         }
     }
 
-    /// 尝试从字节数组构造（仅 Ed25519）
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() == 64 {
-            let mut arr = [0u8; 64];
-            arr.copy_from_slice(bytes);
-            Some(SecretKey::Ed25519(arr))
-        } else {
-            None
-        }
-    }
 }
 
 /// 签名类型（Ed25519 和 SM2 均为 64 字节）
