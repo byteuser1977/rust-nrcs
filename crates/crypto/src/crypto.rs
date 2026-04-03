@@ -39,15 +39,7 @@ impl Crypto {
         };
 
         let cipher: Arc<dyn CipherAlgorithm> = match config.cipher.as_str() {
-            "aes" => {
-                let key_len = match config.aes_key_len {
-                    128 => 16,
-                    192 => 24,
-                    256 => 32,
-                    _ => return Err(CryptoError::ConfigurationError(format!("invalid AES key length: {}", config.aes_key_len))),
-                };
-                Arc::new(impls::AesCbc::new(key_len))
-            }
+            // "aes" => { /* AES-CBC temporarily disabled */ return Err(CryptoError::ConfigurationError("AES-CBC not available yet".into())) }
             "sm4" => Arc::new(impls::Sm4Cbc),
             _ => return Err(CryptoError::ConfigurationError(format!("unknown cipher algorithm: {}", config.cipher))),
         };

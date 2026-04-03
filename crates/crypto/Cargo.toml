@@ -29,13 +29,12 @@ sm4 = "0.6.0-rc.3"
 # SM4-GCM 模式支持
 sm4-gcm = "0.1.2"
 
-# 块密码和 AEAD 支持
-block-cipher-trait = "0.11"
-
-# AES 及其模式
+# AES 及其模式（统一使用 0.8 版本）
 aes = "0.8"
 aes-gcm = "0.10"
-cbc = { version = "0.1", features = ["aes"] } # AES-CBC 使用 cbc crate
+
+# NOTE: AES-CBC 暂时禁用，因其依赖的 cbc crate 版本冲突
+# cbc = "0.2"  # 需要时再启用
 
 [dev-dependencies]
 criterion = "0.5"

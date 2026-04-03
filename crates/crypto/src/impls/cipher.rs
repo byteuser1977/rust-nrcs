@@ -9,6 +9,7 @@ use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, generic_array::Ge
 use rand::rngs::OsRng;
 use sm4::Sm4;
 
+/* 暂时禁用 AES-CBC 实现，避免依赖冲突
 /// AES-CBC 模式
 ///
 /// 使用 PKCS#7 填充，返回 `iv || ciphertext`
@@ -38,67 +39,11 @@ impl AesCbc {
 
 impl CipherAlgorithm for AesCbc {
     fn encrypt_cbc(&self, key: &[u8], iv: &[u8], plaintext: &[u8]) -> Vec<u8> {
-        assert_eq!(key.len(), self.key_len, "AES key length mismatch");
-        assert_eq!(iv.len(), 16, "IV must be 16 bytes");
-
-        type AesCbcEnc = cbc::Encryptor<aes::Aes256>; // 简化：固定使用 AES-256，实际应根据 key_len 选择
-        // 由于 Rust 类型系统限制，这里简单处理：总是使用 AES-256
-        // 生产环境应为不同密钥长度实现不同结构体或使用 trait object
-
-        let key_arr = GenericArray::from_slice(key);
-        let iv_arr = GenericArray::from_slice(iv);
-        let cipher = AesCbcEnc::new_from_slice(key_arr, iv_arr).unwrap();
-
-        // PKCS#7 填充
-        let pad_len = 16 - (plaintext.len() % 16);
-        let mut padded = plaintext.to_vec();
-        padded.extend(std::iter::repeat(pad_len as u8).take(pad_len));
-
-        let mut result = Vec::with_capacity(iv.len() + padded.len());
-        result.extend_from_slice(iv);
-
-        // 逐块加密
-        for chunk in padded.chunks(16) {
-            let mut block = GenericArray::clone_from_slice(chunk);
-            cipher.encrypt_block(&mut block);
-            result.extend_from_slice(block.as_slice());
-        }
-
-        result
+        unimplemented!("AES-CBC disabled due to dependency conflict")
     }
 
     fn decrypt_cbc(&self, key: &[u8], iv_ciphertext: &[u8]) -> CryptoResult<Vec<u8>> {
-        assert_eq!(key.len(), self.key_len, "AES key length mismatch");
-        if iv_ciphertext.len() < 16 {
-            return Err(CryptoError::Sm4Error("ciphertext too short".into()));
-        }
-        if (iv_ciphertext.len() - 16) % 16 != 0 {
-            return Err(CryptoError::Sm4Error("ciphertext length not multiple of block size".into()));
-        }
-
-        type AesCbcDec = cbc::Decryptor<aes::Aes256>;
-        let key_arr = GenericArray::from_slice(key);
-        let iv = GenericArray::from_slice(&iv_ciphertext[..16]);
-        let cipher = AesCbcDec::new_from_slice(key_arr, iv).unwrap();
-
-        let ciphertext = &iv_ciphertext[16..];
-        let mut plaintext = Vec::with_capacity(ciphertext.len());
-
-        for chunk in ciphertext.chunks_exact(16) {
-            let mut block = GenericArray::clone_from_slice(chunk);
-            cipher.decrypt_block(&mut block);
-            plaintext.extend_from_slice(block.as_slice());
-        }
-
-        // PKCS#7 去填充
-        if let Some(&pad_len) = plaintext.last() {
-            let pad_len = pad_len as usize;
-            if pad_len > 0 && pad_len <= 16 && pad_len <= plaintext.len() {
-                plaintext.truncate(plaintext.len() - pad_len);
-            }
-        }
-
-        Ok(plaintext)
+        unimplemented!("AES-CBC disabled due to dependency conflict")
     }
 
     fn name(&self) -> &'static str {
@@ -114,7 +59,7 @@ impl CipherAlgorithm for AesCbc {
         self.key_len
     }
 }
-
+*/
 /// SM4-CBC 模式
 ///
 /// 使用 PKCS#7 填充，返回 `iv || ciphertext`
