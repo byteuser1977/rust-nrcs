@@ -1,6 +1,6 @@
 # NRCS - Neo Rapid BlockChain EcoSystem
 
-> 重构自 Java 的高性能区块链平台，采用 Rust + Vue 3 技术栈
+ 重构自 Java 的高性能区块链平台，采用 Rust + Vue 3 技术栈
 
 [![CI/CD](https://github.com/bytechain/nrcs/workflows/Continuous%20Integration/badge.svg)](https://github.com/bytechain/nrcs/actions)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
@@ -356,6 +356,8 @@ Apache License 2.0 - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
-**开发状态**: 早期开发中 (v0.1.0-alpha)#   r u s t - n r c s  
- #   r u s t - n r c s  
+**开发状态**: 早期开发中 (v0.1.0-alpha)#   r u s t - n r c s 
+ 
+ #   r u s t - n r c s 
+ 
  
