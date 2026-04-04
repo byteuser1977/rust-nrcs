@@ -69,3 +69,4 @@ backup/
 # OS
 Thumbs.db
 Desktop.ini
+.trae/documents/orm_model_cleanup_plan.md
