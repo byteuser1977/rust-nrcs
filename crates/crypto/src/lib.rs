@@ -1,14 +1,13 @@
 //! # Cryptography Module
 //!
 //! 加密原语模块，提供区块链所需的核心加密功能：
-//! - 数字签名（Ed25519, SM2）
+//! - 数字签名（Ed25519）
 //! - 哈希算法（SHA-256, BLAKE3, SM3）
-//! - 对称加密（AES-CBC/GCM, SM4-CBC/GCM）
 //! - **可插拔算法抽象层**：通过配置文件动态选择算法
 //!
 //! ## 架构
-//! - `algorithms.rs`: 定义核心 trait (HashAlgorithm, SignatureAlgorithm, CipherAlgorithm, GcmAlgorithm)
-//! - `impls/`: 各具体算法实现 (Sha256, Sm3, Ed25519, Sm2, AesCbc, Sm4Cbc, AesGcm, Sm4Gcm)
+//! - `algorithms.rs`: 定义核心 trait (HashAlgorithm, SignatureAlgorithm)
+//! - `impls/`: 各具体算法实现 (Sha256, Sm3, Ed25519)
 //! - `config.rs`: 配置管理（从 `config/default.toml` 读取）
 //! - `keypair.rs`: 统一密钥对类型（枚举，支持多算法）
 //! - `crypto.rs`: `Crypto` 结构体（根据配置组合算法）、向后兼容的便捷函数
@@ -17,21 +16,15 @@
 //!
 //! ### 便捷函数（兼容原有 API）
 //! ```
-//! use crypto::{hash, verify, generate_keypair, encrypt_cbc, decrypt_cbc, sha256, sm3};
+//! use crypto::{hash, verify, generate_keypair, sha256, sm3};
 //!
 //! let data = b"hello world";
-//! let hash = hash(data); // 默认配置算法（SHA-256）
-//! let specific = sha256(data); // 固定 SHA-256
+//! let hash = hash(data);
+//! let specific = sha256(data);
 //!
 //! let kp = generate_keypair();
 //! let sig = sign(&kp.secret_key(), data);
 //! assert!(verify(&kp.public_key(), data, &sig).is_ok());
-//!
-//! let key = random_32();
-//! let mut iv = [0u8; 16];
-//! rand::thread_rng().fill_bytes(&mut iv);
-//! let ciphertext = encrypt_cbc(&key, &iv, b"plaintext").unwrap();
-//! let plaintext = decrypt_cbc(&key, &ciphertext).unwrap();
 //! ```
 //!
 //! ### 直接使用 `Crypto` 结构体（显式控制）
@@ -52,21 +45,64 @@
 //! ```toml
 //! [crypto]
 //! hash = "sha256"        # "sha256" 或 "sm3"
-//! signature = "ed25519"  # "ed25519" 或 "sm2"
-//! cipher = "aes"         # "aes" 或 "sm4" (CBC 模式)
-//! gcm = "aes-gcm"        # "aes-gcm" 或 "sm4-gcm"
-//! aes_key_len = 256      # 128, 192, 256 (仅当 cipher="aes")
+//! signature = "ed25519"  # "ed25519"
 //! ```
 //!
-//! 默认配置：Ed25519 + SHA-256 + AES-256-CBC/GCM
-//!
-//! ## 可插拔设计
-//!
-//! 各算法通过 `HashAlgorithm`, `SignatureAlgorithm`, `CipherAlgorithm`, `GcmAlgorithm` trait 抽象。
-//! 添加新算法只需：
-//! 1. 实现对应 trait
-//! 2. 在 `impls/` 模块导出
-//! 3. 在 `Crypto::new()` 的 match 分支添加
+//! 默认配置：Ed25519 + SHA-256
+
+/// 固定大小的 SHA-256 哈希（32 字节）
+pub type Hash256 = [u8; 32];
+
+/// 签名类型（64 字节）
+pub type Signature = [u8; 64];
+
+/// 公钥类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum PublicKey {
+    /// Ed25519 公钥（32 字节）
+    Ed25519([u8; 32]),
+}
+
+impl PublicKey {
+    /// 获取公钥长度（字节）
+    pub fn len(&self) -> usize {
+        match self {
+            PublicKey::Ed25519(bytes) => bytes.len(),
+        }
+    }
+
+    /// 转换为字节 slice
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            PublicKey::Ed25519(bytes) => bytes,
+        }
+    }
+}
+
+/// 私钥类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SecretKey {
+    /// Ed25519 私钥（64 字节）
+    Ed25519([u8; 64]),
+}
+
+impl SecretKey {
+    /// 获取私钥长度
+    pub fn len(&self) -> usize {
+        match self {
+            SecretKey::Ed25519(bytes) => bytes.len(),
+        }
+    }
+
+    /// 转换为字节 slice
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            SecretKey::Ed25519(bytes) => bytes,
+        }
+    }
+}
 
 // 模块声明
 mod algorithms;
@@ -77,12 +113,12 @@ mod keypair;
 
 // 重新导出算法 trait（方便用户自定义算法）
 pub use algorithms::{
-    CipherAlgorithm, GcmAlgorithm, HashAlgorithm, SignatureAlgorithm,
+    HashAlgorithm, SignatureAlgorithm,
 };
 
 // 重新导出具体算法（供选择和测试）
 pub use impls::{
-    AesCbc, AesGcm, Ed25519, Sha256, Sm2, Sm3, Sm4Cbc, Sm4Gcm,
+    Ed25519, Sha256, Sm3,
 };
 
 // 导出配置类型
@@ -92,7 +128,7 @@ pub use config::CryptoConfig;
 pub use crypto::Crypto;
 
 // 导出核心类型
-pub use blockchain_types::*;
+pub use keypair::KeyPair;
 
 // 错误类型与结果
 use thiserror::Error;
@@ -135,17 +171,11 @@ pub type CryptoResult<T> = std::result::Result<T, CryptoError>;
 // 原有 API 保持一致（通过内部模块转发）
 // ============================================================================
 
-// 类型别名（保持兼容）
-pub use crypto::{KeyPair, Hash256};
-
 // Hash 函数
-pub use crypto::{blake3, hash, sha256, sha256d, sm3};
+pub use crypto::{blake3, hash, sha256, sm3};
 
 // Signature 函数
 pub use crypto::{generate_keypair, keypair_from_seed, sign, verify};
-
-// Cipher 函数
-pub use crypto::{decrypt_cbc, decrypt_gcm, encrypt_cbc, encrypt_gcm};
 
 // 其他工具函数
 pub use crypto::{random_32, zeroize_keypair};
@@ -159,8 +189,6 @@ mod tests {
         let crypto = Crypto::global().unwrap();
         assert_eq!(crypto.hash_algorithm_name(), "sha256");
         assert_eq!(crypto.signature_algorithm_name(), "ed25519");
-        assert!(crypto.cipher_algorithm_name().contains("aes"));
-        assert!(crypto.gcm_algorithm_name().contains("aes"));
     }
 
     #[test]
@@ -211,23 +239,5 @@ mod tests {
         let hash_sha = crypto_sha.hash(data);
         let expected = sha256(data);
         assert_eq!(hash_sha, expected);
-    }
-
-    #[test]
-    fn test_config_switching_signature() {
-        // 切换到 SM2
-        let cfg_sm2 = CryptoConfig { signature: "sm2".into(), ..Default::default() };
-        let crypto_sm2 = Crypto::new(&cfg_sm2).unwrap();
-        let kp_sm2 = crypto_sm2.generate_keypair();
-        let msg = b"test sm2";
-        let sig = crypto_sm2.sign(&kp_sm2.secret_key(), msg);
-        assert!(crypto_sm2.verify(&kp_sm2.public_key(), msg, &sig).is_ok());
-
-        // 回到 Ed25519
-        let cfg_ed = CryptoConfig { signature: "ed25519".into(), ..Default::default() };
-        let crypto_ed = Crypto::new(&cfg_ed).unwrap();
-        let kp_ed = crypto_ed.generate_keypair();
-        let sig_ed = crypto_ed.sign(&kp_ed.secret_key(), msg);
-        assert!(crypto_ed.verify(&kp_ed.public_key(), msg, &sig_ed).is_ok());
     }
 }

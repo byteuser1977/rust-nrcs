@@ -3,11 +3,10 @@
 //! 提供 AES-CBC 和 SM4-CBC 的 CipherAlgorithm trait 实现
 //! 以及 AES-GCM 和 SM4-GCM 的 GcmAlgorithm trait 实现
 
-use super::algorithms::{CipherAlgorithm, GcmAlgorithm};
-use crate::{sm4, CryptoError};
+use crate::algorithms::{CipherAlgorithm, GcmAlgorithm};
+use crate::CryptoError;
 use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, generic_array::GenericArray};
 use rand::rngs::OsRng;
-use sm4::Sm4;
 
 /* 暂时禁用 AES-CBC 实现，避免依赖冲突
 /// AES-CBC 模式
