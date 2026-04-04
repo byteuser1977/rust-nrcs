@@ -1,0 +1,781 @@
+{
+    "TRANSACTION":  {
+                        "name":  "TRANSACTION",
+                        "columns":  [
+                                        {
+                                            "name":  "DB_ID",
+                                            "data_type":  "bigint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  true,
+                                            "is_primary_key":  true
+                                        },
+                                        {
+                                            "name":  "ID",
+                                            "data_type":  "bigint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "DEADLINE",
+                                            "data_type":  "smallint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "RECIPIENT_ID",
+                                            "data_type":  "bigint",
+                                            "is_nullable":  true,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "AMOUNT",
+                                            "data_type":  "bigint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "FEE",
+                                            "data_type":  "bigint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "FULL_HASH",
+                                            "data_type":  "binary(32)",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "HEIGHT",
+                                            "data_type":  "integer",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "BLOCK_ID",
+                                            "data_type":  "bigint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "SIGNATURE",
+                                            "data_type":  "binary(64)",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "TIMESTAMP",
+                                            "data_type":  "integer",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "TYPE",
+                                            "data_type":  "tinyint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "SUBTYPE",
+                                            "data_type":  "tinyint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "SENDER_ID",
+                                            "data_type":  "bigint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "BLOCK_TIMESTAMP",
+                                            "data_type":  "integer",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "REFERENCED_TRANSACTION_FULL_HASH",
+                                            "data_type":  "binary(32)",
+                                            "is_nullable":  true,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "TRANSACTION_INDEX",
+                                            "data_type":  "smallint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "PHASED",
+                                            "data_type":  "boolean",
+                                            "is_nullable":  false,
+                                            "default_value":  "FALSE",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "ATTACHMENT_BYTES",
+                                            "data_type":  "binary(2147483647)",
+                                            "is_nullable":  true,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "VERSION",
+                                            "data_type":  "tinyint",
+                                            "is_nullable":  false,
+                                            "default_value":  null,
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "HAS_MESSAGE",
+                                            "data_type":  "boolean",
+                                            "is_nullable":  false,
+                                            "default_value":  "FALSE",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "HAS_ENCRYPTED_MESSAGE",
+                                            "data_type":  "boolean",
+                                            "is_nullable":  false,
+                                            "default_value":  "FALSE",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "HAS_PUBLIC_KEY_ANNOUNCEMENT",
+                                            "data_type":  "boolean",
+                                            "is_nullable":  false,
+                                            "default_value":  "FALSE",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "HAS_PRUNABLE_MESSAGE",
+                                            "data_type":  "boolean",
+                                            "is_nullable":  false,
+                                            "default_value":  "FALSE",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "HAS_PRUNABLE_ATTACHMENT",
+                                            "data_type":  "boolean",
+                                            "is_nullable":  false,
+                                            "default_value":  "FALSE",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "EC_BLOCK_HEIGHT",
+                                            "data_type":  "integer",
+                                            "is_nullable":  true,
+                                            "default_value":  "NULL",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "EC_BLOCK_ID",
+                                            "data_type":  "bigint",
+                                            "is_nullable":  true,
+                                            "default_value":  "NULL",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "HAS_ENCRYPTTOSELF_MESSAGE",
+                                            "data_type":  "boolean",
+                                            "is_nullable":  false,
+                                            "default_value":  "FALSE",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        },
+                                        {
+                                            "name":  "HAS_PRUNABLE_ENCRYPTED_MESSAGE",
+                                            "data_type":  "boolean",
+                                            "is_nullable":  false,
+                                            "default_value":  "FALSE",
+                                            "is_auto_increment":  false,
+                                            "is_primary_key":  false
+                                        }
+                                    ],
+                        "primary_key":  [
+
+                                        ],
+                        "unique_constraints":  [
+
+                                               ],
+                        "indexes":  [
+                                        {
+                                            "name":  "TRANSACTION_RECIPIENT_ID_IDX",
+                                            "columns":  "RECIPIENT_ID",
+                                            "is_unique":  false
+                                        },
+                                        {
+                                            "name":  "TRANSACTION_SENDER_ID_IDX",
+                                            "columns":  "SENDER_ID",
+                                            "is_unique":  false
+                                        },
+                                        {
+                                            "name":  "TRANSACTION_BLOCK_TIMESTAMP_IDX",
+                                            "columns":  "BLOCK_TIMESTAMP DESC",
+                                            "is_unique":  false
+                                        },
+                                        {
+                                            "name":  "TRANSACTION_ID_IDX",
+                                            "columns":  "ID",
+                                            "is_unique":  true
+                                        }
+                                    ],
+                        "foreign_keys":  [
+                                             {
+                                                 "column":  "B",
+                                                 "referenced_table":  "BLOCK",
+                                                 "referenced_column":  "I",
+                                                 "on_delete":  "CASCADE"
+                                             }
+                                         ]
+                    },
+    "ACCOUNT":  {
+                    "name":  "ACCOUNT",
+                    "columns":  [
+                                    {
+                                        "name":  "DB_ID",
+                                        "data_type":  "bigint",
+                                        "is_nullable":  false,
+                                        "default_value":  null,
+                                        "is_auto_increment":  true,
+                                        "is_primary_key":  true
+                                    },
+                                    {
+                                        "name":  "ID",
+                                        "data_type":  "bigint",
+                                        "is_nullable":  false,
+                                        "default_value":  null,
+                                        "is_auto_increment":  false,
+                                        "is_primary_key":  false
+                                    },
+                                    {
+                                        "name":  "BALANCE",
+                                        "data_type":  "bigint",
+                                        "is_nullable":  false,
+                                        "default_value":  null,
+                                        "is_auto_increment":  false,
+                                        "is_primary_key":  false
+                                    },
+                                    {
+                                        "name":  "UNCONFIRMED_BALANCE",
+                                        "data_type":  "bigint",
+                                        "is_nullable":  false,
+                                        "default_value":  null,
+                                        "is_auto_increment":  false,
+                                        "is_primary_key":  false
+                                    },
+                                    {
+                                        "name":  "FORGED_BALANCE",
+                                        "data_type":  "bigint",
+                                        "is_nullable":  false,
+                                        "default_value":  null,
+                                        "is_auto_increment":  false,
+                                        "is_primary_key":  false
+                                    },
+                                    {
+                                        "name":  "ACTIVE_LESSEE_ID",
+                                        "data_type":  "bigint",
+                                        "is_nullable":  true,
+                                        "default_value":  null,
+                                        "is_auto_increment":  false,
+                                        "is_primary_key":  false
+                                    },
+                                    {
+                                        "name":  "HAS_CONTROL_PHASING",
+                                        "data_type":  "boolean",
+                                        "is_nullable":  false,
+                                        "default_value":  "FALSE",
+                                        "is_auto_increment":  false,
+                                        "is_primary_key":  false
+                                    },
+                                    {
+                                        "name":  "HEIGHT",
+                                        "data_type":  "integer",
+                                        "is_nullable":  false,
+                                        "default_value":  null,
+                                        "is_auto_increment":  false,
+                                        "is_primary_key":  false
+                                    },
+                                    {
+                                        "name":  "LATEST",
+                                        "data_type":  "boolean",
+                                        "is_nullable":  false,
+                                        "default_value":  "TRUE",
+                                        "is_auto_increment":  false,
+                                        "is_primary_key":  false
+                                    }
+                                ],
+                    "primary_key":  [
+
+                                    ],
+                    "unique_constraints":  [
+
+                                           ],
+                    "indexes":  [
+                                    {
+                                        "name":  "ACCOUNT_ACTIVE_LESSEE_ID_IDX",
+                                        "columns":  "ACTIVE_LESSEE_ID",
+                                        "is_unique":  false
+                                    },
+                                    {
+                                        "name":  "ACCOUNT_HEIGHT_ID_IDX",
+                                        "columns":  [
+                                                        "HEIGHT",
+                                                        "ID"
+                                                    ],
+                                        "is_unique":  false
+                                    },
+                                    {
+                                        "name":  "ACCOUNT_ID_HEIGHT_IDX",
+                                        "columns":  [
+                                                        "ID",
+                                                        "HEIGHT DESC"
+                                                    ],
+                                        "is_unique":  true
+                                    }
+                                ],
+                    "foreign_keys":  [
+
+                                     ]
+                },
+    "ASSET":  {
+                  "name":  "ASSET",
+                  "columns":  [
+                                  {
+                                      "name":  "DB_ID",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  true,
+                                      "is_primary_key":  true
+                                  },
+                                  {
+                                      "name":  "ID",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "ACCOUNT_ID",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "NAME",
+                                      "data_type":  "varchar(2147483647)",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "DESCRIPTION",
+                                      "data_type":  "varchar(2147483647)",
+                                      "is_nullable":  true,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "QUANTITY",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "DECIMALS",
+                                      "data_type":  "tinyint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "INITIAL_QUANTITY",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "HAS_CONTROL_PHASING",
+                                      "data_type":  "BOOLEAN",
+                                      "is_nullable":  false,
+                                      "default_value":  "FALSE",
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "HEIGHT",
+                                      "data_type":  "integer",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "LATEST",
+                                      "data_type":  "boolean",
+                                      "is_nullable":  false,
+                                      "default_value":  "TRUE",
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  }
+                              ],
+                  "primary_key":  [
+
+                                  ],
+                  "unique_constraints":  [
+
+                                         ],
+                  "indexes":  [
+                                  {
+                                      "name":  "ASSET_ACCOUNT_ID_IDX",
+                                      "columns":  "ACCOUNT_ID",
+                                      "is_unique":  false
+                                  },
+                                  {
+                                      "name":  "ASSET_HEIGHT_ID_IDX",
+                                      "columns":  [
+                                                      "HEIGHT",
+                                                      "ID"
+                                                  ],
+                                      "is_unique":  false
+                                  },
+                                  {
+                                      "name":  "ASSET_ID_HEIGHT_IDX",
+                                      "columns":  [
+                                                      "ID",
+                                                      "HEIGHT DESC"
+                                                  ],
+                                      "is_unique":  true
+                                  }
+                              ],
+                  "foreign_keys":  [
+
+                                   ]
+              },
+    "BLOCK":  {
+                  "name":  "BLOCK",
+                  "columns":  [
+                                  {
+                                      "name":  "DB_ID",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  true,
+                                      "is_primary_key":  true
+                                  },
+                                  {
+                                      "name":  "ID",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "VERSION",
+                                      "data_type":  "integer",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "TIMESTAMP",
+                                      "data_type":  "integer",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "PREVIOUS_BLOCK_ID",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  true,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "TOTAL_AMOUNT",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "TOTAL_FEE",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "PAYLOAD_LENGTH",
+                                      "data_type":  "integer",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "PREVIOUS_BLOCK_HASH",
+                                      "data_type":  "binary(32)",
+                                      "is_nullable":  true,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "CUMULATIVE_DIFFICULTY",
+                                      "data_type":  "binary(2147483647)",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "BASE_TARGET",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "NEXT_BLOCK_ID",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  true,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "HEIGHT",
+                                      "data_type":  "integer",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "GENERATION_SIGNATURE",
+                                      "data_type":  "varbinary(64)",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "BLOCK_SIGNATURE",
+                                      "data_type":  "binary(64)",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "PAYLOAD_HASH",
+                                      "data_type":  "binary(32)",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  },
+                                  {
+                                      "name":  "GENERATOR_ID",
+                                      "data_type":  "bigint",
+                                      "is_nullable":  false,
+                                      "default_value":  null,
+                                      "is_auto_increment":  false,
+                                      "is_primary_key":  false
+                                  }
+                              ],
+                  "primary_key":  [
+
+                                  ],
+                  "unique_constraints":  [
+
+                                         ],
+                  "indexes":  [
+                                  {
+                                      "name":  "BLOCK_GENERATOR_ID_IDX",
+                                      "columns":  "GENERATOR_ID",
+                                      "is_unique":  false
+                                  },
+                                  {
+                                      "name":  "BLOCK_ID_IDX",
+                                      "columns":  "ID",
+                                      "is_unique":  true
+                                  },
+                                  {
+                                      "name":  "BLOCK_TIMESTAMP_IDX",
+                                      "columns":  "TIMESTAMP DESC",
+                                      "is_unique":  true
+                                  },
+                                  {
+                                      "name":  "BLOCK_HEIGHT_IDX",
+                                      "columns":  "HEIGHT",
+                                      "is_unique":  true
+                                  }
+                              ],
+                  "foreign_keys":  [
+
+                                   ]
+              },
+    "ACCOUNT_ASSET":  {
+                          "name":  "ACCOUNT_ASSET",
+                          "columns":  [
+                                          {
+                                              "name":  "DB_ID",
+                                              "data_type":  "bigint",
+                                              "is_nullable":  false,
+                                              "default_value":  null,
+                                              "is_auto_increment":  true,
+                                              "is_primary_key":  true
+                                          },
+                                          {
+                                              "name":  "ACCOUNT_ID",
+                                              "data_type":  "bigint",
+                                              "is_nullable":  false,
+                                              "default_value":  null,
+                                              "is_auto_increment":  false,
+                                              "is_primary_key":  false
+                                          },
+                                          {
+                                              "name":  "ASSET_ID",
+                                              "data_type":  "bigint",
+                                              "is_nullable":  false,
+                                              "default_value":  null,
+                                              "is_auto_increment":  false,
+                                              "is_primary_key":  false
+                                          },
+                                          {
+                                              "name":  "QUANTITY",
+                                              "data_type":  "bigint",
+                                              "is_nullable":  false,
+                                              "default_value":  null,
+                                              "is_auto_increment":  false,
+                                              "is_primary_key":  false
+                                          },
+                                          {
+                                              "name":  "UNCONFIRMED_QUANTITY",
+                                              "data_type":  "bigint",
+                                              "is_nullable":  false,
+                                              "default_value":  null,
+                                              "is_auto_increment":  false,
+                                              "is_primary_key":  false
+                                          },
+                                          {
+                                              "name":  "HEIGHT",
+                                              "data_type":  "integer",
+                                              "is_nullable":  false,
+                                              "default_value":  null,
+                                              "is_auto_increment":  false,
+                                              "is_primary_key":  false
+                                          },
+                                          {
+                                              "name":  "LATEST",
+                                              "data_type":  "boolean",
+                                              "is_nullable":  false,
+                                              "default_value":  "TRUE",
+                                              "is_auto_increment":  false,
+                                              "is_primary_key":  false
+                                          }
+                                      ],
+                          "primary_key":  [
+
+                                          ],
+                          "unique_constraints":  [
+
+                                                 ],
+                          "indexes":  [
+                                          {
+                                              "name":  "ACCOUNT_ASSET_ASSET_ID_IDX",
+                                              "columns":  "ASSET_ID",
+                                              "is_unique":  false
+                                          },
+                                          {
+                                              "name":  "ACCOUNT_ASSET_QUANTITY_IDX",
+                                              "columns":  "QUANTITY DESC",
+                                              "is_unique":  false
+                                          },
+                                          {
+                                              "name":  "ACCOUNT_ASSET_HEIGHT_ID_IDX",
+                                              "columns":  [
+                                                              "HEIGHT",
+                                                              "ACCOUNT_ID",
+                                                              "ASSET_ID"
+                                                          ],
+                                              "is_unique":  false
+                                          },
+                                          {
+                                              "name":  "ACCOUNT_ASSET_ID_HEIGHT_IDX",
+                                              "columns":  [
+                                                              "ACCOUNT_ID",
+                                                              "ASSET_ID",
+                                                              "HEIGHT DESC"
+                                                          ],
+                                              "is_unique":  true
+                                          }
+                                      ],
+                          "foreign_keys":  [
+
+                                           ]
+                      }
+}

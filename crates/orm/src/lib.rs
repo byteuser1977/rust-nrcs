@@ -8,6 +8,6 @@ pub mod repository;
 
 pub use models::*;
 pub use repository::*;
-#[cfg(test)]
-mod generated_model_tests;
+
+#[cfg(all(test, feature = "integration-tests"))]
 

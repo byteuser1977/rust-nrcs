@@ -1,126 +1,52 @@
-//! Repository pattern for database access
+//! Repository pattern for database access (based on migrations schema)
 //!
 //! Provides traits and implementations for CRUD operations on blockchain entities.
-//! Uses async/await with SQLx and connection pooling (bb8).
+//! Uses async/await with SQLx and connection pooling.
 
 use async_trait::async_trait;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres};
 use thiserror::Error;
-use std::sync::Arc;
 
-use crate::models::*;
-use blockchain_types::*;
+use crate::models_v2::*;
 
-/// Repository errors
 #[derive(Debug, Error)]
 pub enum RepositoryError {
     #[error("database error: {0}")]
     DbError(#[from] sqlx::Error),
-
     #[error("not found: {0}")]
     NotFound(String),
-
     #[error("duplicate key: {0}")]
     DuplicateKey(String),
-
     #[error("validation error: {0}")]
     Validation(String),
-
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
-
     #[error("blockchain error: {0}")]
-    Blockchain(#[from] BlockchainError),
+    Blockchain(#[from] blockchain_types::BlockchainError),
 }
 
 pub type RepositoryResult<T> = Result<T, RepositoryError>;
 
-/// Common repository trait
 #[async_trait]
 pub trait Repository<T>: Send + Sync {
-    /// Insert a new record
     async fn insert(&self, item: &T) -> RepositoryResult<()>;
-
-    /// Insert multiple records
-    async fn insert_many(&self, items: &[T]) -> RepositoryResult<()>;
-
-    /// Find by ID
-    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<T>>;
-
-    /// Update an existing record
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<T>>;
     async fn update(&self, item: &T) -> RepositoryResult<()>;
-
-    /// Delete by ID
-    async fn delete(&self, id: i64) -> RepositoryResult<()>;
-
-    /// Find all with pagination
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()>;
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<T>>;
-
-    /// Count total records
     async fn count(&self) -> RepositoryResult<i64>;
 }
 
-/// Block repository
 #[async_trait]
 pub trait BlockRepository: Repository<BlockModel> {
-    async fn find_by_height(&self, height: i64) -> RepositoryResult<Option<BlockModel>>;
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Option<BlockModel>>;
+    async fn find_by_id_column(&self, id: i64) -> RepositoryResult<Option<BlockModel>>;
     async fn find_by_hash(&self, hash: &[u8]) -> RepositoryResult<Option<BlockModel>>;
     async fn find_latest(&self) -> RepositoryResult<Option<BlockModel>>;
-    async fn find_range(&self, start_height: i64, end_height: i64) -> RepositoryResult<Vec<BlockModel>>;
+    async fn find_range(&self, start_height: i32, end_height: i32) -> RepositoryResult<Vec<BlockModel>>;
+    async fn find_by_generator(&self, generator_id: i64) -> RepositoryResult<Vec<BlockModel>>;
 }
 
-/// Transaction repository
-#[async_trait]
-pub trait TransactionRepository: Repository<TransactionModel> {
-    async fn find_by_txid(&self, txid: &[u8]) -> RepositoryResult<Option<TransactionModel>>;
-    async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
-    async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
-    async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<TransactionModel>>;
-    async fn find_unconfirmed(&self, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
-}
-
-/// Account repository
-#[async_trait]
-pub trait AccountRepository: Repository<AccountModel> {
-    async fn find_by_account_id(&self, account_id: i64) -> RepositoryResult<Option<AccountModel>>;
-    async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<AccountModel>>;
-    async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()>;
-}
-
-/// Asset repository
-#[async_trait]
-pub trait AssetRepository: Repository<AssetModel> {
-    async fn find_by_asset_id(&self, asset_id: i64) -> RepositoryResult<Option<AssetModel>>;
-    async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>>;
-    async fn find_tradable(&self, limit: i64) -> RepositoryResult<Vec<AssetModel>>;
-}
-
-/// AccountAsset repository
-#[async_trait]
-pub trait AccountAssetRepository: Repository<AccountAssetModel> {
-    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>>;
-    async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>>;
-    async fn increase_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
-    async fn decrease_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
-}
-
-/// Contract repository
-#[async_trait]
-pub trait ContractRepository: Repository<ContractModel> {
-    async fn find_by_address(&self, address: &[u8]) -> RepositoryResult<Option<ContractModel>>;
-    async fn find_by_creator(&self, creator_id: i64) -> RepositoryResult<Vec<ContractModel>>;
-}
-
-/// Transaction receipt repository
-#[async_trait]
-pub trait TransactionReceiptRepository: Repository<TransactionReceiptModel> {
-    async fn find_by_transaction(&self, txid: i64) -> RepositoryResult<Option<TransactionReceiptModel>>;
-    async fn insert_with_status(&self, txid: i64, status: u8, gas_used: u64, logs: &str, contract_address: Option<&[u8]>) -> RepositoryResult<()>;
-}
-
-// ========== Implementations ==========
-
-/// PostgreSQL implementation using SQLx
 pub struct PgBlockRepository {
     pool: PgPool,
 }
@@ -133,110 +59,206 @@ impl PgBlockRepository {
 
 #[async_trait]
 impl BlockRepository for PgBlockRepository {
-    async fn insert(&self, block: &BlockModel) -> RepositoryResult<()> {
-        sqlx::query!(
-            r#"
-            INSERT INTO blocks (
-                height, block_hash, previous_block_hash, payload_hash,
-                generator_id, nonce, base_target, cumulative_difficulty,
-                total_amount, total_fee, payload_length, generation_signature,
-                block_signature, version
-            ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-            )
-            "#,
-            block.height,
-            block.block_hash.as_slice(),
-            block.previous_block_hash.as_slice(),
-            block.payload_hash.as_slice(),
-            block.generator_id,
-            block.nonce,
-            block.base_target,
-            block.cumulative_difficulty.as_slice(),
-            block.total_amount,
-            block.total_fee,
-            block.payload_length,
-            block.generation_signature.as_slice(),
-            block.block_signature.as_slice(),
-            block.version
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(())
-    }
-
-    async fn find_by_height(&self, height: i64) -> RepositoryResult<Option<BlockModel>> {
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Option<BlockModel>> {
         let record = sqlx::query_as!(
             BlockModel,
-            "SELECT * FROM blocks WHERE height = $1",
+            "SELECT * FROM block WHERE height = $1",
             height
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn find_by_id_column(&self, id: i64) -> RepositoryResult<Option<BlockModel>> {
+        let record = sqlx::query_as!(
+            BlockModel,
+            "SELECT * FROM block WHERE id = $1",
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
         Ok(record)
     }
 
     async fn find_by_hash(&self, hash: &[u8]) -> RepositoryResult<Option<BlockModel>> {
         let record = sqlx::query_as!(
             BlockModel,
-            "SELECT * FROM blocks WHERE block_hash = $1",
+            "SELECT * FROM block WHERE payload_hash = $1 OR generation_signature = $1",
             hash
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(record)
     }
 
     async fn find_latest(&self) -> RepositoryResult<Option<BlockModel>> {
         let record = sqlx::query_as!(
             BlockModel,
-            "SELECT * FROM blocks ORDER BY height DESC LIMIT 1"
+            "SELECT * FROM block ORDER BY height DESC LIMIT 1"
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(record)
     }
 
-    async fn find_range(&self, start_height: i64, end_height: i64) -> RepositoryResult<Vec<BlockModel>> {
+    async fn find_range(&self, start_height: i32, end_height: i32) -> RepositoryResult<Vec<BlockModel>> {
         let records = sqlx::query_as!(
             BlockModel,
-            "SELECT * FROM blocks WHERE height BETWEEN $1 AND $2 ORDER BY height ASC",
+            "SELECT * FROM block WHERE height BETWEEN $1 AND $2 ORDER BY height ASC",
             start_height,
             end_height
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
 
-    // Implement basic Repository trait (stub)
-    async fn update(&self, _item: &BlockModel) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn delete(&self, _id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<BlockModel>> {
-        Err(RepositoryError::Validation("use find_range instead".to_string()))
-    }
-
-    async fn count(&self) -> RepositoryResult<i64> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM blocks")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(count.0)
+    async fn find_by_generator(&self, generator_id: i64) -> RepositoryResult<Vec<BlockModel>> {
+        let records = sqlx::query_as!(
+            BlockModel,
+            "SELECT * FROM block WHERE generator_id = $1 ORDER BY height DESC",
+            generator_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
     }
 }
 
-/// Transaction repository implementation
+#[async_trait]
+impl Repository<BlockModel> for PgBlockRepository {
+    async fn insert(&self, block: &BlockModel) -> RepositoryResult<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO block (
+                id, version, timestamp, previous_block_id, total_amount,
+                total_fee, payload_length, previous_block_hash, cumulative_difficulty,
+                base_target, next_block_id, height, generation_signature,
+                block_signature, payload_hash, generator_id
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+            )
+            "#,
+            block.id,
+            block.version,
+            block.timestamp,
+            block.previous_block_id,
+            block.total_amount,
+            block.total_fee,
+            block.payload_length,
+            block.previous_block_hash.as_slice(),
+            block.cumulative_difficulty.as_slice(),
+            block.base_target,
+            block.next_block_id,
+            block.height,
+            block.generation_signature.as_slice(),
+            block.block_signature.as_slice(),
+            block.payload_hash.as_slice(),
+            block.generator_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<BlockModel>> {
+        let record = sqlx::query_as!(
+            BlockModel,
+            "SELECT * FROM block WHERE db_id = $1",
+            db_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, block: &BlockModel) -> RepositoryResult<()> {
+        sqlx::query!(
+            r#"
+            UPDATE block SET
+                version = $2, timestamp = $3, previous_block_id = $4,
+                total_amount = $5, total_fee = $6, payload_length = $7,
+                previous_block_hash = $8, cumulative_difficulty = $9,
+                base_target = $10, next_block_id = $11, height = $12,
+                generation_signature = $13, block_signature = $14,
+                payload_hash = $15, generator_id = $16
+            WHERE db_id = $1
+            "#,
+            block.db_id,
+            block.version,
+            block.timestamp,
+            block.previous_block_id,
+            block.total_amount,
+            block.total_fee,
+            block.payload_length,
+            block.previous_block_hash.as_slice(),
+            block.cumulative_difficulty.as_slice(),
+            block.base_target,
+            block.next_block_id,
+            block.height,
+            block.generation_signature.as_slice(),
+            block.block_signature.as_slice(),
+            block.payload_hash.as_slice(),
+            block.generator_id
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query!("DELETE FROM block WHERE db_id = $1", db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<BlockModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as!(
+            BlockModel,
+            "SELECT * FROM block ORDER BY height DESC LIMIT $1 OFFSET $2",
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM block")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+pub trait TransactionRepository: Repository<TransactionModel> {
+    async fn find_by_txid(&self, id: i64) -> RepositoryResult<Option<TransactionModel>>;
+    async fn find_by_full_hash(&self, full_hash: &[u8]) -> RepositoryResult<Option<TransactionModel>>;
+    async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
+    async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
+    async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<TransactionModel>>;
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<TransactionModel>>;
+    async fn find_unconfirmed(&self, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
+}
+
 pub struct PgTransactionRepository {
     pool: PgPool,
 }
@@ -249,39 +271,126 @@ impl PgTransactionRepository {
 
 #[async_trait]
 impl TransactionRepository for PgTransactionRepository {
+    async fn find_by_txid(&self, id: i64) -> RepositoryResult<Option<TransactionModel>> {
+        let record = sqlx::query_as!(
+            TransactionModel,
+            "SELECT * FROM transaction WHERE id = $1",
+            id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn find_by_full_hash(&self, full_hash: &[u8]) -> RepositoryResult<Option<TransactionModel>> {
+        let record = sqlx::query_as!(
+            TransactionModel,
+            "SELECT * FROM transaction WHERE full_hash = $1",
+            full_hash
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
+        let records = sqlx::query_as!(
+            TransactionModel,
+            "SELECT * FROM transaction WHERE sender_id = $1 ORDER BY timestamp DESC LIMIT $2",
+            sender_id,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
+        let records = sqlx::query_as!(
+            TransactionModel,
+            "SELECT * FROM transaction WHERE recipient_id = $1 ORDER BY timestamp DESC LIMIT $2",
+            recipient_id,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<TransactionModel>> {
+        let records = sqlx::query_as!(
+            TransactionModel,
+            "SELECT * FROM transaction WHERE block_id = $1 ORDER BY transaction_index ASC",
+            block_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<TransactionModel>> {
+        let records = sqlx::query_as!(
+            TransactionModel,
+            "SELECT * FROM transaction WHERE height = $1 ORDER BY transaction_index ASC",
+            height
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_unconfirmed(&self, _limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
+        Err(RepositoryError::Validation("use UnconfirmedTransactionModel with UnconfirmedTransactionRepository".to_string()))
+    }
+}
+
+#[async_trait]
+impl Repository<TransactionModel> for PgTransactionRepository {
     async fn insert(&self, tx: &TransactionModel) -> RepositoryResult<()> {
         sqlx::query!(
             r#"
-            INSERT INTO transactions (
-                transaction_id, full_hash, type_id, subtype, sender_id,
-                recipient_id, amount, fee, block_id, height, timestamp,
-                deadline, signature, attachment_bytes, phased, has_message,
-                has_encrypted_message, has_public_key_announcement,
-                has_prunable_attachment, ec_block_height, ec_block_id,
-                has_encrypttoself_message, has_prunable_encrypted_message
+            INSERT INTO transaction (
+                id, deadline, recipient_id, amount, fee, full_hash,
+                height, block_id, signature, timestamp, type, subtype,
+                sender_id, block_timestamp, referenced_transaction_full_hash,
+                transaction_index, phased, attachment_bytes, version,
+                has_message, has_encrypted_message, has_public_key_announcement,
+                has_prunable_message, has_prunable_attachment, ec_block_height,
+                ec_block_id, has_encrypttoself_message, has_prunable_encrypted_message
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
             )
             "#,
-            tx.transaction_id,
-            tx.full_hash.as_slice(),
-            tx.type_id,
-            tx.subtype,
-            tx.sender_id,
+            tx.id,
+            tx.deadline,
             tx.recipient_id,
             tx.amount,
             tx.fee,
-            tx.block_id,
+            tx.full_hash.as_slice(),
             tx.height,
-            tx.timestamp,
-            tx.deadline,
+            tx.block_id,
             tx.signature.as_slice(),
-            tx.attachment_bytes.as_slice(),
+            tx.timestamp,
+            tx.type_,
+            tx.subtype,
+            tx.sender_id,
+            tx.block_timestamp,
+            tx.referenced_transaction_full_hash.as_deref(),
+            tx.transaction_index,
             tx.phased,
+            tx.attachment_bytes.as_deref(),
+            tx.version,
             tx.has_message,
             tx.has_encrypted_message,
             tx.has_public_key_announcement,
+            tx.has_prunable_message,
             tx.has_prunable_attachment,
             tx.ec_block_height,
             tx.ec_block_id,
@@ -290,102 +399,52 @@ impl TransactionRepository for PgTransactionRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(())
     }
 
-    async fn find_by_txid(&self, txid: &[u8]) -> RepositoryResult<Option<TransactionModel>> {
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TransactionModel>> {
         let record = sqlx::query_as!(
             TransactionModel,
-            "SELECT * FROM transactions WHERE full_hash = $1",
-            txid
+            "SELECT * FROM transaction WHERE db_id = $1",
+            db_id
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(record)
     }
 
-    async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        let records = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transactions WHERE sender_id = $1 ORDER BY timestamp DESC LIMIT $2",
-            sender_id,
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(records)
+    async fn update(&self, _tx: &TransactionModel) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("update not implemented for transaction".to_string()))
     }
 
-    async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        let records = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transactions WHERE recipient_id = $1 ORDER BY timestamp DESC LIMIT $2",
-            recipient_id
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(records)
-    }
-
-    async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        let records = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transactions WHERE block_id = $1",
-            block_id
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(records)
-    }
-
-    async fn find_unconfirmed(&self, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        let records = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transactions WHERE block_id IS NULL ORDER BY fee DESC, timestamp ASC LIMIT $1",
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(records)
-    }
-
-    // Stubs
-    async fn update(&self, _item: &TransactionModel) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn delete(&self, _id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn insert_many(&self, _items: &[TransactionModel]) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("batch insert not implemented".to_string()))
-    }
-
-    async fn find_by_id(&self, _id: i64) -> RepositoryResult<Option<TransactionModel>> {
-        Err(RepositoryError::Validation("use find_by_txid instead".to_string()))
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("delete not implemented for transaction".to_string()))
     }
 
     async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<TransactionModel>> {
-        Err(RepositoryError::Validation("use other find methods".to_string()))
+        Err(RepositoryError::Validation("use find_by_sender or find_by_recipient".to_string()))
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM transactions")
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM transaction")
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(count.0)
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
     }
 }
 
-/// Account repository implementation
+#[async_trait]
+pub trait AccountRepository: Repository<AccountModel> {
+    async fn find_by_account_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>>;
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AccountModel>>;
+    async fn find_latest_by_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>>;
+    async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<AccountModel>>;
+    async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()>;
+}
+
 pub struct PgAccountRepository {
     pool: PgPool,
 }
@@ -398,206 +457,161 @@ impl PgAccountRepository {
 
 #[async_trait]
 impl AccountRepository for PgAccountRepository {
-    async fn insert(&self, account: &AccountModel) -> RepositoryResult<()> {
-        sqlx::query!(
-            r#"
-            INSERT INTO accounts (
-                account_id, address, public_key, balance, unconfirmed_balance,
-                reserved_balance, guaranteed_balance, properties, lease, current_height
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            "#,
-            account.account_id,
-            account.address,
-            account.public_key.as_slice(),
-            account.balance,
-            account.unconfirmed_balance,
-            account.reserved_balance,
-            account.guaranteed_balance,
-            &account.properties,
-            &account.lease,
-            account.current_height
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(())
-    }
-
-    async fn find_by_account_id(&self, account_id: i64) -> RepositoryResult<Option<AccountModel>> {
+    async fn find_by_account_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>> {
         let record = sqlx::query_as!(
             AccountModel,
-            "SELECT * FROM accounts WHERE account_id = $1",
-            account_id
+            "SELECT * FROM account WHERE id = $1 AND latest = TRUE LIMIT 1",
+            id
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(record)
+    }
+
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AccountModel>> {
+        let records = sqlx::query_as!(
+            AccountModel,
+            "SELECT * FROM account WHERE height = $1 AND latest = TRUE",
+            height
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_latest_by_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>> {
+        self.find_by_account_id(id).await
     }
 
     async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<AccountModel>> {
         let record = sqlx::query_as!(
             AccountModel,
-            "SELECT * FROM accounts WHERE address = $1",
-            address
+            "SELECT * FROM account WHERE latest = TRUE ORDER BY height DESC LIMIT 1"
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(record)
     }
 
     async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()> {
         sqlx::query!(
             r#"
-            UPDATE accounts
-            SET balance = $1, unconfirmed_balance = $2, last_updated = NOW()
-            WHERE account_id = $3
+            UPDATE account
+            SET balance = $2, unconfirmed_balance = $3
+            WHERE id = $1 AND latest = TRUE
             "#,
+            account_id,
             balance,
-            unconfirmed_balance,
-            account_id
+            unconfirmed_balance
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(())
-    }
-
-    // Stubs
-    async fn find_by_id(&self, _id: i64) -> RepositoryResult<Option<AccountModel>> {
-        Err(RepositoryError::Validation("use find_by_account_id instead".to_string()))
-    }
-
-    async fn update(&self, _item: &AccountModel) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("use update_balance instead".to_string()))
-    }
-
-    async fn delete(&self, _id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn insert_many(&self, _items: &[AccountModel]) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("batch insert not implemented".to_string()))
-    }
-
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<AccountModel>> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn count(&self) -> RepositoryResult<i64> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM accounts")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(count.0)
-    }
-}
-
-/// Asset repository implementation
-pub struct PgAssetRepository {
-    pool: PgPool,
-}
-
-impl PgAssetRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
     }
 }
 
 #[async_trait]
-impl AssetRepository for PgAssetRepository {
-    async fn insert(&self, asset: &AssetModel) -> RepositoryResult<()> {
+impl Repository<AccountModel> for PgAccountRepository {
+    async fn insert(&self, account: &AccountModel) -> RepositoryResult<()> {
         sqlx::query!(
             r#"
-            INSERT INTO assets (
-                asset_id, owner_id, name, description, quantity,
-                decimals, mintable, transferable, data
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO account (
+                id, balance, unconfirmed_balance, forged_balance,
+                active_lessee_id, has_control_phasing, height, latest
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
-            asset.asset_id,
-            asset.owner_id,
-            asset.name,
-            asset.description,
-            asset.quantity,
-            asset.decimals,
-            asset.mintable,
-            asset.transferable,
-            asset.data.as_slice()
+            account.id,
+            account.balance,
+            account.unconfirmed_balance,
+            account.forged_balance,
+            account.active_lessee_id,
+            account.has_control_phasing,
+            account.height,
+            account.latest
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(())
     }
 
-    async fn find_by_asset_id(&self, asset_id: i64) -> RepositoryResult<Option<AssetModel>> {
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountModel>> {
         let record = sqlx::query_as!(
-            AssetModel,
-            "SELECT * FROM assets WHERE asset_id = $1",
-            asset_id
+            AccountModel,
+            "SELECT * FROM account WHERE db_id = $1",
+            db_id
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(record)
     }
 
-    async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>> {
+    async fn update(&self, account: &AccountModel) -> RepositoryResult<()> {
+        sqlx::query!(
+            r#"
+            UPDATE account SET
+                balance = $2, unconfirmed_balance = $3, forged_balance = $4,
+                active_lessee_id = $5, has_control_phasing = $6, height = $7, latest = $8
+            WHERE db_id = $1
+            "#,
+            account.db_id,
+            account.balance,
+            account.unconfirmed_balance,
+            account.forged_balance,
+            account.active_lessee_id,
+            account.has_control_phasing,
+            account.height,
+            account.latest
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("delete not implemented for account (use logical delete)".to_string()))
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
         let records = sqlx::query_as!(
-            AssetModel,
-            "SELECT * FROM assets WHERE owner_id = $1 ORDER BY created_at DESC",
-            owner_id
+            AccountModel,
+            "SELECT * FROM account WHERE latest = TRUE ORDER BY id LIMIT $1 OFFSET $2",
+            limit,
+            offset
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(records)
-    }
-
-    async fn find_tradable(&self, limit: i64) -> RepositoryResult<Vec<AssetModel>> {
-        let records = sqlx::query_as!(
-            AssetModel,
-            "SELECT * FROM assets WHERE deleted = FALSE AND transferable = TRUE ORDER BY created_at DESC LIMIT $1",
-            limit
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(records)
-    }
-
-    // Stubs
-    async fn find_by_id(&self, _id: i64) -> RepositoryResult<Option<AssetModel>> {
-        Err(RepositoryError::Validation("use find_by_asset_id instead".to_string()))
-    }
-
-    async fn update(&self, _item: &AssetModel) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn delete(&self, _id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn insert_many(&self, _items: &[AssetModel]) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("batch insert not implemented".to_string()))
-    }
-
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<AssetModel>> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM assets WHERE deleted = FALSE")
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account WHERE latest = TRUE")
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(count.0)
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
     }
 }
 
-/// AccountAsset repository implementation
+#[async_trait]
+pub trait AccountAssetRepository: Repository<AccountAssetModel> {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>>;
+    async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>>;
+    async fn find_by_account_and_asset(&self, account_id: i64, asset_id: i64) -> RepositoryResult<Option<AccountAssetModel>>;
+    async fn update_quantity(&self, account_id: i64, asset_id: i64, quantity: i64, height: i32) -> RepositoryResult<()>;
+    async fn increase_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
+    async fn decrease_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
+}
+
 pub struct PgAccountAssetRepository {
     pool: PgPool,
 }
@@ -610,55 +624,67 @@ impl PgAccountAssetRepository {
 
 #[async_trait]
 impl AccountAssetRepository for PgAccountAssetRepository {
-    async fn insert(&self, aa: &AccountAssetModel) -> RepositoryResult<()> {
-        sqlx::query!(
-            r#"
-            INSERT INTO account_assets (account_id, asset_id, quantity)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (account_id, asset_id) DO UPDATE
-            SET quantity = EXCLUDED.quantity, last_updated = NOW()
-            "#,
-            aa.account_id,
-            aa.asset_id,
-            aa.quantity
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(())
-    }
-
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
         let records = sqlx::query_as!(
             AccountAssetModel,
-            "SELECT * FROM account_assets WHERE account_id = $1",
+            "SELECT * FROM account_asset WHERE account_id = $1 AND latest = TRUE",
             account_id
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
 
     async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
         let records = sqlx::query_as!(
             AccountAssetModel,
-            "SELECT * FROM account_assets WHERE asset_id = $1",
+            "SELECT * FROM account_asset WHERE asset_id = $1 AND latest = TRUE",
             asset_id
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(records)
+    }
+
+    async fn find_by_account_and_asset(&self, account_id: i64, asset_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
+        let record = sqlx::query_as!(
+            AccountAssetModel,
+            "SELECT * FROM account_asset WHERE account_id = $1 AND asset_id = $2 AND latest = TRUE LIMIT 1",
+            account_id,
+            asset_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update_quantity(&self, account_id: i64, asset_id: i64, quantity: i64, height: i32) -> RepositoryResult<()> {
+        sqlx::query!(
+            r#"
+            UPDATE account_asset
+            SET quantity = $3, height = $4, latest = TRUE
+            WHERE account_id = $1 AND asset_id = $2
+            "#,
+            account_id,
+            asset_id,
+            quantity,
+            height
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 
     async fn increase_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
         sqlx::query!(
             r#"
-            INSERT INTO account_assets (account_id, asset_id, quantity)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (account_id, asset_id) DO UPDATE
-            SET quantity = account_assets.quantity + EXCLUDED.quantity, last_updated = NOW()
+            UPDATE account_asset
+            SET quantity = quantity + $3, latest = TRUE
+            WHERE account_id = $1 AND asset_id = $2
             "#,
             account_id,
             asset_id,
@@ -666,157 +692,256 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(())
     }
 
     async fn decrease_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
         let result = sqlx::query!(
             r#"
-            UPDATE account_assets
-            SET quantity = quantity - $1, last_updated = NOW()
-            WHERE account_id = $2 AND asset_id = $3 AND quantity >= $1
+            UPDATE account_asset
+            SET quantity = quantity - $3, latest = TRUE
+            WHERE account_id = $1 AND asset_id = $2 AND quantity >= $3
             "#,
-            delta,
             account_id,
-            asset_id
+            asset_id,
+            delta
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
 
         if result.rows_affected() == 0 {
             return Err(RepositoryError::Validation("insufficient asset quantity".to_string()));
         }
         Ok(())
     }
+}
 
-    // Stubs
-    async fn find_by_id(&self, _id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
+#[async_trait]
+impl Repository<AccountAssetModel> for PgAccountAssetRepository {
+    async fn insert(&self, aa: &AccountAssetModel) -> RepositoryResult<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO account_asset (
+                account_id, asset_id, quantity, unconfirmed_quantity, height, latest
+            ) VALUES ($1, $2, $3, $4, $5, $6)
+            "#,
+            aa.account_id,
+            aa.asset_id,
+            aa.quantity,
+            aa.unconfirmed_quantity,
+            aa.height,
+            aa.latest
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 
-    async fn update(&self, _item: &AccountAssetModel) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("use increase_quantity/decrease_quantity instead".to_string()))
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
+        let record = sqlx::query_as!(
+            AccountAssetModel,
+            "SELECT * FROM account_asset WHERE db_id = $1",
+            db_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
     }
 
-    async fn delete(&self, _id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
+    async fn update(&self, aa: &AccountAssetModel) -> RepositoryResult<()> {
+        sqlx::query!(
+            r#"
+            UPDATE account_asset SET
+                quantity = $2, unconfirmed_quantity = $3, height = $4, latest = $5
+            WHERE db_id = $1
+            "#,
+            aa.db_id,
+            aa.quantity,
+            aa.unconfirmed_quantity,
+            aa.height,
+            aa.latest
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 
-    async fn insert_many(&self, _items: &[AccountAssetModel]) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("batch insert not implemented".to_string()))
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("delete not implemented for account_asset".to_string()))
     }
 
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<AccountAssetModel>> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountAssetModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as!(
+            AccountAssetModel,
+            "SELECT * FROM account_asset WHERE latest = TRUE ORDER BY db_id LIMIT $1 OFFSET $2",
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_assets")
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_asset WHERE latest = TRUE")
             .fetch_one(&self.pool)
             .await
-            .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(count.0)
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
     }
 }
 
-/// TransactionReceipt repository implementation
-pub struct PgTransactionReceiptRepository {
+#[async_trait]
+pub trait AssetRepository: Repository<AssetModel> {
+    async fn find_by_asset_id(&self, id: i64) -> RepositoryResult<Option<AssetModel>>;
+    async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>>;
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AssetModel>>;
+    async fn find_tradable(&self, limit: i64) -> RepositoryResult<Vec<AssetModel>>;
+}
+
+pub struct PgAssetRepository {
     pool: PgPool,
 }
 
-impl PgTransactionReceiptRepository {
+impl PgAssetRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 }
 
 #[async_trait]
-impl TransactionReceiptRepository for PgTransactionReceiptRepository {
-    async fn insert(&self, receipt: &TransactionReceiptModel) -> RepositoryResult<()> {
-        sqlx::query!(
-            r#"
-            INSERT INTO transaction_receipts (transaction_id, status, gas_used, logs, contract_address)
-            VALUES ($1, $2, $3, $4::jsonb, $5)
-            "#,
-            receipt.transaction_id,
-            receipt.status,
-            receipt.gas_used,
-            receipt.logs.as_str(),
-            receipt.contract_address.as_deref()
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(())
-    }
-
-    async fn insert_with_status(
-        &self,
-        txid: i64,
-        status: u8,
-        gas_used: u64,
-        logs: &str,
-        contract_address: Option<&[u8]>,
-    ) -> RepositoryResult<()> {
-        let receipt = TransactionReceiptModel {
-            id: 0,
-            transaction_id: txid,
-            status: status as i16,
-            gas_used: gas_used as i64,
-            logs: serde_json::from_str(logs).unwrap_or_default(),
-            contract_address: contract_address.map(|v| v.to_vec()),
-            executed_at: Utc::now(),
-        };
-        self.insert(&receipt).await
-    }
-
-    async fn find_by_transaction(&self, txid: i64) -> RepositoryResult<Option<TransactionReceiptModel>> {
+impl AssetRepository for PgAssetRepository {
+    async fn find_by_asset_id(&self, id: i64) -> RepositoryResult<Option<AssetModel>> {
         let record = sqlx::query_as!(
-            TransactionReceiptModel,
-            "SELECT * FROM transaction_receipts WHERE transaction_id = $1",
-            txid
+            AssetModel,
+            "SELECT * FROM asset WHERE id = $1 AND latest = TRUE LIMIT 1",
+            id
         )
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| RepositoryError::DbError(e))?;
+        .map_err(RepositoryError::DbError)?;
         Ok(record)
     }
 
-    // Stubs
-    async fn find_by_id(&self, _id: i64) -> RepositoryResult<Option<TransactionReceiptModel>> {
-        Err(RepositoryError::Validation("use find_by_transaction instead".to_string()))
+    async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>> {
+        let records = sqlx::query_as!(
+            AssetModel,
+            "SELECT * FROM asset WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC",
+            owner_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
     }
 
-    async fn update(&self, _item: &TransactionReceiptModel) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AssetModel>> {
+        let records = sqlx::query_as!(
+            AssetModel,
+            "SELECT * FROM asset WHERE height = $1 AND latest = TRUE",
+            height
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
     }
 
-    async fn delete(&self, _id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn insert_many(&self, _items: &[TransactionReceiptModel]) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("batch insert not implemented".to_string()))
-    }
-
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<TransactionReceiptModel>> {
-        Err(RepositoryError::Validation("not implemented".to_string()))
-    }
-
-    async fn count(&self) -> RepositoryResult<i64> {
-        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM transaction_receipts")
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| RepositoryError::DbError(e))?;
-        Ok(count.0)
+    async fn find_tradable(&self, limit: i64) -> RepositoryResult<Vec<AssetModel>> {
+        let records = sqlx::query_as!(
+            AssetModel,
+            "SELECT * FROM asset WHERE latest = TRUE ORDER BY height DESC LIMIT $1",
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
     }
 }
 
-// Re-export repository traits
+#[async_trait]
+impl Repository<AssetModel> for PgAssetRepository {
+    async fn insert(&self, asset: &AssetModel) -> RepositoryResult<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO asset (
+                id, account_id, name, description, quantity, decimals,
+                has_control_phasing, initial_quantity, height, latest
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            "#,
+            asset.id,
+            asset.account_id,
+            asset.name,
+            asset.description,
+            asset.quantity,
+            asset.decimals,
+            asset.has_control_phasing,
+            asset.initial_quantity,
+            asset.height,
+            asset.latest
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetModel>> {
+        let record = sqlx::query_as!(
+            AssetModel,
+            "SELECT * FROM asset WHERE db_id = $1",
+            db_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _asset: &AssetModel) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("update not implemented for asset".to_string()))
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("delete not implemented for asset".to_string()))
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AssetModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as!(
+            AssetModel,
+            "SELECT * FROM asset WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2",
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset WHERE latest = TRUE")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
 pub use {
     BlockRepository, TransactionRepository, AccountRepository,
-    AssetRepository, AccountAssetRepository, ContractRepository,
-    TransactionReceiptRepository
+    AccountAssetRepository, AssetRepository,
+    PgBlockRepository, PgTransactionRepository, PgAccountRepository,
+    PgAccountAssetRepository, PgAssetRepository,
 };

@@ -11,5 +11,5 @@ pub mod repository;
 pub mod crypto;
 
 pub use manager::{AccountManager, AccountConfig};
-pub use repository::AccountRepositoryExt;
+pub use repository::AccountStore;
 pub use crypto::{generate_keypair, AddressGenerator};

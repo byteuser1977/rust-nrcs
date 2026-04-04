@@ -13,6 +13,9 @@ blockchain-types = { path = "../blockchain-types" }
 # 数据访问层
 orm = { path = "../orm" }
 
+# 加密层
+crypto = { path = "../crypto" }
+
 # 错误处理
 thiserror = "1.0"
 anyhow = "1.0"
@@ -22,10 +25,11 @@ tokio = { version = "1.0", features = ["sync"] }
 dashmap = "5.0"
 parking_lot = "0.12"
 
-# 加密
-ed25519-dalek = "2.0"
-rand = "0.8"
+# 编码
 base58 = "0.2"
+
+# Trait
+async-trait = "0.1"
 
 # 日志
 tracing = "0.1"
