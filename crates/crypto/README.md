@@ -1,129 +1,201 @@
-# Crypto Crate - 加密原语
+# ZeroClaw Crypto
 
-提供 NRCs 区块链所需的核心加密功能，包括：
+可插拔国密算法实现，支持国际算法与国密算法的无缝切换。
 
-- **Ed25519**：数字签名（原有）
-- **SHA-256 / BLAKE3**：哈希计算（原有）
-- **SM2**：椭圆曲线数字签名（国密）
-- **SM3**：密码杂凑算法（国密）
-- **SM4**：分组密码（国密），支持 CBC 和 GCM 模式
+## 特性
 
----
+- **哈希算法**: SHA-256 (默认) 或 SM3
+- **签名算法**: Ed25519 (默认) 或 SM2
+- **对称加密**: AES-CBC/GCM (默认) 或 SM4-CBC/SM4-GCM
 
-## 快速开始
+## 配置
 
-### 签名（Ed25519 或 SM2）
+通过配置文件选择算法：
 
-```rust
-use crypto::{KeyPair, verify};
-
-// Ed25519（原有）
-let kp_ed = KeyPair::generate();
-let msg = b"hello";
-let sig = kp_ed.sign(msg);
-assert!(verify(&kp_ed.public_key(), msg, &sig).is_ok());
-
-// SM2（新增）
-use crypto::sm2::KeyPair as Sm2KeyPair;
-let kp_sm2 = Sm2KeyPair::generate();
-let sig_sm2 = kp_sm2.sign(msg);
-assert!(crypto::sm2::verify(&kp_sm2.public_key(), msg, &sig_sm2).is_ok());
+```toml
+# config/default.toml
+[crypto]
+hash = "sm3"          # "sha256" (default) or "sm3"
+signature = "sm2"    # "ed25519" (default) or "sm2"
+cipher = "sm4"       # "aes" (default) or "sm4"
+cipher_mode = "gcm"  # "cbc" or "gcm" (default: gcm)
 ```
 
-### 哈希（SM3）
-
-```rust
-use crypto::sm3;
-
-let hash = sm3(b"hello world");
-assert_eq!(hash.len(), 32);
+或通过环境变量覆盖：
+```
+CONFIG_CRYPTO_HASH=sm3
+CONFIG_CRYPTO_SIGNATURE=sm2
+CONFIG_CRYPTO_CIPHER=sm4
+CONFIG_CRYPTO_CIPHER_MODE=gcm
 ```
 
-### 对称加密（SM4）
+## 使用示例
 
 ```rust
-use crypto::sm4::{Sm4Key, encrypt_cbc, decrypt_cbc};
+use zeroclaw_crypto::{sha256, sign, verify, KeyPair, generate_keypair};
 
-let key = Sm4Key::random();
-let mut iv = [0u8; 16];
-rand::thread_rng().fill_bytes(&mut iv);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 哈希
+    let data = b"hello world";
+    let hash = sha256(data);
+    println!("Hash: {}", hex::encode(hash));
 
-let plaintext = b"Secret message";
-let ciphertext = encrypt_cbc(plaintext, &key, &iv);
-let decrypted = decrypt_cbc(&ciphertext, &key).unwrap();
+    // 生成密钥对
+    let kp = generate_keypair()?;
+    println!("Public key ({} bytes): {}", kp.public_key().len(), hex::encode(kp.public_key().as_bytes()));
 
-assert_eq!(plaintext, decrypted.as_slice());
+    // 签名
+    let message = b"important message";
+    let signature = sign(kp.secret_key(), message);
+    println!("Signature: {}", hex::encode(signature.as_bytes()));
+
+    // 验证
+    verify(kp.public_key(), message, &signature)?;
+    println!("Signature verified!");
+
+    // 对称加密（如果配置了cipher）
+    if let Some(cipher) = &zeroclaw_crypto::CRYPTO_CONFIG.cipher {
+        let key = [0x00u8; 16];
+        let iv = [0x00u8; 12];
+        let plaintext = b"secret data";
+        let ciphertext = cipher.encrypt(&key, &iv, plaintext)?;
+        let recovered = cipher.decrypt(&key, &iv, &ciphertext)?;
+        assert_eq!(recovered, plaintext);
+    }
+
+    Ok(())
+}
 ```
 
-#### GCM 模式
+## 架构
+
+### 核心 Trait
 
 ```rust
-use crypto::sm4::{encrypt_gcm, decrypt_gcm, Sm4Key};
+pub trait HashAlgorithm {
+    fn hash(&self, data: &[u8]) -> Hash256;
+}
 
-let key = Sm4Key::random();
-let mut nonce = [0u8; 12];
-rand::thread_rng().fill_bytes(&mut nonce);
-let aad = b"header";
+pub trait SignerAlgorithm {
+    fn sign(&self, key: &SecretKey, message: &[u8]) -> Signature;
+    fn verify(&self, key: &PublicKey, message: &[u8], signature: &Signature) -> CryptoResult<()>;
+    fn generate_keypair(&self) -> CryptoResult<KeyPair>;
+}
 
-let (ciphertext, tag) = encrypt_gcm(b"data", &key, &nonce, aad).unwrap();
-let plaintext = decrypt_gcm(&ciphertext, &key, &nonce, &tag, aad).unwrap();
+pub trait CipherAlgorithm {
+    fn encrypt(&self, key: &[u8], iv: &[u8], plaintext: &[u8]) -> CryptoResult<CipherText>;
+    fn decrypt(&self, key: &[u8], iv: &[u8], ciphertext: &CipherText) -> CryptoResult<Vec<u8>>;
+}
 ```
 
----
+### 全局配置
 
-## 国密算法实现细节
+```rust
+pub static CRYPTO_CONFIG: Lazy<CryptoConfig> = Lazy::new(load_config);
+```
 
-| 算法  |  crate   | 输出长度 | 密钥长度 | 模式/用途           |
-|-------|----------|----------|----------|---------------------|
-| SM2   | sm2      | 64 字节  | 32 字节  | 签名/验证（非加密） |
-| SM3   | sm3      | 32 字节  | N/A      | 哈希、KDF           |
-| SM4   | sm4      | 变长     | 16 字节  | CBC（填充）、GCM    |
+`CryptoConfig` 包含三个算法实例：`hash`, `signer`, `cipher`。便捷函数 `sha256()`, `sign()`, `verify()` 等自动使用配置中的算法。
 
-详细技术文档见 `docs/crypto-gm-implementation-report.md`。
+### 类型系统
 
----
+- `Hash256 = [u8; 32]`
+- `PublicKey` 枚举：`Ed25519(ed25519_dalek::PublicKey)` | `Sm2(sm2::PublicKey)`
+- `SecretKey` 枚举：`Ed25519(ed25519_dalek::SecretKey)` | `Sm2(sm2::SecretKey)`
+- `Signature` 枚举：`Ed25519(...)` | `Sm2(...)`
+- `KeyPair` 枚举：`Ed25519(...)` | `Sm2(...)`
 
-## API 兼容性
+## 算法细节
 
-- 新 SM2 `KeyPair` 保持与 Ed25519 `KeyPair` 相同的方法名（`generate`, `from_seed`, `sign`, `public_key`）。
-- SM4 加密函数与 Java `Crypto.aesEncrypt` 风格一致：返回 `iv || ciphertext` 格式，便于跨语言迁移。
+### 哈希
+- **SHA-256**: 使用 `sha2` crate，符合 FIPS 180-4。
+- **SM3**: 使用 `sm3` crate，符合 GM/T 0003-2012。
 
----
+### 签名
+- **Ed25519**: 使用 `ed25519-dalek`，高速抗侧信道。
+- **SM2**: 使用 `sm2` crate，基于 NIST P-256 曲线，符合 GM/T 0003-2012。
 
-## 安全建议
-
-- 使用 `Sm4Key::derive_from` 从密码派生密钥，而非硬编码。
-- 私钥和密钥材料使用后应显式 `zeroize`（已自动处理）。
-- GCM 模式推荐使用 12 字节随机 nonce；勿重复使用同一 nonce+key 组合。
-- CBC 模式适用于无认证需求的场景；优先使用 GCM 认证加密。
-
----
+### 对称加密
+- **AES**: 支持 128/192/256 位密钥
+  - CBC 模式：PKCS7 填充
+  - GCM 模式：认证加密，128 位标签
+- **SM4**:
+  - CBC 模式：PKCS7 填充
+  - GCM 模式：目前在实现中回退到 CBC（待完整实现）
 
 ## 测试
 
-运行测试：
+每个算法包含标准向量测试：
 
 ```bash
-cargo test -p crypto
+cargo test -p zeroclaw-crypto
 ```
 
-测试覆盖：
-- 标准向量验证（GM/T）
-- 加解密往返
-- 错误注入（错误密钥、错误 tag、填充错误）
-- 零化内存检查
+### 已知测试向量
 
----
+- SHA-256：FIPS PUB 180-4 向量
+- SM3：GM/T 0003-2012 附录 A
+- AES-GCM：NIST SP 800-38D
+
+## 错误处理
+
+返回 `CryptoResult<T>`，错误类型 `CryptoError` 包括：
+- `InvalidKeyLength`
+- `InvalidSignatureLength`
+- `InvalidIvLength`
+- `InvalidData`
+- `VerificationFailed`
+- `CipherNotConfigured`
+- `UnsupportedAlgorithm`
+- `ConfigError`
+
+## 迁移指南
+
+### 现有代码使用 `sha2::Sha256` 直接调用
+
+替换为：
+
+```rust
+// Before
+use sha2::{Digest, Sha256};
+let hash = Sha256::digest(data);
+
+// After
+use zeroclaw_crypto::sha256;
+let hash = sha256(data);
+```
+
+类似地，将 `ed25519_dalek` 签名代码改为调用 `sign()` 和 `verify()`。
+
+通过配置可无缝切换算法，无需修改业务逻辑。
+
+## 依赖项
+
+```toml
+[dependencies]
+sha2 = "0.10"
+ed25519-dalek = "2.0"
+aes = "0.8"
+aes-gcm = "0.11.0-rc.3"
+cbc = "0.2.0-rc.4"
+sm2 = "0.14.0-rc.8"
+sm3 = "0.5.0"
+sm4 = "0.6.0-rc.3"
+config = "0.13"
+once_cell = "1.18"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+rand = "0.10"
+```
 
 ## 许可证
 
-Apache-2.0
+Licensed under either of
 
----
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
 
-## 参考
+at your option.
 
-- GM/T 0003-2012: SM2 椭圆曲线数字签名算法
-- GM/T 0004-2012: SM3 密码杂凑算法
-- GM/T 0002-2012: SM4 分组密码算法
-- Java 参考实现: `nrcs-crypto/src/main/java/com/bytechain/nrcs/crypto/Crypto.java`
+## 贡献
+
+见 [CONTRIBUTING.md](../CONTRIBUTING.md)。

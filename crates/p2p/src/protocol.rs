@@ -1,247 +1,252 @@
-//! P2P 协议消息定义
-
-use super::blockchain_types::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-/// P2P 协议协议标识符（用于 libp2p 的 protocol ID）
-pub const BLOCK_PROTOCOL: &str = "/nrcs/block/1.0.0";
-pub const TX_PROTOCOL: &str = "/nrcs/tx/1.0.0";
-pub const PEER_PROTOCOL: &str = "/nrcs/peer/1.0.0";
-
-/// P2P 网络消息枚举
-///
-/// 所有消息都应该是可序列化的，使用 `bincode` 编码。
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum P2PMessage {
-    /// 区块广播（Announce）
-    /// 当节点接收到新区块时，向邻居广播区块头部元信息。
-    BlockAnnounce(BlockAnnounce),
-
-    /// 区块请求（Request full block data）
-    BlockRequest(BlockRequest),
-
-    /// 区块响应（Response full block）
-    BlockResponse(BlockResponse),
-
-    /// 交易广播（Broadcast transaction）
-    TransactionBroadcast(TransactionBroadcast),
-
-    /// 交易请求（Request transactions from pool）
-    TransactionsRequest(TransactionsRequest),
-
-    /// 交易响应
-    TransactionsResponse(TransactionsResponse),
-
-    /// 节点列表请求
-    PeersRequest(PeersRequest),
-
-    /// 节点列表响应
-    PeersResponse(PeersResponse),
-
-    /// Ping（心跳）
-    Ping(Ping),
-
-    /// Pong
-    Pong(Pong),
+/// P2P 协议帧头（对应 Java 二进制封装）
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FrameHeader {
+    pub version: i32,      // 版本 (1)
+    pub request_id: i64,  // 请求 ID（客户端生成）
+    pub flags: i32,       // 标志位（FLAG_COMPRESSED = 1）
+    pub length: i32,      // 消息体长度
 }
 
-/// 区块公告（轻量级头部信息）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlockAnnounce {
-    /// 区块 ID
-    pub block_id: BlockId,
-    /// 区块高度
-    pub height: Height,
-    /// 区块哈希
-    pub hash: Hash256,
-    /// 出块者
-    pub generator_id: AccountId,
-    /// 时间戳
-    pub timestamp: Timestamp,
-    /// 交易数量
-    pub tx_count: u32,
-    /// 总金额
-    pub total_amount: Amount,
-    /// 总手续费
-    pub total_fee: Amount,
+impl FrameHeader {
+    pub fn new(version: i32, request_id: i64, flags: i32, length: i32) -> Self {
+        Self {
+            version,
+            request_id,
+            flags,
+            length,
+        }
+    }
+
+    pub fn is_compressed(&self) -> bool {
+        (self.flags & 1) != 0
+    }
 }
 
-/// 区块请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlockRequest {
-    /// 请求的区块高度
-    pub height: Height,
-    /// 请求的区块哈希（校验用）
-    pub hash: Option<Hash256>,
+/// 请求类型枚举（与 Java 完全匹配）
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "camelCase")]
+pub enum RequestType {
+    GetInfo,
+    GetPeers,
+    AddPeers,
+    GetCumulativeDifficulty,
+    GetMilestoneBlockIds,
+    GetNextBlockIds,
+    GetNextBlocks,
+    GetTransactions,
+    GetUnconfirmedTransactions,
+    ProcessBlock,
+    ProcessTransactions,
+    BundlerRate,
+    // 未来可能扩展
+    Unknown(String),
 }
 
-/// 区块响应（完整区块数据）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BlockResponse {
-    /// 区块数据（如果不存在则为 None）
-    pub block: Option<Block>,
-    /// 错误信息（如果失败）
+impl From<&str> for RequestType {
+    fn from(s: &str) -> Self {
+        match s {
+            "getInfo" => RequestType::GetInfo,
+            "getPeers" => RequestType::GetPeers,
+            "addPeers" => RequestType::AddPeers,
+            "getCumulativeDifficulty" => RequestType::GetCumulativeDifficulty,
+            "getMilestoneBlockIds" => RequestType::GetMilestoneBlockIds,
+            "getNextBlockIds" => RequestType::GetNextBlockIds,
+            "getNextBlocks" => RequestType::GetNextBlocks,
+            "getTransactions" => RequestType::GetTransactions,
+            "getUnconfirmedTransactions" => RequestType::GetUnconfirmedTransactions,
+            "processBlock" => RequestType::ProcessBlock,
+            "processTransactions" => RequestType::ProcessTransactions,
+            "bundlerRate" => RequestType::BundlerRate,
+            other => RequestType::Unknown(other.to_string()),
+        }
+    }
+}
+
+/// 基础请求（所有 RPC 共享字段）
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PeerRequest {
+    #[serde(rename = "requestType")]
+    pub request_type: RequestType,
+    #[serde(rename = "protocol")]
+    pub protocol: i32, // 必须是 1 或 2
+
+    // 其他字段使用 serde_json::Value 动态处理
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+impl PeerRequest {
+    pub fn new(request_type: RequestType, protocol: i32) -> Self {
+        Self {
+            request_type,
+            protocol,
+            extra: HashMap::new(),
+        }
+    }
+
+    pub fn get<T: for<'de> Deserialize<'de>>(&self, key: &str) -> Option<T> {
+        self.extra.get(key)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    }
+
+    pub fn set<T: Serialize>(&mut self, key: &str, value: T) {
+        if let Ok(v) = serde_json::to_value(value) {
+            self.extra.insert(key.to_string(), v);
+        }
+    }
+}
+
+/// 基础响应
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PeerResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+
+    // 成功时的数据字段（根据 requestType 不同而不同）
+    #[serde(flatten)]
+    pub data: Option<serde_json::Value>,
 }
 
-/// 交易广播
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionBroadcast {
-    /// 交易列表（通常单次只广播一个）
-    pub transactions: Vec<Transaction>,
-}
-
-/// 交易请求（从内存池获取未确认交易）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionsRequest {
-    /// 请求者公钥（用于过滤自己已知的交易）
-    /// 可选
-    pub since_tx_id: Option<TransactionId>,
-    /// 最多返回数量
-    pub limit: u32,
-}
-
-/// 交易响应
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionsResponse {
-    /// 交易列表
-    pub transactions: Vec<Transaction>,
-    /// 是否还有更多
-    pub has_more: bool,
-}
-
-/// 节点列表请求
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeersRequest {
-    /// 请求数量上限
-    pub limit: u32,
-    /// 排除已知节点列表
-    pub exclude: Vec<PeerId>,
-}
-
-/// 节点列表响应
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeersResponse {
-    /// 节点信息列表（简化版）
-    pub peers: Vec<PeerInfo>,
-}
-
-/// 节点信息（简化）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PeerInfo {
-    /// 节点 ID（libp2p PeerId）
-    pub id: String,
-    /// 节点地址列表（multiaddr 字符串）
-    pub addresses: Vec<String>,
-    /// 支持的协议列表
-    pub protocols: Vec<String>,
-    /// 节点版本
-    pub version: String,
-    /// 最后看到的时间戳
-    pub last_seen: Timestamp,
-}
-
-/// Ping 消息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Ping {
-    /// 发送时间戳
-    pub sent: Timestamp,
-    /// 随机数（防缓存）
-    pub nonce: u64,
-}
-
-/// Pong 消息
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Pong {
-    /// 响应时间
-    pub received: Timestamp,
-    /// 对应 Ping 的 nonce
-    pub nonce: u64,
-}
-
-/// Peer ID 类型别名（libp2p 的 PeerId）
-pub type PeerId = libp2p::PeerId;
-
-impl P2PMessage {
-    /// 创建区块广播消息
-    pub fn block_announce(announce: BlockAnnounce) -> Self {
-        Self::BlockAnnounce(announce)
+impl PeerResponse {
+    pub fn success(data: Option<serde_json::Value>) -> Self {
+        Self { error: None, data }
     }
 
-    /// 创建交易广播消息
-    pub fn transaction_broadcast(txs: Vec<Transaction>) -> Self {
-        Self::TransactionBroadcast(TransactionBroadcast { transactions: txs })
+    pub fn error(msg: &str) -> Self {
+        Self {
+            error: Some(msg.to_string()),
+            data: None,
+        }
     }
 
-    /// 创建 Peer 请求
-    pub fn peers_request(limit: u32) -> Self {
-        Self::PeersRequest(PeersRequest { limit, exclude: vec![] })
+    pub fn unsupported_request_type() -> Self {
+        Self::error("UNSUPPORTED_REQUEST_TYPE")
+    }
+
+    pub fn unsupported_protocol() -> Self {
+        Self::error("UNSUPPORTED_PROTOCOL")
+    }
+
+    pub fn sequence_error() -> Self {
+        Self::error("SEQUENCE_ERROR")
+    }
+
+    pub fn downloading() -> Self {
+        Self::error("DOWNLOADING")
+    }
+
+    pub fn max_inbound_connections() -> Self {
+        Self::error("MAX_INBOUND_CONNECTIONS")
+    }
+
+    pub fn blacklisted() -> Self {
+        Self::error("BLACKLISTED")
     }
 }
 
-/// 消息编解码辅助函数
-pub mod codec {
-    use super::*;
-    use bincode::{ serialize, deserialize };
-    use std::io;
+/// 帧编码器/解码器
+pub struct FrameCodec;
 
-    /// 编码消息为二进制
-    pub fn encode(msg: &P2PMessage) -> io::Result<Vec<u8>> {
-        serialize(msg).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-    }
+impl FrameCodec {
+    const MAGIC: [u8; 4] = [0x50, 0x32, 0x50, 0x00]; // "P2P\0"
 
-    /// 解码二进制消息
-    pub fn decode(data: &[u8]) -> io::Result<P2PMessage> {
-        deserialize(data).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-    }
-}
-
-#[cfg(test)]
-mod protocol_tests {
-    use super::*;
-
-    #[test]
-    fn test_block_announce_roundtrip() {
-        let announce = BlockAnnounce {
-            block_id: 100,
-            height: 100,
-            hash: [1u8; 32],
-            generator_id: 123456,
-            timestamp: 1_700_000_000,
-            tx_count: 10,
-            total_amount: 1_000_000_000,
-            total_fee: 100_000,
+    pub fn encode(&self, payload: &[u8], compressed: bool) -> Vec<u8> {
+        let mut flags = 0;
+        let body = if compressed {
+            flags |= 1;
+            self::compress_gzip(payload)
+        } else {
+            payload.to_vec()
         };
 
-        let msg = P2PMessage::BlockAnnounce(announce.clone());
-        let encoded = bincode::serialize(&msg).unwrap();
-        let decoded: P2PMessage = bincode::deserialize(&encoded).unwrap();
+        let length = body.len() as i32;
+        let mut buf = Vec::new();
 
-        match decoded {
-            P2PMessage::BlockAnnounce(a) => {
-                assert_eq!(a.block_id, announce.block_id);
-                assert_eq!(a.height, announce.height);
-            }
-            _ => panic!("wrong message type"),
-        }
+        // Magic + Version(4) + RequestID(8) + Flags(4) + Length(4) + Body
+        buf.extend(&Self::MAGIC);
+        buf.extend(&1i32.to_be_bytes()); // version = 1
+        buf.extend(&0i64.to_be_bytes()); // request_id (占位)
+        buf.extend(&flags.to_be_bytes());
+        buf.extend(&length.to_be_bytes());
+        buf.extend(body);
+
+        buf
     }
 
-    #[test]
-    fn test_transaction_broadcast_roundtrip() {
-        let tx = Transaction::new(
-            TransactionType::Payment,
-            123, Some(456), 1000, 10, 1_700_000_000, 32767
-        );
-        let msg = P2PMessage::transaction_broadcast(vec![tx.clone()]);
-        let encoded = bincode::serialize(&msg).unwrap();
-        let decoded: P2PMessage = bincode::deserialize(&encoded).unwrap();
-
-        match decoded {
-            P2PMessage::TransactionBroadcast(resp) => {
-                assert_eq!(resp.transactions.len(), 1);
-                assert_eq!(resp.transactions[0].sender_id, 123);
-            }
-            _ => panic!("wrong message type"),
+    pub fn decode(&self, data: &[u8]) -> Result<(FrameHeader, Vec<u8>), ProtocolError> {
+        if data.len() < 20 {
+            return Err(ProtocolError::InvalidFrame("Frame too short".into()));
         }
+
+        if &data[0..4] != &Self::MAGIC {
+            return Err(ProtocolError::InvalidFrame("Invalid magic bytes".into()));
+        }
+
+        let version = i32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+        let request_id = i64::from_be_bytes([
+            data[8], data[9], data[10], data[11],
+            data[12], data[13], data[14], data[15],
+        ]);
+        let flags = i32::from_be_bytes([data[16], data[17], data[18], data[19]]);
+        let length = i32::from_be_bytes([data[20], data[21], data[22], data[23]]);
+
+        let body_start = 24;
+        let body_end = body_start + length as usize;
+
+        if data.len() < body_end {
+            return Err(ProtocolError::InvalidFrame("Incomplete frame".into()));
+        }
+
+        let mut body = data[body_start..body_end].to_vec();
+
+        if flags & 1 != 0 {
+            body = self::decompress_gzip(&body)?;
+        }
+
+        let header = FrameHeader {
+            version,
+            request_id,
+            flags,
+            length,
+        };
+
+        Ok((header, body))
     }
+}
+
+fn compress_gzip(data: &[u8]) -> Vec<u8> {
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(data).unwrap();
+    encoder.finish().unwrap()
+}
+
+fn decompress_gzip(data: &[u8]) -> Result<Vec<u8>, ProtocolError> {
+    use flate2::read::GzDecoder;
+    use std::io::Read;
+
+    let mut decoder = GzDecoder::new(data);
+    let mut decompressed = Vec::new();
+    decoder.read_to_end(&mut decompressed)
+        .map_err(|e| ProtocolError::DecompressionError(e.to_string()))?;
+
+    Ok(decompressed)
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ProtocolError {
+    #[error("Invalid frame: {0}")]
+    InvalidFrame(String),
+
+    #[error("Decompression error: {0}")]
+    DecompressionError(String),
+
+    #[error("JSON error: {0}")]
+    JsonError(#[from] serde_json::Error),
 }
