@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use sqlx::{PgPool, Postgres};
 use thiserror::Error;
 
-use crate::models_v2::*;
+use crate::models::*;
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {

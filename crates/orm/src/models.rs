@@ -212,17 +212,13 @@ impl AccountModel {
     pub fn to_domain(&self) -> Result<Account> {
         Ok(Account {
             id: self.id as AccountId,
-            address: None,
             balance: self.balance as Amount,
             unconfirmed_balance: self.unconfirmed_balance as Amount,
-            reserved_balance: 0,
-            guaranteed_balance: self.forged_balance as Amount,
-            assets: std::collections::HashMap::new(),
-            properties: std::collections::HashMap::new(),
-            lease: None,
-            created_at: 0,
-            last_updated: 0,
-            current_height: self.height as Height,
+            forged_balance: self.forged_balance as Amount,
+            active_lessee_id: self.active_lessee_id.map(|id| id as AccountId),
+            has_control_phasing: self.has_control_phasing,
+            height: self.height as Height,
+            latest: self.latest,
         })
     }
 
@@ -232,11 +228,11 @@ impl AccountModel {
             id: account.id as i64,
             balance: account.balance as i64,
             unconfirmed_balance: account.unconfirmed_balance as i64,
-            forged_balance: account.guaranteed_balance as i64,
-            active_lessee_id: None,
-            has_control_phasing: false,
-            height: account.current_height as i32,
-            latest: true,
+            forged_balance: account.forged_balance as i64,
+            active_lessee_id: account.active_lessee_id.map(|id| id as i64),
+            has_control_phasing: account.has_control_phasing,
+            height: account.height as i32,
+            latest: account.latest,
         })
     }
 }

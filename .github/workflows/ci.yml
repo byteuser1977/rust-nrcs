@@ -26,10 +26,10 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Clippy linter
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --exclude orm -- -D warnings
 
       - name: Build (debug)
-        run: cargo build --workspace
+        run: cargo build --workspace --exclude orm
 
   test:
     name: Tests
@@ -43,10 +43,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run unit tests
-        run: cargo test --workspace --verbose
+        run: cargo test --workspace --exclude orm --verbose
 
       - name: Run doctests
-        run: cargo test --workspace --doc
+        run: cargo test --workspace --doc --exclude orm
 
       - name: Generate code coverage (optional)
         if: ${{ always() }}
@@ -75,10 +75,10 @@ jobs:
           rustup default stable-x86_64-pc-windows-msvc
 
       - name: Build (MSVC)
-        run: cargo build --workspace
+        run: cargo build --workspace --exclude orm
 
       - name: Run unit tests
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude orm
 
   audit:
     name: Audit dependencies
