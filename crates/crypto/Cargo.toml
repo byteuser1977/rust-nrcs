@@ -1,11 +1,11 @@
 [package]
-name = "zeroclaw-crypto"
+name = "crypto"
 version = "0.1.0"
 edition = "2021"
 authors = ["theonlyhennygod"]
 license = "MIT OR Apache-2.0"
-description = "Pluggable cryptography for ZeroClaw with SM2/SM3/SM4 support"
-repository = "https://github.com/zeroclaw-labs/zeroclaw"
+description = "Pluggable cryptography for NRCS with SM2/SM3/SM4 support"
+repository = "https://github.com/byteuser1977/rust-nrcs"
 readme = "README.md"
 keywords = ["crypto", "sm2", "sm3", "sm4", "national-cryptography"]
 categories = ["cryptography", "science::cryptography"]
