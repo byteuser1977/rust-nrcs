@@ -208,6 +208,7 @@ pub struct AccountModel {
     pub latest: bool,
 }
 
+/*
 impl AccountModel {
     pub fn to_domain(&self) -> Result<Account> {
         Ok(Account {
@@ -236,6 +237,7 @@ impl AccountModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountAssetModel {
