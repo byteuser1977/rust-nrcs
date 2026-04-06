@@ -335,7 +335,7 @@ impl Repository<TransactionModel> for PgTransactionRepository {
             tx.block_id,
             tx.signature.as_slice(),
             tx.timestamp,
-            tx.type_,
+            tx.r#type,
             tx.subtype,
             tx.sender_id,
             tx.block_timestamp,

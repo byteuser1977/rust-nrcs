@@ -106,8 +106,7 @@ pub struct TransactionModel {
     pub block_id: i64,
     pub signature: Vec<u8>,
     pub timestamp: i32,
-    #[sqlx(rename = "type")]
-    pub type_: i16,
+    pub r#type: i16,
     pub subtype: i16,
     pub sender_id: i64,
     pub block_timestamp: i32,
@@ -127,12 +126,13 @@ pub struct TransactionModel {
     pub has_prunable_encrypted_message: bool,
 }
 
+/*
 impl TransactionModel {
     pub fn to_domain(&self) -> Result<Transaction> {
         let sender_id = self.sender_id as AccountId;
         let tx = Transaction {
             version: self.version as u8,
-            type_id: TransactionType::from(self.type_ as u8),
+            type_id: TransactionType::from(self.r#type as u8),
             subtype: self.subtype as u8,
             timestamp: self.timestamp as Timestamp,
             deadline: self.deadline as u16,
@@ -173,7 +173,7 @@ impl TransactionModel {
             block_id: tx.block_id as i64,
             signature: tx.signature.to_vec(),
             timestamp: tx.timestamp as i32,
-            type_: u8::from(tx.type_id) as i16,
+            r#type: u8::from(tx.type_id) as i16,
             subtype: tx.subtype as i16,
             sender_id: tx.sender_id as i64,
             block_timestamp: 0,
@@ -194,6 +194,7 @@ impl TransactionModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountModel {
