@@ -8,7 +8,7 @@ authors = ["ByteChain <dev@bytechain.cn>"]
 
 [dependencies]
 # 核心依赖
-sqlx = { version = "0.7", features = [ "runtime-tokio-rustls", "postgres", "macros", "chrono", "bigdecimal" ] }
+sqlx = { version = "0.6.3", features = [ "runtime-tokio-rustls", "postgres", "macros", "offline" ] }
 async-trait = "0.1"
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }

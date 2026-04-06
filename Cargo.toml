@@ -27,7 +27,11 @@ codegen-units = 1
 opt-level = 0
 debug = true
 overflow-checks = true
+codegen-units = 1
+lto = false
 
 [profile.test]
 opt-level = 0
 debug = true
+codegen-units = 1
+lto = false

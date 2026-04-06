@@ -32,7 +32,7 @@ figment = { version = "0.10", features = ["env", "json", "toml", "yaml"] }
 clap = { version = "4.0", features = ["derive"] }
 
 # 数据库
-sqlx = { version = "0.7", features = [ "runtime-tokio-rustls", "postgres", "macros", "chrono" ] }
+sqlx = { version = "0.6.3", features = [ "runtime-tokio-rustls", "postgres", "macros" ] }
 bb8 = "0.8"
 bb8-postgres = "0.8"
 

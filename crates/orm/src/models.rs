@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 use blockchain_types::{
-    Account, AccountAsset, AccountId, Amount, Asset, AssetId, Block, BlockId, BlockchainError,
-    Hash256, Hash512, Height, Result, Signature, Timestamp, Transaction, TransactionId,
-    TransactionType,
+    AccountId, Amount, AssetId, BlockId, BlockchainError, Hash256, Hash512, Height, Result,
+    Signature, Timestamp, TransactionId, TransactionType,
 };
+use blockchain_types::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct BlockModel {
@@ -344,6 +344,7 @@ pub struct CurrencyModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl CurrencyModel {
     pub fn to_domain(&self) -> Result<Currency> {
         Ok(Currency {
@@ -395,6 +396,7 @@ impl CurrencyModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AliasModel {
@@ -409,6 +411,7 @@ pub struct AliasModel {
     pub latest: bool,
 }
 
+/*
 impl AliasModel {
     pub fn to_domain(&self) -> Result<Alias> {
         Ok(Alias {
@@ -435,6 +438,7 @@ impl AliasModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AliasOfferModel {
@@ -446,6 +450,7 @@ pub struct AliasOfferModel {
     pub latest: bool,
 }
 
+/*
 impl AliasOfferModel {
     pub fn to_domain(&self) -> Result<AliasOffer> {
         Ok(AliasOffer {
@@ -468,6 +473,7 @@ impl AliasOfferModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountInfoModel {
@@ -478,6 +484,7 @@ pub struct AccountInfoModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl AccountInfoModel {
     pub fn to_domain(&self) -> Result<AccountInfo> {
         Ok(AccountInfo {
@@ -499,6 +506,7 @@ impl AccountInfoModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountLeaseModel {
@@ -514,6 +522,7 @@ pub struct AccountLeaseModel {
     pub latest: bool,
 }
 
+/*
 impl AccountLeaseModel {
     pub fn to_domain(&self) -> Result<AccountLease> {
         Ok(AccountLease {
@@ -539,6 +548,7 @@ impl AccountLeaseModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PublicKeyModel {
@@ -549,6 +559,7 @@ pub struct PublicKeyModel {
     pub latest: bool,
 }
 
+/*
 impl PublicKeyModel {
     pub fn to_domain(&self) -> Result<PublicKey> {
         Ok(PublicKey {
@@ -573,6 +584,7 @@ impl PublicKeyModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountCurrencyModel {
@@ -585,6 +597,7 @@ pub struct AccountCurrencyModel {
     pub latest: bool,
 }
 
+/*
 impl AccountCurrencyModel {
     pub fn to_domain(&self) -> Result<AccountCurrency> {
         Ok(AccountCurrency {
@@ -608,6 +621,7 @@ impl AccountCurrencyModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountControlPhasingModel {
@@ -625,6 +639,7 @@ pub struct AccountControlPhasingModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl AccountControlPhasingModel {
     pub fn to_domain(&self) -> Result<PhasingControl> {
         Ok(PhasingControl {
@@ -661,6 +676,8 @@ impl AccountControlPhasingModel {
         })
     }
 }
+*/
+
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountGuaranteedBalanceModel {
@@ -669,6 +686,7 @@ pub struct AccountGuaranteedBalanceModel {
     pub additions: i64,
     pub height: i32,
 }
+/*
 impl AccountGuaranteedBalanceModel {
     pub fn to_domain(&self) -> Result<Amount> {
         Ok(self.additions as Amount)
@@ -683,6 +701,7 @@ impl AccountGuaranteedBalanceModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountLedgerModel {
@@ -698,7 +717,7 @@ pub struct AccountLedgerModel {
     pub height: i32,
     pub timestamp: i32,
 }
-
+/*
 impl AccountLedgerModel {
     pub fn to_domain(&self) -> Result<AccountLedgerEntry> {
         Ok(AccountLedgerEntry {
@@ -731,7 +750,7 @@ impl AccountLedgerModel {
         })
     }
 }
-
+*/
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountPropertyModel {
     pub db_id: i64,
@@ -744,6 +763,7 @@ pub struct AccountPropertyModel {
     pub latest: bool,
 }
 
+/*
 impl AccountPropertyModel {
     pub fn to_domain(&self) -> Result<AccountProperty> {
         Ok(AccountProperty {
@@ -769,7 +789,7 @@ impl AccountPropertyModel {
         })
     }
 }
-
+*/
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AssetTransferModel {
     pub db_id: i64,
@@ -781,7 +801,7 @@ pub struct AssetTransferModel {
     pub timestamp: i32,
     pub height: i32,
 }
-
+/*
 impl AssetTransferModel {
     pub fn to_domain(&self) -> Result<AssetTransfer> {
         Ok(AssetTransfer {
@@ -808,7 +828,7 @@ impl AssetTransferModel {
         })
     }
 }
-
+*/
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AssetDeleteModel {
     pub db_id: i64,
@@ -819,7 +839,7 @@ pub struct AssetDeleteModel {
     pub timestamp: i32,
     pub height: i32,
 }
-
+/*
 impl AssetDeleteModel {
     pub fn to_domain(&self) -> Result<AssetDelete> {
         Ok(AssetDelete {
@@ -844,7 +864,7 @@ impl AssetDeleteModel {
         })
     }
 }
-
+*/
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AssetDividendModel {
     pub db_id: i64,
@@ -857,6 +877,7 @@ pub struct AssetDividendModel {
     pub timestamp: i32,
     pub height: i32,
 }
+/*
 impl AssetDividendModel {
     pub fn to_domain(&self) -> Result<AssetDividend> {
         Ok(AssetDividend {
@@ -885,7 +906,7 @@ impl AssetDividendModel {
         })
     }
 }
-
+*/
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AssetHistoryModel {
     pub db_id: i64,
@@ -898,6 +919,7 @@ pub struct AssetHistoryModel {
     pub chain_id: i32,
     pub height: i32,
 }
+/*
 impl AssetHistoryModel {
     pub fn to_domain(&self) -> Result<AssetHistory> {
         Ok(AssetHistory {
@@ -926,7 +948,7 @@ impl AssetHistoryModel {
         })
     }
 }
-
+*/
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AssetControlPhasingModel {
     pub db_id: i64,
@@ -948,6 +970,7 @@ pub struct AssetControlPhasingModel {
     pub latest: bool,
 }
 
+/*
 impl AssetControlPhasingModel {
     pub fn to_domain(&self) -> Result<AssetControlPhasing> {
         Ok(AssetControlPhasing {
@@ -988,6 +1011,7 @@ impl AssetControlPhasingModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct CurrencyMintModel {
@@ -998,6 +1022,7 @@ pub struct CurrencyMintModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl CurrencyMintModel {
     pub fn to_domain(&self) -> Result<CurrencyMint> {
         Ok(CurrencyMint {
@@ -1019,7 +1044,7 @@ impl CurrencyMintModel {
         })
     }
 }
-
+*/
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct CurrencySupplyModel {
     pub db_id: i64,
@@ -1029,6 +1054,7 @@ pub struct CurrencySupplyModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl CurrencySupplyModel {
     pub fn to_domain(&self) -> Result<CurrencySupply> {
         Ok(CurrencySupply {
@@ -1050,7 +1076,7 @@ impl CurrencySupplyModel {
         })
     }
 }
-
+*/
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct CurrencyTransferModel {
     pub db_id: i64,
@@ -1062,6 +1088,7 @@ pub struct CurrencyTransferModel {
     pub timestamp: i32,
     pub height: i32,
 }
+/*
 impl CurrencyTransferModel {
     pub fn to_domain(&self) -> Result<CurrencyTransfer> {
         Ok(CurrencyTransfer {
@@ -1088,7 +1115,7 @@ impl CurrencyTransferModel {
         })
     }
 }
-
+*/
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct CurrencyFounderModel {
     pub db_id: i64,
@@ -1099,6 +1126,7 @@ pub struct CurrencyFounderModel {
     pub latest: bool,
 }
 
+/*
 impl CurrencyFounderModel {
     pub fn to_domain(&self) -> Result<CurrencyFounder> {
         Ok(CurrencyFounder {
@@ -1120,6 +1148,7 @@ impl CurrencyFounderModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AskOrderModel {
@@ -1135,6 +1164,7 @@ pub struct AskOrderModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl AskOrderModel {
     pub fn to_domain(&self) -> Result<AskOrder> {
         Ok(AskOrder {
@@ -1166,6 +1196,7 @@ impl AskOrderModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct BidOrderModel {
@@ -1182,6 +1213,7 @@ pub struct BidOrderModel {
     pub latest: bool,
 }
 
+/*
 impl BidOrderModel {
     pub fn to_domain(&self) -> Result<BidOrder> {
         Ok(BidOrder {
@@ -1213,6 +1245,7 @@ impl BidOrderModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct SellOfferModel {
@@ -1247,6 +1280,7 @@ pub struct BuyOfferModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl BuyOfferModel {
     pub fn to_domain(&self) -> Result<BuyOffer> {
         Ok(BuyOffer {
@@ -1282,6 +1316,7 @@ impl BuyOfferModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct TradeModel {
@@ -1301,6 +1336,7 @@ pub struct TradeModel {
     pub height: i32,
 }
 
+/*
 impl TradeModel {
     pub fn to_domain(&self) -> Result<Trade> {
         Ok(Trade {
@@ -1338,6 +1374,7 @@ impl TradeModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct ExchangeModel {
@@ -1353,6 +1390,7 @@ pub struct ExchangeModel {
     pub timestamp: i32,
     pub height: i32,
 }
+/*
 impl ExchangeModel {
     pub fn to_domain(&self) -> Result<Exchange> {
         Ok(Exchange {
@@ -1386,6 +1424,7 @@ impl ExchangeModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct ExchangeRequestModel {
@@ -1400,6 +1439,7 @@ pub struct ExchangeRequestModel {
     pub height: i32,
 }
 
+/*
 impl ExchangeRequestModel {
     pub fn to_domain(&self) -> Result<ExchangeRequest> {
         Ok(ExchangeRequest {
@@ -1428,6 +1468,7 @@ impl ExchangeRequestModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PollModel {
@@ -1450,6 +1491,7 @@ pub struct PollModel {
     pub height: i32,
 }
 
+/*
 impl PollModel {
     pub fn to_domain(&self) -> Result<Poll> {
         let options: Vec<String> = serde_json::from_str(&self.options).unwrap_or_default();
@@ -1495,6 +1537,7 @@ impl PollModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct VoteModel {
@@ -1506,6 +1549,7 @@ pub struct VoteModel {
     pub height: i32,
 }
 
+/*
 impl VoteModel {
     pub fn to_domain(&self) -> Result<Vote> {
         Ok(Vote {
@@ -1528,6 +1572,7 @@ impl VoteModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PollResultModel {
@@ -1538,6 +1583,7 @@ pub struct PollResultModel {
     pub height: i32,
 }
 
+/*
 impl PollResultModel {
     pub fn to_domain(&self) -> Result<PollResult> {
         Ok(PollResult {
@@ -1558,6 +1604,7 @@ impl PollResultModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PhasingPollModel {
@@ -1576,6 +1623,7 @@ pub struct PhasingPollModel {
     pub height: i32,
 }
 
+/*
 impl PhasingPollModel {
     pub fn to_domain(&self) -> Result<PhasingPoll> {
         Ok(PhasingPoll {
@@ -1612,6 +1660,7 @@ impl PhasingPollModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PhasingPollResultModel {
@@ -1622,6 +1671,7 @@ pub struct PhasingPollResultModel {
     pub height: i32,
 }
 
+/*
 impl PhasingPollResultModel {
     pub fn to_domain(&self) -> Result<PhasingPollResult> {
         Ok(PhasingPollResult {
@@ -1642,6 +1692,7 @@ impl PhasingPollResultModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PhasingPollLinkedTransactionModel {
@@ -1651,6 +1702,7 @@ pub struct PhasingPollLinkedTransactionModel {
     pub linked_transaction_id: i64,
     pub height: i32,
 }
+/*
 impl PhasingPollLinkedTransactionModel {
     pub fn to_domain(&self) -> Result<PhasingPollLinkedTransaction> {
         Ok(PhasingPollLinkedTransaction {
@@ -1669,12 +1721,13 @@ impl PhasingPollLinkedTransactionModel {
         Ok(Self {
             db_id: 0,
             transaction_id: linked.transaction_id as i64,
-            referenced_transaction_full_hash: Some(linked.linked_full_hash.to_vec()),
+            linked_full_hash: linked.linked_full_hash.to_vec(),
             linked_transaction_id: linked.linked_transaction_id as i64,
             height: linked.height as i32,
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PhasingPollHashedSecretModel {
@@ -1688,6 +1741,7 @@ pub struct PhasingPollHashedSecretModel {
     pub finish_height: i32,
     pub height: i32,
 }
+/*
 impl PhasingPollHashedSecretModel {
     pub fn to_domain(&self) -> Result<PhasingPollHashedSecret> {
         Ok(PhasingPollHashedSecret {
@@ -1719,6 +1773,7 @@ impl PhasingPollHashedSecretModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PhasingVoteModel {
@@ -1729,6 +1784,7 @@ pub struct PhasingVoteModel {
     pub height: i32,
 }
 
+/*
 impl PhasingVoteModel {
     pub fn to_domain(&self) -> Result<PhasingVote> {
         Ok(PhasingVote {
@@ -1749,6 +1805,7 @@ impl PhasingVoteModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PhasingPollVoterModel {
@@ -1757,6 +1814,7 @@ pub struct PhasingPollVoterModel {
     pub voter_id: i64,
     pub height: i32,
 }
+/*
 impl PhasingPollVoterModel {
     pub fn to_domain(&self) -> Result<PhasingPollVoter> {
         Ok(PhasingPollVoter {
@@ -1775,6 +1833,7 @@ impl PhasingPollVoterModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct ShufflingModel {
@@ -1794,6 +1853,7 @@ pub struct ShufflingModel {
     pub latest: bool,
 }
 
+/*
 impl ShufflingModel {
     pub fn to_domain(&self) -> Result<Shuffling> {
         Ok(Shuffling {
@@ -1837,6 +1897,7 @@ impl ShufflingModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct ShufflingDataModel {
@@ -1848,6 +1909,7 @@ pub struct ShufflingDataModel {
     pub height: i32,
 }
 
+/*
 impl ShufflingDataModel {
     pub fn to_domain(&self) -> Result<ShufflingData> {
         Ok(ShufflingData {
@@ -1870,6 +1932,7 @@ impl ShufflingDataModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct ShufflingParticipantModel {
@@ -1906,6 +1969,7 @@ pub struct TaggedDataModel {
     pub latest: bool,
 }
 
+/*
 impl TaggedDataModel {
     pub fn to_domain(&self) -> Result<TaggedData> {
         Ok(TaggedData {
@@ -1951,6 +2015,7 @@ impl TaggedDataModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct TaggedDataExtendModel {
@@ -1961,6 +2026,7 @@ pub struct TaggedDataExtendModel {
     pub latest: bool,
 }
 
+/*
 impl TaggedDataExtendModel {
     pub fn to_domain(&self) -> Result<TaggedDataExtend> {
         Ok(TaggedDataExtend {
@@ -1980,6 +2046,7 @@ impl TaggedDataExtendModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct TaggedDataTimestampModel {
@@ -1990,6 +2057,7 @@ pub struct TaggedDataTimestampModel {
     pub latest: bool,
 }
 
+/*
 impl TaggedDataTimestampModel {
     pub fn to_domain(&self) -> Result<TaggedDataTimestamp> {
         Ok(TaggedDataTimestamp {
@@ -2009,6 +2077,7 @@ impl TaggedDataTimestampModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PrunableMessageModel {
@@ -2026,6 +2095,7 @@ pub struct PrunableMessageModel {
     pub height: i32,
 }
 
+/*
 impl PrunableMessageModel {
     pub fn to_domain(&self) -> Result<PrunableMessage> {
         Ok(PrunableMessage {
@@ -2060,6 +2130,7 @@ impl PrunableMessageModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct GoodsModel {
@@ -2078,6 +2149,7 @@ pub struct GoodsModel {
     pub latest: bool,
     pub has_image: bool,
 }
+/*
 impl GoodsModel {
     pub fn to_domain(&self) -> Result<Goods> {
         Ok(Goods {
@@ -2119,6 +2191,7 @@ impl GoodsModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PurchaseModel {
@@ -2147,6 +2220,7 @@ pub struct PurchaseModel {
     pub latest: bool,
 }
 
+/*
 impl PurchaseModel {
     pub fn to_domain(&self) -> Result<Purchase> {
         Ok(Purchase {
@@ -2202,6 +2276,7 @@ impl PurchaseModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PurchaseFeedbackModel {
@@ -2213,6 +2288,7 @@ pub struct PurchaseFeedbackModel {
     pub latest: bool,
 }
 
+/*
 impl PurchaseFeedbackModel {
     pub fn to_domain(&self) -> Result<PurchaseFeedback> {
         Ok(PurchaseFeedback {
@@ -2234,6 +2310,7 @@ impl PurchaseFeedbackModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PurchasePublicFeedbackModel {
@@ -2243,6 +2320,7 @@ pub struct PurchasePublicFeedbackModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl PurchasePublicFeedbackModel {
     pub fn to_domain(&self) -> Result<PurchasePublicFeedback> {
         Ok(PurchasePublicFeedback {
@@ -2262,6 +2340,7 @@ impl PurchasePublicFeedbackModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct PeerModel {
@@ -2270,6 +2349,7 @@ pub struct PeerModel {
     pub services: Option<i64>,
 }
 
+/*
 impl PeerModel {
     pub fn to_domain(&self) -> Result<Peer> {
         Ok(Peer {
@@ -2287,6 +2367,7 @@ impl PeerModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct HubModel {
@@ -2297,6 +2378,7 @@ pub struct HubModel {
     pub height: Option<i32>,
     pub latest: Option<bool>,
 }
+/*
 impl HubModel {
     pub fn to_domain(&self) -> Result<HubInfo> {
         Ok(HubInfo {
@@ -2318,6 +2400,7 @@ impl HubModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct CoinOrderFxtModel {
@@ -2337,6 +2420,7 @@ pub struct CoinOrderFxtModel {
     pub transaction_index: i16,
     pub latest: bool,
 }
+/*
 impl CoinOrderFxtModel {
     pub fn to_domain(&self) -> Result<CoinOrderFxt> {
         Ok(CoinOrderFxt {
@@ -2376,6 +2460,7 @@ impl CoinOrderFxtModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct CoinTradeFxtModel {
@@ -2393,6 +2478,7 @@ pub struct CoinTradeFxtModel {
     pub match_id: i64,
     pub match_full_hash: Vec<u8>,
 }
+/*
 impl CoinTradeFxtModel {
     pub fn to_domain(&self) -> Result<CoinTradeFxt> {
         Ok(CoinTradeFxt {
@@ -2436,6 +2522,7 @@ impl CoinTradeFxtModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct BalanceModel {
@@ -2447,6 +2534,7 @@ pub struct BalanceModel {
     pub latest: bool,
 }
 
+/*
 impl BalanceModel {
     pub fn to_domain(&self) -> Result<Balance> {
         Ok(Balance {
@@ -2468,6 +2556,7 @@ impl BalanceModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AssetPropertyModel {
@@ -2481,6 +2570,7 @@ pub struct AssetPropertyModel {
     pub latest: bool,
 }
 
+/*
 impl AssetPropertyModel {
     pub fn to_domain(&self) -> Result<AssetProperty> {
         Ok(AssetProperty {
@@ -2506,6 +2596,7 @@ impl AssetPropertyModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AssetControlPhasingSubPollModel {
@@ -2528,6 +2619,7 @@ pub struct AssetControlPhasingSubPollModel {
     pub latest: bool,
 }
 
+/*
 impl AssetControlPhasingSubPollModel {
     pub fn to_domain(&self) -> Result<AssetControlPhasingSubPoll> {
         Ok(AssetControlPhasingSubPoll {
@@ -2575,6 +2667,7 @@ impl AssetControlPhasingSubPollModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct ScanModel {
@@ -2583,6 +2676,7 @@ pub struct ScanModel {
     pub validate: bool,
 }
 
+/*
 impl ScanModel {
     pub fn to_domain(&self) -> Result<Scan> {
         Ok(Scan {
@@ -2600,6 +2694,7 @@ impl ScanModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct TagModel {
@@ -2610,6 +2705,7 @@ pub struct TagModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl TagModel {
     pub fn to_domain(&self) -> Result<Tag> {
         Ok(Tag {
@@ -2631,6 +2727,7 @@ impl TagModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct DataTagModel {
@@ -2640,6 +2737,7 @@ pub struct DataTagModel {
     pub height: i32,
     pub latest: bool,
 }
+/*
 impl DataTagModel {
     pub fn to_domain(&self) -> Result<DataTag> {
         Ok(DataTag {
@@ -2659,6 +2757,7 @@ impl DataTagModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct UnconfirmedTransactionModel {
@@ -2673,6 +2772,7 @@ pub struct UnconfirmedTransactionModel {
     pub prunable_json: Option<String>,
 }
 
+/*
 impl UnconfirmedTransactionModel {
     pub fn to_domain(&self) -> Result<UnconfirmedTransaction> {
         Ok(UnconfirmedTransaction {
@@ -2701,6 +2801,7 @@ impl UnconfirmedTransactionModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct ReferencedTransactionModel {
@@ -2709,6 +2810,7 @@ pub struct ReferencedTransactionModel {
     pub referenced_transaction_id: i64,
 }
 
+/*
 impl ReferencedTransactionModel {
     pub fn to_domain(&self) -> Result<ReferencedTransaction> {
         Ok(ReferencedTransaction {
@@ -2725,6 +2827,7 @@ impl ReferencedTransactionModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct ContractReferenceModel {
@@ -2739,6 +2842,7 @@ pub struct ContractReferenceModel {
     pub latest: bool,
 }
 
+/*
 impl ContractReferenceModel {
     pub fn to_domain(&self) -> Result<ContractReference> {
         Ok(ContractReference {
@@ -2771,6 +2875,7 @@ impl ContractReferenceModel {
         })
     }
 }
+*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountFxtModel {
@@ -2778,6 +2883,7 @@ pub struct AccountFxtModel {
     pub balance: Vec<u8>,
     pub height: i32,
 }
+/*
 impl AccountFxtModel {
     pub fn to_domain(&self) -> Result<AccountFxt> {
         Ok(AccountFxt {
@@ -2795,3 +2901,4 @@ impl AccountFxtModel {
         })
     }
 }
+*/
