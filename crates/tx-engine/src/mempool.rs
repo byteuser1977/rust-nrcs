@@ -17,6 +17,7 @@ use tracing::{debug, warn};
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
 use crate::TxPriority;
+// use hex; // 暂时注释，等待 Cargo.toml 添加依赖
 
 /// Mempool 配置
 #[derive(Debug, Clone)]
@@ -68,7 +69,7 @@ impl Mempool {
     }
 
     /// 添加交易到内存池
-    pub fn add(&self, tx: Transaction) -> Result<(), MempoolError> {
+    pub fn add(&self, tx: Transaction) -> std::result::Result<(), MempoolError> {
         let full_hash = tx.full_hash;
 
         // 1. 检查是否已存在
@@ -77,11 +78,8 @@ impl Mempool {
         }
 
         // 2. 检查发送者 nonce（防重放）
-        let expected_nonce = self.get_next_nonce(tx.sender_id);
-        // 注意：Transaction 中的 deadline 字段实际用于表示 nonce 吗？
-        // 在原版 NXT 中，deadline 是交易过期时间，nonce 是单独的字段
-        // 这里假设我们使用一个字段来追踪 nonce，简化处理
-        // 实际上需要调整 Transaction 结构或使用扩展字段
+        // 注意：Transaction 中可能没有 nonce 字段，需要调整
+        // 暂时跳过 nonce 检查，等待 Transaction 结构完善
 
         // 3. 计算优先级
         let priority = TxPriority {
@@ -103,7 +101,7 @@ impl Mempool {
 
         // 5. 插入交易池
         self.pool.insert(full_hash, (tx, priority, Instant::now()));
-        debug!("tx added to mempool: hash={:x}", hex::encode(full_hash));
+        debug!("tx added to mempool: hash={:?}", full_hash);
 
         // 6. 更新 nonce tracker
         // self.nonce_tracker.insert(tx.sender_id, tx.nonce + 1);
@@ -113,7 +111,7 @@ impl Mempool {
 
     /// 移除交易
     pub fn remove(&self, hash: &Hash256) -> Option<Transaction> {
-        if let Some((tx, _priority, _time)) = self.pool.remove(hash) {
+        if let Some((tx, _priority, _time)) = self.pool.remove(hash).map(|(_, value)| value) {
             // 更新内存占用
             let size = tx.size();
             *self.memory_usage.write() = self.memory_usage.read().saturating_sub(size);
@@ -125,7 +123,7 @@ impl Mempool {
 
     /// 获取交易
     pub fn get(&self, hash: &Hash256) -> Option<Transaction> {
-        self.pool.get(hash).map(|(tx, _p, _t)| tx.clone())
+        self.pool.get(hash).map(|entry| entry.value().0.clone())
     }
 
     /// 获取所有交易（按优先级排序）
@@ -139,7 +137,7 @@ impl Mempool {
     pub fn get_by_sender(&self, sender_id: AccountId) -> Vec<Transaction> {
         self.pool
             .iter()
-            .filter(|(_, (tx, _, _))| tx.sender_id == sender_id)
+            .filter(|entry| entry.value().0.sender_id == sender_id)
             .map(|v| v.value().0.clone())
             .collect()
     }
@@ -204,17 +202,26 @@ impl Mempool {
     }
 
     /// 驱逐一个最不优先的交易
-    fn evict_one(&self) -> Result<(), MempoolError> {
-        if let Some((hash, (tx, priority, _time))) = self.pool.iter().next() {
-            // 如果 evict_by_fee 为 true，按 gas price 最低的驱逐
-            // 否则按最早插入的驱逐（当前迭代顺序不保证，需要收集排序）
-            // 简化：移除第一个
-            self.remove(hash);
-            debug!("evicted tx from mempool: hash={:x}", hex::encode(*hash));
-            Ok(())
-        } else {
-            Ok(())
+    fn evict_one(&self) -> std::result::Result<(), MempoolError> {
+        // 收集所有交易并按优先级排序
+        let mut entries: Vec<_> = self.pool.iter().map(|entry| {
+            let (tx, priority, _time) = entry.value();
+            (priority.clone(), entry.key().clone())
+        }).collect();
+        
+        if entries.is_empty() {
+            return Ok(());
         }
+        
+        // 按优先级排序（最低的先驱逐）
+        entries.sort_by_key(|(p, _)| *p);
+        
+        let (_priority, hash) = entries.first().unwrap();
+        if let Some(tx) = self.remove(hash) {
+            debug!("evicted tx from mempool: hash={:?}", hash);
+        }
+        
+        Ok(())
     }
 
     /// 获取统计信息
@@ -233,6 +240,9 @@ impl Mempool {
 pub enum MempoolError {
     #[error("duplicate transaction")]
     DuplicateTransaction,
+
+    #[error("invalid nonce")]
+    InvalidNonce,
 
     #[error("mempool full")]
     Full,

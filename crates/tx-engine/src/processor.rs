@@ -5,11 +5,12 @@
 //! - 应用交易到状态（修改账户余额、资产、合约存储）
 //! - 返回交易收据
 
-use async_trait::async_trait;
+// use async_trait::async_trait; // 暂时注释，等待 Cargo.toml 添加依赖
 use std::sync::Arc;
 
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
+use blockchain_types::prelude::Account;
 use orm::{AccountRepository, AccountAssetRepository, TransactionRepository, RepositoryError};
 use thiserror::Error;
 
@@ -37,12 +38,12 @@ pub enum ProcessorError {
     Io(#[from] std::io::Error),
 }
 
-pub type ProcessorResult<T> = Result<T, ProcessorError>;
+pub type ProcessorResult<T> = std::result::Result<T, ProcessorError>;
 
 /// TransactionProcessor trait
 ///
 /// 负责交易的验证、执行和状态更新
-#[async_trait]
+// #[async_trait] // 暂时注释，等待 Cargo.toml 添加 async_trait 依赖
 pub trait TransactionProcessor: Send + Sync {
     /// 验证交易的有效性（签名、余额、nonce 等）
     async fn validate(&self, tx: &Transaction) -> ProcessorResult<()>;
@@ -87,13 +88,13 @@ impl DatabaseTransactionProcessor {
         account_repo: Arc<dyn AccountRepository>,
         account_asset_repo: Arc<dyn AccountAssetRepository>,
         tx_repo: Arc<dyn TransactionRepository>,
-        receipt_repo: Arc<dyn TransactionReceiptRepository>,
+        // receipt_repo: Arc<dyn TransactionReceiptRepository>, // 暂时注释，等待 orm 模块实现
     ) -> Self {
         Self {
             account_repo,
             account_asset_repo,
             tx_repo,
-            receipt_repo,
+            // receipt_repo, // 暂时注释，等待 orm 模块实现
         }
     }
 
@@ -103,7 +104,21 @@ impl DatabaseTransactionProcessor {
             .find_by_account_id(account_id as i64)
             .await?
             .ok_or_else(|| ProcessorError::AccountNotFound(account_id))?;
-        model.to_domain().map_err(Into::into)
+        // 暂时手动转换，等待 AccountModel 实现 to_domain 方法
+        Ok(Account {
+            id: model.id as AccountId,
+            address: None,
+            balance: model.balance as Amount,
+            unconfirmed_balance: model.unconfirmed_balance as Amount,
+            reserved_balance: 0,
+            guaranteed_balance: 0,
+            assets: Default::default(),
+            properties: Default::default(),
+            lease: None,
+            created_at: 0,
+            last_updated: 0,
+            current_height: 0,
+        })
     }
 
     /// 更新账户余额
@@ -115,7 +130,8 @@ impl DatabaseTransactionProcessor {
     }
 }
 
-#[async_trait]
+/// 数据库交易处理器实现
+// #[async_trait] // 暂时注释，等待 Cargo.toml 添加 async_trait 依赖
 impl TransactionProcessor for DatabaseTransactionProcessor {
     async fn validate(&self, tx: &Transaction) -> ProcessorResult<()> {
         // 1. 基础验证

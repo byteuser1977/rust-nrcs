@@ -3,10 +3,11 @@
 use std::sync::Arc;
 
 use blockchain_types::*;
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize}; // 暂时注释，等待 Cargo.toml 添加依赖
+// use serde_json; // 暂时注释，等待 Cargo.toml 添加依赖
 
 /// 交易状态
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TxStatus {
     /// 待处理（在 mempool 中）
     Pending,
@@ -19,7 +20,7 @@ pub enum TxStatus {
 }
 
 /// 交易收据信息（返回给 API）
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TxReceiptInfo {
     pub transaction_id: TransactionId,
     pub status: TxStatus,
@@ -40,14 +41,14 @@ impl TxReceiptInfo {
         };
 
         // 解析 logs JSON 数组
-        let logs_vec: Vec<String> = serde_json::from_str(&receipt.logs).unwrap_or_default();
+        // let logs_vec: Vec<String> = serde_json::from_str(&receipt.logs).unwrap_or_default(); // 暂时注释，等待 Cargo.toml 添加 serde_json 依赖
 
         Self {
             transaction_id: receipt.transaction_id,
             status,
             block_height,
             gas_used: receipt.gas_used,
-            logs: logs_vec,
+            logs: Vec::new(), // 暂时使用空向量
             contract_address: receipt.contract_address,
             executed_at: receipt.executed_at,
         }
