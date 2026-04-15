@@ -6,7 +6,7 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 
 /// 节点状态
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PeerState {
     Connected,
     Disconnected,
@@ -146,24 +146,25 @@ impl ActiveConnections {
 }
 
 /// 节点管理器
+#[derive(Clone)]
 pub struct Peers {
     /// 已知节点（包括已断开但可重连的）
-    known_peers: RwLock<HashMap<SocketAddr, Arc<Mutex<Peer>>>>,
+    known_peers: Arc<RwLock<HashMap<SocketAddr, Arc<Mutex<Peer>>>>>,
     /// 活跃的 WebSocket/TCP 连接
-    active_connections: Mutex<ActiveConnections>,
+    active_connections: Arc<Mutex<ActiveConnections>>,
     /// 黑名单
-    blacklist: RwLock<HashSet<SocketAddr>>,
+    blacklist: Arc<RwLock<HashSet<SocketAddr>>>,
     /// 自己节点的信息
-    my_peer_info: RwLock<Peer>,
+    my_peer_info: Arc<RwLock<Peer>>,
 }
 
 impl Peers {
     pub fn new(my_peer_info: Peer) -> Self {
         Self {
-            known_peers: RwLock::new(HashMap::new()),
-            active_connections: Mutex::new(ActiveConnections::new()),
-            blacklist: RwLock::new(HashSet::new()),
-            my_peer_info: RwLock::new(my_peer_info),
+            known_peers: Arc::new(RwLock::new(HashMap::new())),
+            active_connections: Arc::new(Mutex::new(ActiveConnections::new())),
+            blacklist: Arc::new(RwLock::new(HashSet::new())),
+            my_peer_info: Arc::new(RwLock::new(my_peer_info)),
         }
     }
 
@@ -183,16 +184,17 @@ impl Peers {
     pub async fn register_peer(&self, peer: Peer) {
         let mut known = self.known_peers.write().await;
         let addr = peer.address;
+        let peer_clone = peer.clone();
         let entry = known.entry(addr).or_insert_with(|| Arc::new(Mutex::new(peer)));
         // 更新元数据
         let mut peer_mutex = entry.lock().await;
         peer_mutex.update_metadata(
-            peer.version.clone(),
-            peer.application.clone(),
-            peer.platform.clone(),
-            peer.services,
-            peer.api_port,
-            peer.api_ssl_port,
+            peer_clone.version.clone(),
+            peer_clone.application.clone(),
+            peer_clone.platform.clone(),
+            peer_clone.services,
+            peer_clone.api_port,
+            peer_clone.api_ssl_port,
         );
         debug!("Registered peer: {}", addr);
     }
@@ -220,12 +222,12 @@ impl Peers {
     /// 获取所有已知节点列表
     pub async fn get_known_peers(&self) -> Vec<Peer> {
         let known = self.known_peers.read().await;
-        known.values()
-            .map(|p| {
-                let p = p.lock().unwrap_or_else(|e| e.into_inner());
-                p.clone()
-            })
-            .collect()
+        let mut peers = Vec::new();
+        for p in known.values() {
+            let p = p.lock().await;
+            peers.push(p.clone());
+        }
+        peers
     }
 
     /// 获取活跃节点列表
@@ -236,7 +238,7 @@ impl Peers {
         let mut active = Vec::new();
         for addr in conns.connections.iter() {
             if let Some(p) = known.get(addr) {
-                let p = p.lock().unwrap_or_else(|e| e.into_inner());
+                let p = p.lock().await;
                 active.push(p.clone());
             }
         }

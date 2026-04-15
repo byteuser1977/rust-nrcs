@@ -33,40 +33,42 @@ impl AddPeersHandler {
         let mut blacklisted_count = 0;
 
         for peer_data in peers_data {
-            if let Ok(addr_str) = peer_data.get("address").and_then(|v| v.as_str()) {
+            if let Some(addr_str) = peer_data.get("address").and_then(|v| v.as_str()) {
                 let port = peer_data.get("port").and_then(|v| v.as_i64());
                 let services = peer_data.get("services").and_then(|v| v.as_u64()).unwrap_or(0);
 
                 // 构建 SocketAddr (简化版，实际需要更复杂的地址解析)
-                if let (Some(port_i64), Ok(port_u16)) = (port, port_i64.try_into().ok()) {
-                    let addr_str_full = format!("{}:{}", addr_str, port_u16);
-                    if let Ok(addr) = addr_str_full.parse::<SocketAddr>() {
-                        // 检查是否在黑名单
-                        if peers.is_blacklisted(&addr).await {
-                            warn!("Peer {} is blacklisted, skipping", addr);
-                            blacklisted_count += 1;
-                            continue;
-                        }
+                if let Some(port_i64) = port {
+                    if let Ok(port_u16) = <i64 as TryInto<u16>>::try_into(port_i64) {
+                        let addr_str_full = format!("{}:{}", addr_str, port_u16);
+                        if let Ok(addr) = addr_str_full.parse::<SocketAddr>() {
+                            // 检查是否在黑名单
+                            if peers.is_blacklisted(&addr).await {
+                                warn!("Peer {} is blacklisted, skipping", addr);
+                                blacklisted_count += 1;
+                                continue;
+                            }
 
-                        // 创建并注册 peer
-                        let mut peer = crate::peer::Peer::new(addr, false); // outbound
-                        peer.services = services;
-                        // 从 peer_data 提取其他字段...
-                        if let Some(version) = peer_data.get("version").and_then(|v| v.as_str()) {
-                            peer.version = Some(version.to_string());
-                        }
-                        if let Some(platform) = peer_data.get("platform").and_then(|v| v.as_str()) {
-                            peer.platform = Some(platform.to_string());
-                        }
-                        if let Some(app) = peer_data.get("application").and_then(|v| v.as_str()) {
-                            peer.application = Some(app.to_string());
-                        }
+                            // 创建并注册 peer
+                            let mut peer = crate::peer::Peer::new(addr, false); // outbound
+                            peer.services = services;
+                            // 从 peer_data 提取其他字段...
+                            if let Some(version) = peer_data.get("version").and_then(|v| v.as_str()) {
+                                peer.version = Some(version.to_string());
+                            }
+                            if let Some(platform) = peer_data.get("platform").and_then(|v| v.as_str()) {
+                                peer.platform = Some(platform.to_string());
+                            }
+                            if let Some(app) = peer_data.get("application").and_then(|v| v.as_str()) {
+                                peer.application = Some(app.to_string());
+                            }
 
-                        peers.register_peer(peer).await;
-                        added_count += 1;
-                        debug!("Added peer: {} (services: {})", addr, services);
-                    } else {
-                        warn!("Invalid peer address: {}", addr_str_full);
+                            peers.register_peer(peer).await;
+                            added_count += 1;
+                            debug!("Added peer: {} (services: {})", addr, services);
+                        } else {
+                            warn!("Invalid peer address: {}", addr_str_full);
+                        }
                     }
                 }
             }

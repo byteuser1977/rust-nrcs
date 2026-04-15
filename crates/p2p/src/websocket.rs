@@ -70,7 +70,7 @@ impl WebsocketServer {
         // 注册新连接
         let mut peer_count = {
             let peers = peers.lock().await;
-            peers.connection_count()
+            peers.connection_count().await
         };
 
         if peer_count >= max_connections {
@@ -80,8 +80,8 @@ impl WebsocketServer {
 
         {
             let mut peers = peers.lock().await;
-            peers.add_connection(addr);
-            peer_count = peers.connection_count();
+            peers.add_connection(addr).await;
+            peer_count = peers.connection_count().await;
         }
 
         info!("Connection established. Active: {}", peer_count);
@@ -97,7 +97,13 @@ impl WebsocketServer {
 
                             match serde_json::from_slice::<PeerRequest>(&body) {
                                 Ok(request) => {
-                                    let response = handler.handle(request, Arc::clone(&peers)).await;
+                                    // 现在 Peers 内部已经用 Arc 包装，可以安全克隆
+                                    let peers_arc = {
+                                        let peers_guard = peers.lock().await;
+                                        peers_guard.clone()
+                                    };
+                                    
+                                    let response = handler.handle(request, Arc::new(peers_arc)).await;
                                     let resp_json = serde_json::to_vec(&response)
                                         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
@@ -149,8 +155,8 @@ impl WebsocketServer {
         // 清理连接
         let count = {
             let mut peers = peers.lock().await;
-            peers.remove_connection(addr);
-            peers.connection_count()
+            peers.remove_connection(&addr).await;
+            peers.connection_count().await
         };
         info!("Connection removed. Active: {}", count);
 

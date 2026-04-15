@@ -26,6 +26,7 @@ pub use unknown::UnknownHandler;
 
 use crate::{peer::Peers, protocol::PeerRequest};
 use std::sync::Arc;
+use tracing::warn;
 
 /// 请求处理器聚合（类似 Java 的 peerRequestHandlers map）
 pub struct Handler {

@@ -154,7 +154,7 @@ impl FrameCodec {
     const MAGIC: [u8; 4] = [0x50, 0x32, 0x50, 0x00]; // "P2P\0"
 
     pub fn encode(&self, payload: &[u8], compressed: bool) -> Vec<u8> {
-        let mut flags = 0;
+        let mut flags: i32 = 0;
         let body = if compressed {
             flags |= 1;
             self::compress_gzip(payload)

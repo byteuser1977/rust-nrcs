@@ -1,17 +1,17 @@
 use crate::{
-    protocol::{PeerRequest, PeerResponse, FrameCodec},
+    protocol::PeerRequest,
     handlers::Handler,
     peer::Peers,
 };
 use axum::{
-    body::Body,
-    http::{HeaderMap, Method, StatusCode},
+    extract::State,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
     Router,
 };
+use bytes::Bytes;
 use serde_json;
-use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -42,22 +42,16 @@ struct HttpHandlerState {
 
 async fn handle_peer(
     headers: HeaderMap,
-    body: Body,
-    state: axum::extract::State<HttpHandlerState>,
-) -> Result<impl IntoResponse, impl IntoResponse> {
+    State(state): State<HttpHandlerState>,
+    body: Bytes,
+) -> Response {
     // 检查 Content-Type
     let content_type = headers
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("application/json");
 
-    let body_bytes = match axum::body::to_bytes(body, 10 * 1024 * 1024).await {
-        Ok(bytes) => bytes.to_bytes().to_vec(),
-        Err(e) => {
-            error!("Failed to read body: {}", e);
-            return Err((StatusCode::BAD_REQUEST, "Invalid body").into_response());
-        }
-    };
+    let body_bytes = body.to_vec();
 
     // 如果是 JSON 格式，直接解析；否则尝试从文本解析
     let request = if content_type.contains("application/json") {
@@ -65,7 +59,7 @@ async fn handle_peer(
             Ok(req) => req,
             Err(e) => {
                 error!("JSON parse error: {}", e);
-                return Err((StatusCode::BAD_REQUEST, "Invalid JSON").into_response());
+                return (StatusCode::BAD_REQUEST, "Invalid JSON").into_response();
             }
         }
     } else {
@@ -76,12 +70,12 @@ async fn handle_peer(
                     Ok(req) => req,
                     Err(e) => {
                         error!("JSON parse error: {}", e);
-                        return Err((StatusCode::BAD_REQUEST, "Invalid JSON").into_response());
+                        return (StatusCode::BAD_REQUEST, "Invalid JSON").into_response();
                     }
                 }
             }
             _ => {
-                return Err((StatusCode::BAD_REQUEST, "Empty body").into_response());
+                return (StatusCode::BAD_REQUEST, "Empty body").into_response();
             }
         }
     };
@@ -89,14 +83,14 @@ async fn handle_peer(
     info!("HTTP request: {:?}", request.request_type);
 
     // 调用处理器
-    let response = state.handler.handle(request, state.peers).await;
+    let response = state.handler.handle(request, Arc::clone(&state.peers)).await;
 
     // 序列化响应
     let resp_json = match serde_json::to_vec(&response) {
         Ok(json) => json,
         Err(e) => {
             error!("Response serialization error: {}", e);
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, "Serialization error").into_response());
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Serialization error").into_response();
         }
     };
 
@@ -107,7 +101,7 @@ async fn handle_peer(
         "text/plain; charset=UTF-8".parse().unwrap(),
     );
 
-    Ok((response_headers, resp_json).into_response())
+    (response_headers, resp_json).into_response()
 }
 
 /// 启动 HTTP 服务器
