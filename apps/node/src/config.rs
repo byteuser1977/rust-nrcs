@@ -27,7 +27,7 @@ pub struct DatabaseConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2PConfig {
     pub enabled: bool,
-    pub listen_addr: SocketAddr,
+    pub listen_addr: String,
     pub seed_nodes: Vec<String>,
 }
 
@@ -39,8 +39,7 @@ pub struct ChainConfig {
 }
 
 impl NodeConfig {
-    pub fn load(cli: &crate::Cli) -> Result<Self, anyhow::Error> {
-        // 简化的配置加载：从文件或使用默认值
+    pub fn load() -> Result<Self, anyhow::Error> {
         let config = Self {
             api: ApiConfig {
                 enabled: true,
@@ -53,8 +52,8 @@ impl NodeConfig {
             },
             p2p: P2PConfig {
                 enabled: true,
-                listen_addr: "/ip4/0.0.0.0/tcp/4001".parse()?,
-                seed_nodes: vec!["/ip4/127.0.0.1/tcp/4001/p2p/QmSeed".to_string()],
+                listen_addr: "0.0.0.0:4001".to_string(),
+                seed_nodes: vec![],
             },
             chain: ChainConfig {
                 chain_id: "nrcs-testnet-v1".to_string(),

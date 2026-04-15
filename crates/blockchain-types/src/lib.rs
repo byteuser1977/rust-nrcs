@@ -30,6 +30,12 @@ pub mod prelude {
     pub use crate::transaction::*;
     pub use crate::account::*;
     pub use crate::asset::*;
+    pub use crate::{
+        Hash256, Hash512, PublicKey, SecretKey, Signature,
+        Timestamp, Height, Amount, AccountId, AssetId, BlockId,
+        TransactionId, TransactionType, TxReceipt,
+        BLOCK_VERSION, TRANSACTION_VERSION, BlockchainError, Result,
+    };
 }
 
 /// 区块链错误类型

@@ -4,13 +4,13 @@ use std::sync::Arc;
 
 use blockchain_types::*;
 use orm::BlockRepository;
-use tx_engine::DatabaseTransactionProcessor;
+use tx_engine::TransactionProcessor;
 use ::account::AccountManager;
 
 /// Global API state (shared across all handlers)
 #[derive(Clone)]
 pub struct ApiState {
     pub account_manager: Arc<dyn AccountManager>,
-    pub tx_processor: Arc<DatabaseTransactionProcessor>,
+    pub tx_processor: Arc<dyn TransactionProcessor>,
     pub block_repo: Arc<dyn BlockRepository>,
 }

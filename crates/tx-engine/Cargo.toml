@@ -17,6 +17,9 @@ orm = { path = "../orm" }
 thiserror = "1.0"
 anyhow = "1.0"
 
+# Async trait
+async-trait = "0.1"
+
 # 并发
 tokio = { version = "1.0", features = ["sync", "time", "rt-multi-thread"] }
 dashmap = "5.0"  # 并发 HashMap

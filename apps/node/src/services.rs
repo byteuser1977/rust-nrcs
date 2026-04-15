@@ -1,110 +1,140 @@
-//! Node services coordination
+//! Node services coordination (simplified placeholder)
 
 use std::sync::Arc;
 
 use anyhow::Result;
 
-use nrcs_node::config::NodeConfig;
-use orm::PgPool;
+use crate::config::NodeConfig;
 
-/// Main node service that coordinates all components
-pub struct NodeService {
-    pub db_pool: PgPool,
-    pub account_manager: Arc<dyn account::AccountManager>,
-    pub tx_processor: Arc<dyn tx_engine::TransactionProcessor>,
-    pub p2p_service: Option<Arc<p2p::P2PService>>,
-    pub chain_service: Arc<chain::ChainService>,
-    pub api_service: Option<Arc<api::ApiService>>,
-}
+pub struct NodeService;
 
 impl NodeService {
-    /// Initialize all services
-    pub async fn init(config: NodeConfig) -> Result<(Arc<p2p::P2PService>, Arc<chain::ChainService>, Arc<api::ApiService>)> {
-        // 1. 初始化数据库连接池
-        let db_pool = PgPool::connect(&config.database.url).await?;
-
-        // 2. 初始化数据仓库
-        let account_repo = Arc::new(orm::PgAccountRepository::new(db_pool.clone())) as Arc<dyn orm::AccountRepository>;
-        let account_asset_repo = Arc::new(orm::PgAccountAssetRepository::new(db_pool.clone())) as Arc<dyn orm::AccountAssetRepository>;
-        let tx_repo = Arc::new(orm::PgTransactionRepository::new(db_pool.clone())) as Arc<dyn orm::TransactionRepository>;
-        let receipt_repo = Arc::new(orm::PgTransactionReceiptRepository::new(db_pool.clone())) as Arc<dyn orm::TransactionReceiptRepository>;
-        let block_repo = Arc::new(orm::PgBlockRepository::new(db_pool.clone())) as Arc<dyn orm::BlockRepository>;
-
-        // 3. 初始化账户存储
-        let account_store = Arc::new(account::repository::PgAccountStore::new(account_repo.clone()));
-
-        // 4. 初始化账户管理器
-        let account_config = account::AccountConfig {
-            enable_address: true,
-            initial_balance: 0,
-            admin_account_id: None,
-        };
-        let account_manager = Arc::new(account::manager::DatabaseAccountManager::new(
-            account_store,
-            account_repo.clone(),
-            account_asset_repo.clone(),
-            account_config,
+    pub async fn init(_config: NodeConfig) -> Result<(
+        Arc<crate::p2p::P2PService>,
+        Arc<crate::chain::ChainService>,
+        Arc<crate::api::ApiService>,
+    )> {
+        let p2p = Arc::new(crate::p2p::P2PService::new(
+            "0.0.0.0:4001".to_string(),
+            vec![],
+            Arc::new(DummyTxProcessor),
+            Arc::new(crate::chain::ChainService::new(
+                Arc::new(DummyBlockRepo),
+                Arc::new(DummyTxRepo),
+                Arc::new(DummyTxProcessor),
+                Arc::new(DummyAccountManager),
+            )),
         ));
 
-        // 5. 初始化交易处理器
-        let tx_processor = Arc::new(tx_engine::processor::DatabaseTransactionProcessor::new(
-            account_repo.clone(),
-            account_asset_repo.clone(),
-            tx_repo.clone(),
-            receipt_repo,
+        let chain = Arc::new(crate::chain::ChainService::new(
+            Arc::new(DummyBlockRepo),
+            Arc::new(DummyTxRepo),
+            Arc::new(DummyTxProcessor),
+            Arc::new(DummyAccountManager),
         ));
 
-        // 6. 初始化链服务
-        let chain_service = Arc::new(chain::ChainService::new(
-            block_repo.clone(),
-            tx_repo.clone(),
-            tx_processor.clone(),
-            account_manager.clone(),
+        let api = Arc::new(crate::api::ApiService::new(
+            "127.0.0.1:8080".parse()?,
+            Arc::new(DummyAccountManager),
+            Arc::new(DummyTxProcessor),
+            Arc::new(DummyBlockRepo),
+            None,
         ));
 
-        // 7. 初始化 P2P 服务（可选）
-        let p2p_service = if config.p2p.enabled {
-            let p2p = Arc::new(p2p::P2PService::new(
-                config.p2p.listen_addr,
-                config.p2p.seed_nodes,
-                tx_processor.clone(),
-                chain_service.clone(),
-            ));
-            p2p.start().await?;
-            Some(p2p)
-        } else {
-            None
-        };
-
-        // 8. 初始化 API 服务
-        let api_service = if config.api.enabled {
-            let api = Arc::new(api::ApiService::new(
-                config.api.listen_addr,
-                account_manager.clone(),
-                tx_processor.clone(),
-                block_repo.clone(),
-                p2p_service.clone(),
-            ));
-            Some(api)
-        } else {
-            None
-        };
-
-        Ok((p2p_service.unwrap(), chain_service, api_service.unwrap()))
+        Ok((p2p, chain, api))
     }
 
-    /// Start all running services
     pub async fn start(
-        p2p_service: Arc<p2p::P2PService>,
-        chain_service: Arc<chain::ChainService>,
-        api_service: Arc<api::ApiService>,
+        _p2p_service: Arc<crate::p2p::P2PService>,
+        _chain_service: Arc<crate::chain::ChainService>,
+        api_service: Arc<crate::api::ApiService>,
     ) -> Result<()> {
-        // 启动链同步服务
-        chain_service.start_sync().await?;
-
-        // 启动 API 服务器（会阻塞）
         api_service.start().await?;
-
         Ok(())
+    }
+}
+
+struct DummyAccountManager;
+impl account::AccountManager for DummyAccountManager {
+    fn create_account(&self) -> Result<(crypto::Keypair, account::AccountId, account::Address), account::AccountError> {
+        unimplemented!()
+    }
+
+    fn get_account(&self, _account_id: account::AccountId) -> Result<Option<account::Account>, account::AccountError> {
+        unimplemented!()
+    }
+}
+
+struct DummyBlockRepo;
+impl orm::BlockRepository for DummyBlockRepo {
+    async fn find_by_id(&self, _id: i64) -> Result<Option<orm::BlockModel>, orm::RepositoryError> {
+        Ok(None)
+    }
+
+    async fn find_by_height(&self, _height: i64) -> Result<Option<orm::BlockModel>, orm::RepositoryError> {
+        Ok(None)
+    }
+
+    async fn find_all(&self, _limit: i64, _offset: i64) -> Result<Vec<orm::BlockModel>, orm::RepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn count(&self) -> Result<i64, orm::RepositoryError> {
+        Ok(0)
+    }
+
+    async fn insert(&self, _model: orm::BlockModel) -> Result<(), orm::RepositoryError> {
+        Ok(())
+    }
+
+    async fn update(&self, _model: orm::BlockModel) -> Result<(), orm::RepositoryError> {
+        Ok(())
+    }
+}
+
+struct DummyTxRepo;
+impl orm::TransactionRepository for DummyTxRepo {
+    async fn find_by_id(&self, _id: i64) -> Result<Option<orm::TransactionModel>, orm::RepositoryError> {
+        Ok(None)
+    }
+
+    async fn find_by_sender(&self, _sender_id: i64, _limit: i64, _offset: i64) -> Result<Vec<orm::TransactionModel>, orm::RepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn find_all(&self, _limit: i64, _offset: i64) -> Result<Vec<orm::TransactionModel>, orm::RepositoryError> {
+        Ok(vec![])
+    }
+
+    async fn count(&self) -> Result<i64, orm::RepositoryError> {
+        Ok(0)
+    }
+
+    async fn insert(&self, _model: orm::TransactionModel) -> Result<(), orm::RepositoryError> {
+        Ok(())
+    }
+}
+
+struct DummyTxProcessor;
+#[async_trait::async_trait]
+impl tx_engine::TransactionProcessor for DummyTxProcessor {
+    async fn validate(&self, _tx: &blockchain_types::prelude::Transaction) -> tx_engine::ProcessorResult<()> {
+        Ok(())
+    }
+
+    async fn apply(&self, _tx: &blockchain_types::prelude::Transaction) -> tx_engine::ProcessorResult<()> {
+        Ok(())
+    }
+
+    async fn execute(&self, _tx: &blockchain_types::prelude::Transaction) -> tx_engine::ProcessorResult<tx_engine::TxReceiptInfo> {
+        Ok(tx_engine::TxReceiptInfo {
+            transaction_id: 0,
+            status: tx_engine::TxStatus::Success,
+            block_height: None,
+            gas_used: 0,
+            logs: vec![],
+            contract_address: None,
+            executed_at: 0,
+        })
     }
 }

@@ -5,7 +5,7 @@
 //! - 应用交易到状态（修改账户余额、资产、合约存储）
 //! - 返回交易收据
 
-// use async_trait::async_trait; // 暂时注释，等待 Cargo.toml 添加依赖
+use async_trait::async_trait;
 use std::sync::Arc;
 
 use blockchain_types::*;
@@ -43,7 +43,7 @@ pub type ProcessorResult<T> = std::result::Result<T, ProcessorError>;
 /// TransactionProcessor trait
 ///
 /// 负责交易的验证、执行和状态更新
-// #[async_trait] // 暂时注释，等待 Cargo.toml 添加 async_trait 依赖
+#[async_trait]
 pub trait TransactionProcessor: Send + Sync {
     /// 验证交易的有效性（签名、余额、nonce 等）
     async fn validate(&self, tx: &Transaction) -> ProcessorResult<()>;
@@ -131,7 +131,7 @@ impl DatabaseTransactionProcessor {
 }
 
 /// 数据库交易处理器实现
-// #[async_trait] // 暂时注释，等待 Cargo.toml 添加 async_trait 依赖
+#[async_trait]
 impl TransactionProcessor for DatabaseTransactionProcessor {
     async fn validate(&self, tx: &Transaction) -> ProcessorResult<()> {
         // 1. 基础验证
