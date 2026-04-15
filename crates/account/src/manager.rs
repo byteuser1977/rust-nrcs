@@ -12,7 +12,10 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use blockchain_types::*;
-use orm::{AccountRepository, AccountAssetRepository, RepositoryError};
+use blockchain_types::prelude::Account;
+use orm::{AccountRepository, AccountAssetRepository, RepositoryError, RepositoryResult};
+use crypto::KeyPair;
+use crate::AccountAsset;
 
 use crate::{AccountStore, crypto::AddressGenerator};
 
@@ -59,7 +62,7 @@ pub enum AccountError {
     Io(#[from] std::io::Error),
 }
 
-pub type AccountResult<T> = Result<T, AccountError>;
+pub type AccountResult<T> = std::result::Result<T, AccountError>;
 
 /// AccountManager trait
 ///
@@ -67,7 +70,7 @@ pub type AccountResult<T> = Result<T, AccountError>;
 #[async_trait]
 pub trait AccountManager: Send + Sync {
     /// 创建新账户（生成密钥对）
-    async fn create_account(&self, initial_balance: Option<Amount>) -> AccountResult<(Keypair, AccountId, String)>;
+    async fn create_account(&self, initial_balance: Option<Amount>) -> AccountResult<(KeyPair, AccountId, String)>;
 
     /// 创建新账户（仅注册，不生成密钥）
     async fn register_account(&self, account_id: AccountId, public_key: Vec<u8>) -> AccountResult<()>;
@@ -130,12 +133,30 @@ impl DatabaseAccountManager {
             .ok_or_else(|| AccountError::NotFound(account_id))?;
 
         // 转换为领域对象
-        let mut account = model.to_domain().map_err(|e| AccountError::Repository(RepositoryError::Blockchain(e)))?;
+        let mut account = Account {
+            id: model.id as AccountId,
+            address: None,
+            balance: model.balance as Amount,
+            unconfirmed_balance: model.unconfirmed_balance as Amount,
+            reserved_balance: 0,
+            guaranteed_balance: 0,
+            assets: Default::default(),
+            properties: Default::default(),
+            lease: None,
+            created_at: 0,
+            last_updated: 0,
+            current_height: 0,
+        };
 
         // 加载资产持仓
         let asset_models = self.account_asset_repo.find_by_account(account_id as i64).await?;
         for am in asset_models {
-            let aa = am.to_domain().map_err(|e| AccountError::Repository(RepositoryError::Blockchain(e)))?;
+            // 直接转换为领域对象
+            let aa = AccountAsset {
+                asset_id: am.asset_id as AssetId,
+                quantity: am.quantity as Amount,
+                unconfirmed_quantity: am.unconfirmed_quantity as Amount,
+            };
             account.assets.insert(aa.asset_id, aa.quantity);
         }
 
@@ -145,14 +166,14 @@ impl DatabaseAccountManager {
 
 #[async_trait]
 impl AccountManager for DatabaseAccountManager {
-    async fn create_account(&self, initial_balance: Option<Amount>) -> AccountResult<(Keypair, AccountId, String)> {
+    async fn create_account(&self, initial_balance: Option<Amount>) -> AccountResult<(KeyPair, AccountId, String)> {
         let (kp, account_id, address) = {
             let generator = ();
             generator.generate_account()
         };
 
         // 存储到数据库
-        let public_key_bytes = kp.public.as_bytes().to_vec();
+        let public_key_bytes = kp.verifying_key().as_bytes().to_vec();
         self.store.get_or_create_account(account_id, public_key_bytes).await?;
 
         // 如果配置了初始余额，进行 credit
@@ -242,10 +263,10 @@ impl AccountManager for DatabaseAccountManager {
     }
 
     async fn get_and_increment_nonce(&self, sender_id: AccountId) -> AccountResult<u64> {
-        self.store.increment_nonce(sender_id).await
+        self.store.increment_nonce(sender_id).await.map_err(AccountError::Repository)
     }
 
-    async fn current_nonce(&self, account_id: AccountId) -> AccountResult<u64> {
+    async fn current_nonce(&self, _account_id: AccountId) -> AccountResult<u64> {
         // TODO: 实现从数据库或缓存查询
         Ok(0) // placeholder
     }

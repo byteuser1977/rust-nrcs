@@ -10,6 +10,14 @@ pub mod manager;
 pub mod repository;
 pub mod crypto;
 
+// 定义 AccountAsset 结构体
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountAsset {
+    pub asset_id: blockchain_types::AssetId,
+    pub quantity: blockchain_types::Amount,
+    pub unconfirmed_quantity: blockchain_types::Amount,
+}
+
 pub use manager::{AccountManager, AccountConfig};
 pub use repository::AccountStore;
 pub use crypto::{generate_keypair, AddressGenerator};

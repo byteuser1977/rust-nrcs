@@ -4,8 +4,9 @@
 //! - Account ID derivation (delegates to crypto crate)
 //! - Address encoding (Base58 with checksum)
 
-use crypto::*;
+use crypto::{KeyPair, PublicKey, generate_keypair, sha256};
 use base58;
+
 
 use blockchain_types::*;
 
@@ -15,8 +16,8 @@ pub fn generate_keypair() -> KeyPair {
 }
 
 /// Derive account ID from public key (delegates to crypto crate)
-/// Account ID = first 8 bytes of SHA-256(public_key) as u64 (big-endian)
-pub fn derive_account_id(public_key: &VerifyingKey) -> AccountId {
+/// Account ID = first 8 bytes of SHA-256(public_key) as u64 (big-endian)        
+pub fn derive_account_id(public_key: &PublicKey) -> AccountId {
     let public_key_bytes = public_key.as_bytes();
     let hash = crypto::sha256(public_key_bytes);
     let mut bytes = [0u8; 8];
@@ -35,7 +36,7 @@ pub fn derive_address(account_id: AccountId) -> String {
     let checksum = double_sha256(&data);
     data.extend_from_slice(&checksum[0..4]);
 
-    base58::encode(&data)
+    base58::ToBase58::to_base58(&data)
 }
 
 /// Verify that an address matches an account ID
