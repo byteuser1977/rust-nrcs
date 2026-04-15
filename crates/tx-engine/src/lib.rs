@@ -10,6 +10,6 @@ pub mod processor;
 pub mod mempool;
 pub mod types;
 
-pub use processor::{TransactionProcessor, DatabaseTransactionProcessor};
+pub use processor::{TransactionProcessor, DatabaseTransactionProcessor, ProcessorError, ProcessorResult};
 pub use mempool::{Mempool, MempoolConfig, MempoolStats};
 pub use types::{TxStatus, TxReceiptInfo, TxPriority};

@@ -92,7 +92,7 @@ impl IntoResponse for ApiError {
             ApiError::Io(e) => (StatusCode::INTERNAL_SERVER_ERROR, 500, e.to_string()),
         };
 
-        let body = Json(ApiResponse::error(code, message));
+        let body = Json(ApiResponse::<()>::error(code, message));
         (status, body).into_response()
     }
 }

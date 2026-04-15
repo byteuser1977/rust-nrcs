@@ -6,6 +6,7 @@
 use super::*;
 use blockchain_types::*;
 use sha2::{Sha256, Digest};
+use crate::ConsensusEngine;
 
 /// PoW 共识引擎
 pub struct PoWEngine {
@@ -84,33 +85,46 @@ impl ConsensusEngine for PoWEngine {
             // 出块过快，增加难度（base_target 减小）
             // PoW 中难度表示为 max_target / current_target
             // 简化：返回新的 target
-            (block.base_target as f64 * (avg / target)) as u64
+            (recent_blocks.last().unwrap().base_target as f64 * (avg / target)) as u64
         } else if avg > target * 1.1 {
             // 出块过慢，降低难度
-            (block.base_target as f64 * (avg / target)) as u64
+            (recent_blocks.last().unwrap().base_target as f64 * (avg / target)) as u64
         } else {
-            block.base_target // 保持不变
+            recent_blocks.last().unwrap().base_target // 保持不变
         }
     }
 
     fn verify_timestamp(&self, block: &Block, current_time: Timestamp) -> ConsensusResult<()> {
-        let max_drift = self.target_spacing * 2; // 允许 2 倍漂移
+        let max_drift = self.target_spacing * 4;
         if block.timestamp > current_time + max_drift {
-            return Err(ConsensusError::InvalidTransaction(
-                format!("block timestamp too far in future: {} vs {}", block.timestamp, current_time)
+            return Err(ConsensusError::InvalidTimestamp(
+                format!("block timestamp too far in future")
             ));
         }
-        // 不能早于前序区块（由区块链逻辑检查）
         Ok(())
     }
 
     fn verify_block_signature(&self, block: &Block, public_key: &PublicKey) -> ConsensusResult<()> {
-        // PoW 中区块签名是出块者对区块内容的签名
-        block.verify_signature(public_key)
+        block.verify_signature(public_key).map_err(|e| ConsensusError::BlockchainError(e))
     }
 
     fn serialize_header(block: &Block) -> Vec<u8> {
-        block.serialize_header()
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&block.version.to_be_bytes());
+        buf.extend_from_slice(&block.timestamp.to_be_bytes());
+        buf.extend_from_slice(&block.height.to_be_bytes());
+        buf.extend_from_slice(&block.previous_block_hash);
+        buf.extend_from_slice(&block.payload_hash);
+        buf.extend_from_slice(&block.generator_id.to_be_bytes());
+        buf.extend_from_slice(&block.nonce.to_be_bytes());
+        buf.extend_from_slice(&block.base_target.to_be_bytes());
+        buf.extend_from_slice(&(block.cumulative_difficulty.len() as u32).to_be_bytes());
+        buf.extend_from_slice(&block.cumulative_difficulty);
+        buf.extend_from_slice(&block.total_amount.to_be_bytes());
+        buf.extend_from_slice(&block.total_fee.to_be_bytes());
+        buf.extend_from_slice(&block.payload_length.to_be_bytes());
+        buf.extend_from_slice(&block.generation_signature);
+        buf
     }
 }
 

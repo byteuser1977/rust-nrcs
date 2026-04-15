@@ -7,6 +7,8 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use crate::ApiState;
+use blockchain_types::prelude::Transaction;
 
 use crate::{error::ApiResult, response::{TransactionResponse, SubmitTransactionResponse}};
 use blockchain_types::*;

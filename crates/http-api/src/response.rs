@@ -1,7 +1,10 @@
 //! 统一响应格式定义
 
 use serde::{Deserialize, Serialize};
-use blockchain_types::*;
+use blockchain_types::{
+    AccountId, Amount, AssetId, BlockId, Height, Timestamp, TransactionId,
+};
+use blockchain_types::prelude::Account;
 
 /// 账户详情响应
 #[derive(Debug, Serialize, Deserialize)]

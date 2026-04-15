@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use figment::{Figment, providers::{Env, Format, Toml, Json}};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {
@@ -42,6 +43,6 @@ impl ApiConfig {
 
     /// 获取绑定的 SocketAddr
     pub fn addr(&self) -> SocketAddr {
-        SocketAddr::from((self.host.parse().unwrap_or([127, 0, 0, 1].into()), self.port))
+        SocketAddr::from((self.host.parse::<std::net::IpAddr>().unwrap_or([127, 0, 0, 1].into()), self.port))
     }
 }

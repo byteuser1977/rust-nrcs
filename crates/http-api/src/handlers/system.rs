@@ -3,7 +3,7 @@
 use axum::{http::StatusCode, Json};
 use serde::Serialize;
 
-use crate::error::{ApiResult, response::ApiResponse};
+use crate::error::ApiResult;
 
 /// 健康检查响应
 #[derive(Debug, Serialize)]

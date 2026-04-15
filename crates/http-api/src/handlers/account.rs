@@ -7,7 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{error::ApiResult, response::{AccountResponse, SubmitTransactionResponse}, state::ApiState};
-use blockchain_types::*;
+use blockchain_types::{AccountId, Amount};
 
 /// 查询账户参数
 #[derive(Debug, Deserialize)]
@@ -49,7 +49,7 @@ pub async fn create_account(
 
     Ok(Json(SubmitTransactionResponse {
         transaction_id: account_id, // 简化：使用 account_id 作为标识
-        full_hash: format!("{:x}", account_id.to_be_bytes()), // 占位
+        full_hash: format!("{:x}", account_id), // 占位
         status: "success".to_string(),
         message: format!("account created: {}", address),
     }))

@@ -15,11 +15,12 @@ pub mod pow;
 pub mod pos;
 
 pub mod prelude {
-    pub use crate::{Consensus, ConsensusEngine, PoSEngine};
+    pub use crate::{ConsensusEngine, PoSEngine};
 }
 
-use super::blockchain_types::*;
+use blockchain_types::*;
 use thiserror::Error;
+use blockchain_types::prelude::Block;
 
 /// 共识错误类型
 #[derive(Debug, Error)]
@@ -38,6 +39,12 @@ pub enum ConsensusError {
 
     #[error("invalid block signature")]
     InvalidSignature,
+
+    #[error("invalid timestamp: {0}")]
+    InvalidTimestamp(String),
+
+    #[error("blockchain error: {0}")]
+    BlockchainError(#[from] blockchain_types::BlockchainError),
 }
 
 pub type ConsensusResult<T> = std::result::Result<T, ConsensusError>;
@@ -110,7 +117,7 @@ pub struct BlockchainState {
 pub struct AccountSnapshot {
     pub id: AccountId,
     pub balance: Amount,
-    pub lease: Option<AccountLease>,
+    pub lease: Option<u64>, // 简化：使用 u64 替代 AccountLease
     pub has_public_key: bool,
 }
 
@@ -177,7 +184,7 @@ pub fn adjust_difficulty(
         return current_target;
     }
 
-    let sum: u64 = actual_times.iter().sum();
+    let sum: u64 = actual_times.iter().map(|&t| t as u64).sum();
     let avg = sum as f64 / actual_times.len() as f64;
     let target = params.target_spacing as f64;
 

@@ -14,7 +14,6 @@ pub mod error;
 pub mod response;
 pub mod routes;
 pub mod handlers;
-pub mod middleware;
 pub mod state;
 
 use axum::Router;

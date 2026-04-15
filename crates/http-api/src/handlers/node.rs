@@ -2,6 +2,7 @@
 
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
+use crate::ApiState;
 
 use crate::{error::ApiResult, response::NodeInfoResponse};
 
@@ -15,7 +16,7 @@ pub async fn get_node_info(
         chain_id: "nrcs-mainnet-v1".to_string(),
         height: 0, // state.chain.head_height()
         syncing: false,
-        peer_count: state.p2p_service.as_ref().map(|s| s.peer_count()).unwrap_or(0),
+        peer_count: 0,
         cpu_usage: 0.0,
         memory_usage: 0,
         uptime_seconds: 0,

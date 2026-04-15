@@ -7,8 +7,14 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{error::ApiResult, response::BlockResponse, state::ApiState};
-use blockchain_types::*;
-use orm::BlockRepository;
+use blockchain_types::prelude::*;
+use blockchain_types::Hash256;
+
+#[derive(Debug, Deserialize)]
+pub struct BlockQuery {
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
 
 /// 获取区块详情（根据高度）
 pub async fn get_block_by_height(
@@ -16,7 +22,7 @@ pub async fn get_block_by_height(
     Path(height): Path<u32>,
 ) -> ApiResult<Json<BlockResponse>> {
     let block_repo = state.block_repo.as_ref();
-    let block_model = block_repo.find_by_height(height as i64).await?
+    let block_model = block_repo.find_by_height(height as i32).await?
         .ok_or_else(|| crate::error::ApiError::NotFound(format!("block at height {} not found", height)))?;
 
     let block = block_model.to_domain()?;
@@ -24,9 +30,9 @@ pub async fn get_block_by_height(
     // 转换为响应
     let response = BlockResponse {
         height: block.height,
-        block_hash: format!("{:x}", compute_block_hash(&block)), // 需要计算或从 DB 存储
-        previous_block_hash: format!("{:x}", block.previous_block_hash),
-        payload_hash: format!("{:x}", block.payload_hash),
+        block_hash: hex::encode(compute_block_hash(&block)), // 需要计算或从 DB 存储
+        previous_block_hash: hex::encode(block.previous_block_hash),
+        payload_hash: hex::encode(block.payload_hash),
         generator_id: block.generator_id,
         nonce: block.nonce,
         base_target: block.base_target,

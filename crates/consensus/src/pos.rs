@@ -7,6 +7,7 @@ use blockchain_types::*;
 use num_bigint::BigUint;
 use num_traits::{Zero, One, ToPrimitive};
 use rand::Rng;
+use sha2::{Sha256, Digest};
 
 /// PoS 共识引擎
 pub struct PoSEngine {
@@ -101,7 +102,7 @@ impl ConsensusEngine for PoSEngine {
     fn verify_timestamp(&self, block: &Block, current_time: Timestamp) -> ConsensusResult<()> {
         let max_drift = self.target_spacing * 4;
         if block.timestamp > current_time + max_drift {
-            return Err(ConsensusError::InvalidTransaction(
+            return Err(ConsensusError::InvalidTimestamp(
                 format!("block timestamp too far in future")
             ));
         }
@@ -109,15 +110,30 @@ impl ConsensusEngine for PoSEngine {
     }
 
     fn verify_block_signature(&self, block: &Block, public_key: &PublicKey) -> ConsensusResult<()> {
-        block.verify_signature(public_key)
+        block.verify_signature(public_key).map_err(|e| ConsensusError::BlockchainError(e))
     }
 
     fn serialize_header(block: &Block) -> Vec<u8> {
-        block.serialize_header()
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&block.version.to_be_bytes());
+        buf.extend_from_slice(&block.timestamp.to_be_bytes());
+        buf.extend_from_slice(&block.height.to_be_bytes());
+        buf.extend_from_slice(&block.previous_block_hash);
+        buf.extend_from_slice(&block.payload_hash);
+        buf.extend_from_slice(&block.generator_id.to_be_bytes());
+        buf.extend_from_slice(&block.nonce.to_be_bytes());
+        buf.extend_from_slice(&block.base_target.to_be_bytes());
+        buf.extend_from_slice(&(block.cumulative_difficulty.len() as u32).to_be_bytes());
+        buf.extend_from_slice(&block.cumulative_difficulty);
+        buf.extend_from_slice(&block.total_amount.to_be_bytes());
+        buf.extend_from_slice(&block.total_fee.to_be_bytes());
+        buf.extend_from_slice(&block.payload_length.to_be_bytes());
+        buf.extend_from_slice(&block.generation_signature);
+        buf
     }
 }
 
-impl PoSEngine for PoSEngine {
+impl crate::PoSEngine for PoSEngine {
     fn select_forger(
         &self,
         blockchain: &BlockchainState,
@@ -140,6 +156,17 @@ impl PoSEngine for PoSEngine {
     }
 
     fn generate_signature(&self, account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512 {
+        // 生成签名使用私有密钥（应调用者提供）
+        // 这里仅返回占位符
+        let mut gen_sig = *prev_gen_sig;
+        // 翻转让签名不重复
+        gen_sig.reverse();
+        gen_sig
+    }
+}
+
+impl PoSEngine {
+    pub(crate) fn generate_signature(&self, account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512 {
         // 生成签名使用私有密钥（应调用者提供）
         // 这里仅返回占位符
         let mut gen_sig = *prev_gen_sig;
