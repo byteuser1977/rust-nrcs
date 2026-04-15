@@ -72,3 +72,13 @@ Desktop.ini
 .trae/documents/orm_model_cleanup_plan.md
 PLAN.md
 .env
+build_in_wsl.sh
+check_deps.bat
+check_orm.sh
+full_build.sh
+grant_permissions.sh
+install_rust_wsl.sh
+run_migrations.sh
+run_sqlx_prepare.sh
+setup_db.sh
+test_db_connection.sh

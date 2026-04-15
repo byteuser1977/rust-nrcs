@@ -9,7 +9,8 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 use blockchain_types::*;
-use orm::{AccountRepository, AccountAssetRepository, TransactionRepository, TransactionReceiptRepository, RepositoryError};
+use blockchain_types::prelude::Transaction;
+use orm::{AccountRepository, AccountAssetRepository, TransactionRepository, RepositoryError};
 use thiserror::Error;
 
 use crate::types::{TxReceiptInfo, TxStatus};
@@ -78,7 +79,7 @@ pub struct DatabaseTransactionProcessor {
     account_repo: Arc<dyn AccountRepository>,
     account_asset_repo: Arc<dyn AccountAssetRepository>,
     tx_repo: Arc<dyn TransactionRepository>,
-    receipt_repo: Arc<dyn TransactionReceiptRepository>,
+    // receipt_repo: Arc<dyn TransactionReceiptRepository>, // 暂时注释，等待 orm 模块实现
 }
 
 impl DatabaseTransactionProcessor {

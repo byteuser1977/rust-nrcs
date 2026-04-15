@@ -6,10 +6,8 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 use blockchain_types::*;
-use orm::{AccountModel, AccountRepository, RepositoryError, RepositoryResult};
+use orm::{AccountModel, AccountRepository, RepositoryResult};
 use blockchain_types::prelude::Account;
-
-use super::AccountManager;
 
 /// 账户存储 trait（用于 AccountManager 依赖注入）
 #[async_trait]

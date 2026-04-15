@@ -4,7 +4,7 @@
 //! - Account ID derivation (delegates to crypto crate)
 //! - Address encoding (Base58 with checksum)
 
-use crypto::{KeyPair, PublicKey, generate_keypair, sha256};
+use crypto::{KeyPair, PublicKey, sha256};
 use base58;
 
 
@@ -36,7 +36,7 @@ pub fn derive_address(account_id: AccountId) -> String {
     let checksum = double_sha256(&data);
     data.extend_from_slice(&checksum[0..4]);
 
-    base58::ToBase58::to_base58(&data)
+    base58::ToBase58::to_base58(data.as_slice())
 }
 
 /// Verify that an address matches an account ID
@@ -60,7 +60,7 @@ pub trait AddressGenerator {
 impl AddressGenerator for () {
     fn generate_account(&self) -> (KeyPair, AccountId, String) {
         let kp = generate_keypair();
-        let public_key = kp.verifying_key();
+        let public_key = kp.public_key();
         let account_id = derive_account_id(&public_key);
         let address = derive_address(account_id);
         (kp, account_id, address)

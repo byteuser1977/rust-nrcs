@@ -15,7 +15,8 @@ use parking_lot::RwLock;
 use tracing::{debug, warn};
 
 use blockchain_types::*;
-use crate::{Transaction, TxPriority};
+use blockchain_types::prelude::Transaction;
+use crate::TxPriority;
 
 /// Mempool 配置
 #[derive(Debug, Clone)]
