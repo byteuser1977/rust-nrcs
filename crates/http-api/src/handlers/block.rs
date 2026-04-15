@@ -24,9 +24,9 @@ pub async fn get_block_by_height(
     // 转换为响应
     let response = BlockResponse {
         height: block.height,
-        block_hash: hex::encode(compute_block_hash(&block)), // 需要计算或从 DB 存储
-        previous_block_hash: hex::encode(block.previous_block_hash),
-        payload_hash: hex::encode(block.payload_hash),
+        block_hash: format!("{:x}", compute_block_hash(&block)), // 需要计算或从 DB 存储
+        previous_block_hash: format!("{:x}", block.previous_block_hash),
+        payload_hash: format!("{:x}", block.payload_hash),
         generator_id: block.generator_id,
         nonce: block.nonce,
         base_target: block.base_target,
