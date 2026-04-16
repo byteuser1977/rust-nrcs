@@ -24,16 +24,25 @@ pub mod block;
 pub mod transaction;
 pub mod account;
 pub mod asset;
+pub mod currency;
+pub mod order;
+pub mod alias;
+pub mod account_ext;
 
 pub mod prelude {
     pub use crate::block::*;
     pub use crate::transaction::*;
     pub use crate::account::*;
     pub use crate::asset::*;
+    pub use crate::currency::*;
+    pub use crate::order::*;
+    pub use crate::alias::*;
+    pub use crate::account_ext::*;
     pub use crate::{
         Hash256, Hash512, PublicKey, SecretKey, Signature,
         Timestamp, Height, Amount, AccountId, AssetId, BlockId,
         TransactionId, TransactionType, TxReceipt,
+        CurrencyId, TransferId, OrderId, AliasId, AliasOfferId,
         BLOCK_VERSION, TRANSACTION_VERSION, BlockchainError, Result,
     };
 }
@@ -136,6 +145,17 @@ pub type AssetId = u64;
 pub type BlockId = u64;
 /// 交易 ID
 pub type TransactionId = u64;
+
+/// 货币 ID
+pub type CurrencyId = u64;
+/// 转账 ID
+pub type TransferId = u64;
+/// 订单 ID
+pub type OrderId = u64;
+/// 别名 ID
+pub type AliasId = u64;
+/// 别名报价 ID
+pub type AliasOfferId = u64;
 
 /// 交易类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
