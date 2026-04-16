@@ -126,7 +126,6 @@ pub struct TransactionModel {
     pub has_prunable_encrypted_message: bool,
 }
 
-/*
 impl TransactionModel {
     pub fn to_domain(&self) -> Result<Transaction> {
         let sender_id = self.sender_id as AccountId;
@@ -194,7 +193,6 @@ impl TransactionModel {
         })
     }
 }
-*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountModel {
@@ -209,18 +207,26 @@ pub struct AccountModel {
     pub latest: bool,
 }
 
-/*
 impl AccountModel {
     pub fn to_domain(&self) -> Result<Account> {
         Ok(Account {
             id: self.id as AccountId,
+            address: None,
             balance: self.balance as Amount,
             unconfirmed_balance: self.unconfirmed_balance as Amount,
-            forged_balance: self.forged_balance as Amount,
-            active_lessee_id: self.active_lessee_id.map(|id| id as AccountId),
-            has_control_phasing: self.has_control_phasing,
-            height: self.height as Height,
-            latest: self.latest,
+            reserved_balance: 0,
+            guaranteed_balance: 0,
+            assets: std::collections::HashMap::new(),
+            properties: std::collections::HashMap::new(),
+            lease: self.active_lessee_id.map(|id| AccountLease {
+                lessee_id: id as AccountId,
+                amount: 0,
+                start_height: 0,
+                end_height: 0,
+            }),
+            created_at: self.height as Timestamp,
+            last_updated: self.height as Timestamp,
+            current_height: self.height as Height,
         })
     }
 
@@ -230,15 +236,14 @@ impl AccountModel {
             id: account.id as i64,
             balance: account.balance as i64,
             unconfirmed_balance: account.unconfirmed_balance as i64,
-            forged_balance: account.forged_balance as i64,
-            active_lessee_id: account.active_lessee_id.map(|id| id as i64),
-            has_control_phasing: account.has_control_phasing,
-            height: account.height as i32,
-            latest: account.latest,
+            forged_balance: 0,
+            active_lessee_id: account.lease.as_ref().map(|l| l.lessee_id as i64),
+            has_control_phasing: false,
+            height: account.current_height as i32,
+            latest: true,
         })
     }
 }
-*/
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
 pub struct AccountAssetModel {
