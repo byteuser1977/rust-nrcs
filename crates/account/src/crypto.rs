@@ -78,20 +78,22 @@ mod tests {
     #[test]
     fn test_keypair_generation() {
         let kp = generate_keypair();
-        assert_eq!(kp.verifying_key().as_bytes().len(), 32);
+        assert_eq!(kp.public_key().len(), 32);
     }
 
     #[test]
     fn test_account_id_derivation() {
         let kp = generate_keypair();
-        let account_id = derive_account_id(&kp.verifying_key());
+        let public_key = kp.public_key();
+        let account_id = derive_account_id(&public_key);
         assert_ne!(account_id, 0);
     }
 
     #[test]
     fn test_address_derivation() {
         let kp = generate_keypair();
-        let account_id = derive_account_id(&kp.verifying_key());
+        let public_key = kp.public_key();
+        let account_id = derive_account_id(&public_key);
         let address = derive_address(account_id);
         assert!(address.len() > 20);
         assert!(verify_address(account_id, &address));

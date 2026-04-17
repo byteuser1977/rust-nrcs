@@ -252,16 +252,24 @@ mod tests {
 
     #[test]
     fn test_merkle_root() {
-        let tx1 = Transaction {
-            type_id: 0,
-            full_hash: [1u8; 32],
-            ..Default::default()
-        };
-        let tx2 = Transaction {
-            type_id: 0,
-            full_hash: [2u8; 32],
-            ..Default::default()
-        };
+        let tx1 = Transaction::new(
+            TransactionType::Payment,
+            1,
+            Some(2),
+            100,
+            1,
+            1700000000,
+            32767,
+        );
+        let tx2 = Transaction::new(
+            TransactionType::Payment,
+            3,
+            Some(4),
+            200,
+            1,
+            1700000000,
+            32767,
+        );
 
         let root = Block::compute_merkle_root(&[tx1, tx2]).unwrap();
         assert_ne!(root, [0u8; 32]); // non-zero

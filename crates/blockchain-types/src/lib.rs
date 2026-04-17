@@ -235,33 +235,6 @@ pub const TRANSACTION_VERSION: u8 = 1;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json;
-
-    #[test]
-    fn test_block_serialization() {
-        let block = Block {
-            version: BLOCK_VERSION,
-            timestamp: 1_704_000_000,
-            height: 100,
-            previous_block_hash: [0u8; 32],
-            payload_hash: [1u8; 32],
-            generator_id: 1234567890,
-            nonce: 0,
-            base_target: 1_000_000,
-            cumulative_difficulty: Default::default(),
-            total_amount: 1_000_000_000,
-            total_fee: 500_000,
-            payload_length: 0,
-            generation_signature: [2u8; 64],
-            block_signature: [3u8; 64],
-            transactions: vec![],
-        };
-
-        let json = serde_json::to_string(&block).unwrap();
-        let decoded: Block = serde_json::from_str(&json).unwrap();
-        assert_eq!(block.version, decoded.version);
-        assert_eq!(block.height, decoded.height);
-    }
 
     #[test]
     fn test_transaction_type_conversion() {

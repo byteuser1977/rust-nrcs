@@ -73,6 +73,36 @@ pub struct Transaction {
     pub has_prunable_encrypted_message: bool,
 }
 
+impl Default for Transaction {
+    fn default() -> Self {
+        Self {
+            version: TRANSACTION_VERSION,
+            type_id: TransactionType::Payment,
+            subtype: 0,
+            timestamp: 0,
+            deadline: 32767,
+            sender_id: 0,
+            recipient_id: None,
+            amount: 0,
+            fee: 0,
+            height: 0,
+            block_id: 0,
+            signature: [0u8; 64],
+            full_hash: [0u8; 32],
+            attachment_bytes: vec![],
+            phased: false,
+            has_message: false,
+            has_encrypted_message: false,
+            has_public_key_announcement: false,
+            has_prunable_attachment: false,
+            ec_block_height: None,
+            ec_block_id: None,
+            has_encrypttoself_message: false,
+            has_prunable_encrypted_message: false,
+        }
+    }
+}
+
 impl Transaction {
     /// 创建新交易（未签名状态）
     /// 计算 full_hash 时需要 sender_id，因此需传入
