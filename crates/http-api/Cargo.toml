@@ -34,6 +34,7 @@ blockchain-types = { path = "../blockchain-types" }
 orm = { path = "../orm" }
 tx-engine = { path = "../tx-engine" }
 account = { path = "../account" }
+crypto = { path = "../crypto" }
 
 # 配置
 config = { version = "0.13", features = ["json", "toml", "yaml"] }
@@ -48,3 +49,5 @@ serde_bytes = "0.11.19"
 [dev-dependencies]
 criterion = "0.5"
 reqwest = { version = "0.11", features = ["json"] }
+async-trait = "0.1"
+tower = { version = "0.4", features = ["util"] }
