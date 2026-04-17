@@ -16,20 +16,19 @@
 //!
 //! ### 便捷函数（兼容原有 API）
 //! ```
-//! use crypto::{hash, verify, generate_keypair, sha256, sm3};
+//! use crypto::{generate_keypair, sha256};
 //!
 //! let data = b"hello world";
-//! let hash = hash(data);
-//! let specific = sha256(data);
+//! let hash = sha256(data);
 //!
 //! let kp = generate_keypair();
-//! let sig = sign(&kp.secret_key(), data);
-//! assert!(verify(&kp.public_key(), data, &sig).is_ok());
+//! let sig = kp.sign(data);
+//! assert!(crypto::verify(&kp.public_key(), data, &sig).is_ok());
 //! ```
 //!
 //! ### 直接使用 `Crypto` 结构体（显式控制）
 //! ```
-//! use crypto::{Crypto, config::CryptoConfig};
+//! use crypto::{Crypto, CryptoConfig};
 //!
 //! let cfg = CryptoConfig::default();
 //! let crypto = Crypto::new(&cfg).unwrap();

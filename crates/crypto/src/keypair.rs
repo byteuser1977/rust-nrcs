@@ -66,9 +66,11 @@ impl KeyPair {
     pub fn secret_key(&self) -> SecretKey {
         match self {
             KeyPair::Ed25519(kp) => {
-                let bytes = kp.to_bytes();
+                let seed = kp.to_bytes(); // 32 bytes
+                let pubkey = kp.verifying_key().to_bytes(); // 32 bytes
                 let mut arr = [0u8; 64];
-                arr.copy_from_slice(&bytes);
+                arr[..32].copy_from_slice(&seed);
+                arr[32..].copy_from_slice(&pubkey);
                 SecretKey::Ed25519(arr)
             }
         }
