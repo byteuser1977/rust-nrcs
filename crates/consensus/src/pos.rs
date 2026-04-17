@@ -10,7 +10,7 @@ use rand::Rng;
 use sha2::{Sha256, Digest};
 
 /// PoS 共识引擎
-pub struct PoSEngine {
+pub struct PosEngine {
     /// 目标区块间隔（秒）
     pub target_spacing: u32,
     /// 最小出块余额要求（NQT）
@@ -21,7 +21,7 @@ pub struct PoSEngine {
     pub max_lease_terms: u32,
 }
 
-impl PoSEngine {
+impl PosEngine {
     pub fn new(target_spacing: u32, minimum_balance: Amount, block_reward: Amount) -> Self {
         Self {
             target_spacing,
@@ -86,7 +86,7 @@ impl PoSEngine {
     }
 }
 
-impl ConsensusEngine for PoSEngine {
+impl ConsensusEngine for PosEngine {
     fn verify_difficulty(&self, block: &Block) -> ConsensusResult<()> {
         // PoS 不验证传统难度，改为验证出块时间在 deadline 内
         // 具体逻辑在 PoS 中放在 select_forger 和 deadline 验证
@@ -133,7 +133,7 @@ impl ConsensusEngine for PoSEngine {
     }
 }
 
-impl crate::PoSEngine for PoSEngine {
+impl crate::PoSEngine for PosEngine {
     fn select_forger(
         &self,
         blockchain: &BlockchainState,
@@ -165,7 +165,7 @@ impl crate::PoSEngine for PoSEngine {
     }
 }
 
-impl PoSEngine {
+impl PosEngine {
     pub(crate) fn generate_signature(&self, account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512 {
         // 生成签名使用私有密钥（应调用者提供）
         // 这里仅返回占位符
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_pos_engine_creation() {
-        let engine = PoSEngine::new(15, 500_000_000_000, 150_000_000_000);
+        let engine = PosEngine::new(15, 500_000_000_000, 150_000_000_000);
         assert_eq!(engine.target_spacing, 15);
         assert_eq!(engine.minimum_balance, 500_000_000_000); // 5000 NRC
         assert_eq!(engine.block_reward, 150_000_000_000);    // 1500 NRC
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn test_deadline_calculation() {
-        let engine = PoSEngine::new(15, 1, 1);
+        let engine = PosEngine::new(15, 1, 1);
         let deadline = engine.calculate_deadline(123, 100).unwrap();
         // height = 100, 100 % 1440 = 100, deadline = 100 * 15 = 1500
         assert_eq!(deadline, 1500);

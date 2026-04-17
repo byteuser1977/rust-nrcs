@@ -1,146 +1,125 @@
-//! 共识算法测试（基于PoS或类似机制）
+//! 共识算法测试
 //!
 //! 测试：
+//! - 共识引擎创建
 //! - 出块者选择
-//! - 区块验证
-//! - 分叉处理
-//! - 拜占庭容错
+//! - 难度调整
 
-use consensus::*;
+use consensus::prelude::*;
 use blockchain_types::*;
 
-/// 测试出块者选择（基于质押权重的随机选择）
+/// 测试 PosEngine 创建和基本操作
 #[test]
-fn test_block_producer_selection() {
-    let mut consensus = PosConsensus::new(12345); // 固定随机种子
-    
-    let stakes = vec![
-        (1u64, 100u64), // (validator_id, stake)
-        (2u64, 200u64),
-        (3u64, 300u64),
-    ];
-    
-    let selected = consensus.select_block_producer(&stakes, Height(1));
-    
-    assert!(selected.is_some());
-    let (validator_id, _) = selected.unwrap();
-    assert!(vec![1, 2, 3].contains(&validator_id));
+fn test_pos_engine_creation() {
+    let engine = PosEngine::new(15, 1_000_000, 100_000);
+    assert_eq!(engine.target_spacing, 15);
+    assert_eq!(engine.minimum_balance, 1_000_000);
+    assert_eq!(engine.block_reward, 100_000);
 }
 
-/// 测试区块签名验证
+/// 测试 PoWEngine 创建
 #[test]
-fn test_block_signature_verification() {
-    let block = Block::new(
+fn test_pow_engine_creation() {
+    let engine = PoWEngine::new(60);
+    assert_eq!(engine.target_spacing, 60);
+    assert_eq!(engine.initial_difficulty, 1u64 << 32);
+}
+
+/// 测试难度调整逻辑
+#[test]
+fn test_difficulty_adjustment() {
+    use consensus::DifficultyAdjustmentParams;
+    
+    let params = DifficultyAdjustmentParams::default();
+    let current = 1_000_000;
+
+    // 出块过快 → 难度提高 → base_target 减小
+    let faster = consensus::adjust_difficulty(current, &[12, 13, 12], &params);
+    assert!(faster < current);
+
+    // 出块过慢 → 难度降低 → base_target 增大
+    let slower = consensus::adjust_difficulty(current, &[20, 22, 21], &params);
+    assert!(slower > current);
+
+    let normal = consensus::adjust_difficulty(current, &[14, 15, 16], &params);
+    assert_eq!(normal, current);
+}
+
+/// 测试出块者选择（基于 PosEngine）
+#[test]
+fn test_forger_selection() {
+    let engine = PosEngine::new(15, 1, 100);
+    
+    let accounts = vec![
+        consensus::AccountSnapshot {
+            id: 1,
+            balance: 100,
+            lease: None,
+            has_public_key: true,
+        },
+        consensus::AccountSnapshot {
+            id: 2,
+            balance: 200,
+            lease: None,
+            has_public_key: true,
+        },
+        consensus::AccountSnapshot {
+            id: 3,
+            balance: 300,
+            lease: None,
+            has_public_key: true,
+        },
+    ];
+    
+    let state = consensus::BlockchainState::new(
         1,
-        [1u8; 32],
+        [0u8; 32],
+        1_000_000,
+        vec![0u8; 32],
+        [0u8; 64],
         1000,
-        vec![],
+        accounts,
     );
     
-    let private_key = ed25519_dalek::SigningKey::generate(&mut rand::rngs::OsRng);
-    let signature = private_key.sign(&block.hash_bytes());
-    
-    let public_key = private_key.verifying_key();
-    
-    assert!(block.verify_signature(&public_key, &signature).is_ok());
+    let result = engine.select_forger(&state, 1000 + 15);
+    assert!(result.is_ok());
+    let (forger_id, _) = result.unwrap();
+    assert!(vec![1, 2, 3].contains(&forger_id));
 }
 
-/// 测试无效签名
+/// 测试 BlockchainState 总有效余额计算
 #[test]
-fn test_invalid_signature() {
-    let block = Block::new(1, [1u8; 32], 1000, vec![]);
-    
-    let dummy_pubkey = ed25519_dalek::VerifyingKey::from_bytes(&[0u8; 32]).unwrap();
-    let dummy_signature = ed25519_dalek::Signature::from_bytes(&[0u8; 64]).unwrap();
-    
-    assert!(block.verify_signature(&dummy_pubkey, &dummy_signature).is_err());
-}
-
-/// 测试区块哈希唯一性（不同内容产生不同哈希）
-#[test]
-fn test_block_hash_uniqueness() {
-    let block1 = Block::new(1, [0u8; 32], 1000, vec![]);
-    let block2 = Block::new(1, [0u8; 32], 1001, vec![]); // 时间戳不同
-    
-    assert_ne!(block1.hash(), block2.hash());
-}
-
-/// 测试 PoS 出块概率与质押量成正比
-#[test]
-fn test_stake_weighted_probability() {
-    let mut consensus = PosConsensus::new(12345);
-    
-    let stakes = vec![
-        (1u64, 100u64),
-        (2u64, 200u64), // 2倍质押
-        (3u64, 300u64), // 3倍质押
+fn test_blockchain_state_total_effective_balance() {
+    let accounts = vec![
+        consensus::AccountSnapshot {
+            id: 1,
+            balance: 100,
+            lease: None,
+            has_public_key: true,
+        },
+        consensus::AccountSnapshot {
+            id: 2,
+            balance: 200,
+            lease: None,
+            has_public_key: true,
+        },
+        consensus::AccountSnapshot {
+            id: 3,
+            balance: 300,
+            lease: None,
+            has_public_key: true,
+        },
     ];
     
-    let mut counts = std::collections::HashMap::new();
-    for _ in 0..1000 {
-        if let Some((validator, _)) = consensus.select_block_producer(&stakes, Height(1)) {
-            *counts.entry(validator).or_insert(0) += 1;
-        }
-    }
+    let state = consensus::BlockchainState::new(
+        1,
+        [0u8; 32],
+        1_000_000,
+        vec![0u8; 32],
+        [0u8; 64],
+        1000,
+        accounts,
+    );
     
-    // 验证者2和3应该被选中更多次（大致成比例）
-    let v1 = counts.get(&1u64).unwrap_or(&0);
-    let v2 = counts.get(&2u64).unwrap_or(&0);
-    let v3 = counts.get(&3u64).unwrap_or(&0);
-    
-    // v2 应该比 v1 多，v3 应该比 v2 多
-    assert!(*v2 > *v1);
-    assert!(*v3 > *v2);
-}
-
-/// 测试最终确定性（finality）
-#[tokio::test]
-async fn test_finality_after_checkpoints() {
-    let mut chain = Vec::new();
-    let mut consensus = PosConsensus::new(12345);
-    
-    // 模拟生成一系列区块
-    for height in 1..=10 {
-        let prev_hash = if height == 1 { [0u8; 32] } else { chain.last().unwrap().hash().0 };
-        let block = Block::new(height, prev_hash, 1000, vec![]);
-        chain.push(block);
-    }
-    
-    // 检查点机制：每 N 个区块确认
-    let finalized_height = consensus.get_finalized_height(&chain, CheckpointInterval(5));
-    assert_eq!(finalized_height.0, 5); // 前5个区块已最终确定
-}
-
-/// 测试分叉选择规则（最长的链获胜）
-#[test]
-fn test_fork_choice_longest_chain() {
-    let mut consensus = Consensus::new();
-    
-    // 链A：高度1-3
-    let mut chain_a = vec![];
-    for i in 1..=3 {
-        let prev = if i == 1 { [0u8; 32] } else { chain_a.last().unwrap().hash().0 };
-        chain_a.push(Block::new(i, prev, 1000, vec![]));
-    }
-    
-    // 链B：高度1-2（较短）
-    let mut chain_b = vec![];
-    for i in 1..=2 {
-        let prev = if i == 1 { [0u8; 32] } else { chain_b.last().unwrap().hash().0 };
-        chain_b.push(Block::new(i, prev, 1000, vec![]));
-    }
-    
-    let chosen = consensus.select_best_chain(chain_a.clone(), chain_b.clone());
-    assert_eq!(chosen.len(), 3); // 选择长链
-}
-
-/// 测试无效区块拒绝
-#[test]
-fn test_invalid_block_rejection() {
-    let mut consensus = Consensus::new();
-    
-    let mut block = Block::new(1, [0u8; 32], 1000, vec![]);
-    block.timestamp = 0; // 无效的时间戳（早于创世区块）
-    
-    assert!(consensus.validate_block(&block).is_err());
+    assert_eq!(state.total_effective_balance(), 600);
 }

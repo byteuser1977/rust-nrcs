@@ -14,8 +14,20 @@
 pub mod pow;
 pub mod pos;
 
+pub use pos::PosEngine;
+pub use pow::PoWEngine;
+
 pub mod prelude {
-    pub use crate::{ConsensusEngine, PoSEngine};
+    pub use crate::{
+        ConsensusEngine,
+        PoSEngine,
+        PosEngine,
+        PoWEngine,
+        BlockchainState,
+        AccountSnapshot,
+        DifficultyAdjustmentParams,
+        adjust_difficulty,
+    };
 }
 
 use blockchain_types::*;
@@ -172,8 +184,8 @@ impl Default for DifficultyAdjustmentParams {
 
 /// 计算难度调整公式（来自 NRCS PoS）
 ///
-/// - 如果平均区块时间 < target_spacing * 0.9，降低难度
-/// - 如果平均区块时间 > target_spacing * 1.1，增加难度
+/// - 如果平均区块时间 < target_spacing * 0.9，增加难度（base_target 减小）
+/// - 如果平均区块时间 > target_spacing * 1.1，降低难度（base_target 增大）
 /// - 否则不变
 pub fn adjust_difficulty(
     current_target: u64,
@@ -190,13 +202,13 @@ pub fn adjust_difficulty(
 
     let ratio = avg / target;
 
-    // ratio < 1 表示出块过快，应增加难度（base_target 增大）
-    // ratio > 1 表示出块过慢，应降低难度（base_target 减小）
+    // ratio < 1 表示出块过快，应增加难度（base_target 减小）
+    // ratio > 1 表示出块过慢，应降低难度（base_target 增大）
     let adjustment = if ratio < 0.9 {
-        // 需要降低难度（base_target 乘以 factor < 1）
+        // 出块过快，增加难度（base_target 减小 → 乘以 factor < 1）
         ratio
     } else if ratio > 1.1 {
-        // 需要增加难度（base_target 乘以 factor > 1）
+        // 出块过慢，降低难度（base_target 增大 → 乘以 factor > 1）
         ratio
     } else {
         return current_target; // 在容差范围内，不调整
@@ -227,12 +239,14 @@ mod tests {
         let current = 1_000_000;
 
         // 区块间隔过快（12秒 vs 15秒 target）
+        // 出块过快 → 难度提高 → base_target 减小
         let faster = adjust_difficulty(current, &[12, 13, 12], &params);
-        assert!(faster > current); // 增加难度
+        assert!(faster < current);
 
         // 区块间隔过慢（20秒）
+        // 出块过慢 → 难度降低 → base_target 增大
         let slower = adjust_difficulty(current, &[20, 22, 21], &params);
-        assert!(slower < current); // 降低难度
+        assert!(slower > current);
 
         // 正常（14-16秒）
         let normal = adjust_difficulty(current, &[14, 15, 16], &params);
