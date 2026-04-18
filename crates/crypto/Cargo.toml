@@ -25,9 +25,11 @@ sm4 = "0.6.0-rc.3"
 
 sm4-gcm = "0.1.2"
 
-aes = "0.8"
-aes-gcm = "0.10"
+# AEAD and generic-array support (for SM4-GCM)
+aead = "0.5"
+generic-array = "0.14"
 
 [dev-dependencies]
 criterion = "0.5"
 hex = "0.4"
+rand = "0.8"

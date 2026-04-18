@@ -112,12 +112,12 @@ mod keypair;
 
 // 重新导出算法 trait（方便用户自定义算法）
 pub use algorithms::{
-    HashAlgorithm, SignatureAlgorithm,
+    HashAlgorithm, SignatureAlgorithm, GcmAlgorithm,
 };
 
 // 重新导出具体算法（供选择和测试）
 pub use impls::{
-    Ed25519, Sha256, Sm3,
+    Ed25519, Sha256, Sm3, Sm4Gcm,
 };
 
 // 导出配置类型

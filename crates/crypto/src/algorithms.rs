@@ -53,3 +53,48 @@ pub trait SignatureAlgorithm: Send + Sync + std::fmt::Debug + 'static {
     /// 获取算法名称（用于配置和调试）
     fn name(&self) -> &'static str;
 }
+
+/// 对称加密算法（CBC 模式）
+///
+/// 提供块加密的加密和解密操作
+pub trait CipherAlgorithm: Send + Sync + std::fmt::Debug + 'static {
+    /// 加密（返回 iv || ciphertext）
+    fn encrypt_cbc(&self, key: &[u8], iv: &[u8], plaintext: &[u8]) -> CryptoResult<Vec<u8>>;
+    /// 解密（输入需包含 iv）
+    fn decrypt_cbc(&self, key: &[u8], iv_ciphertext: &[u8]) -> CryptoResult<Vec<u8>>;
+    /// 算法名称
+    fn name(&self) -> &'static str;
+    /// 密钥长度（字节）
+    fn key_len(&self) -> usize;
+}
+
+/// 认证加密算法（GCM 模式）
+///
+/// 提供机密性+完整性的 AEAD 操作
+pub trait GcmAlgorithm: Send + Sync + std::fmt::Debug + 'static {
+    /// 加密（返回 ciphertext, tag）
+    fn encrypt_gcm(
+        &self,
+        key: &[u8],
+        nonce: &[u8],
+        aad: &[u8],
+        plaintext: &[u8],
+    ) -> CryptoResult<(Vec<u8>, Vec<u8>)>;
+    /// 解密（接受独立的 ciphertext 和 tag）
+    fn decrypt_gcm(
+        &self,
+        key: &[u8],
+        nonce: &[u8],
+        aad: &[u8],
+        ciphertext: &[u8],
+        tag: &[u8],
+    ) -> CryptoResult<Vec<u8>>;
+    /// 算法名称
+    fn name(&self) -> &'static str;
+    /// 密钥长度（字节）
+    fn key_len(&self) -> usize;
+    /// nonce/IV 长度（字节）
+    fn nonce_len(&self) -> usize;
+    /// 认证标签长度（字节）
+    fn tag_len(&self) -> usize;
+}

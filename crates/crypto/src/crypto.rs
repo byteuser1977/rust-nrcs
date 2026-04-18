@@ -4,7 +4,7 @@
 //! 外部代码应通过 `Crypto::global()` 获取单例，或使用便捷函数。
 
 use crate::{
-    algorithms::{HashAlgorithm, SignatureAlgorithm},
+    algorithms::{HashAlgorithm, SignatureAlgorithm, GcmAlgorithm},
     config::CryptoConfig,
     impls::{Ed25519, Sha256, Sm3},
     CryptoError, CryptoResult, Hash256, PublicKey, SecretKey, Signature, keypair::KeyPair,
@@ -144,24 +144,29 @@ pub fn decrypt_cbc(_key: &[u8], _iv_ciphertext: &[u8]) -> CryptoResult<Vec<u8>> 
     Err(CryptoError::CipherError("CBC decryption temporarily disabled".into()))
 }
 
-/// GCM 加密（暂时不可用）
+/// GCM 加密（SM4-GCM）
 pub fn encrypt_gcm(
-    _key: &[u8],
-    _nonce: &[u8],
-    _aad: &[u8],
-    _plaintext: &[u8],
+    key: &[u8],
+    nonce: &[u8],
+    aad: &[u8],
+    plaintext: &[u8],
 ) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
-    Err(CryptoError::CipherError("GCM encryption temporarily disabled".into()))
+    use crate::impls::Sm4Gcm;
+    let algo = Sm4Gcm;
+    algo.encrypt_gcm(key, nonce, aad, plaintext)
 }
 
-/// GCM 解密（暂时不可用）
+/// GCM 解密（SM4-GCM）
 pub fn decrypt_gcm(
-    _key: &[u8],
-    _nonce: &[u8],
-    _ciphertext: &[u8],
-    _tag: &[u8],
+    key: &[u8],
+    nonce: &[u8],
+    aad: &[u8],
+    ciphertext: &[u8],
+    tag: &[u8],
 ) -> CryptoResult<Vec<u8>> {
-    Err(CryptoError::CipherError("GCM decryption temporarily disabled".into()))
+    use crate::impls::Sm4Gcm;
+    let algo = Sm4Gcm;
+    algo.decrypt_gcm(key, nonce, aad, ciphertext, tag)
 }
 
 // ============================================================================
