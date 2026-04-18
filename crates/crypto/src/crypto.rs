@@ -6,7 +6,7 @@
 use crate::{
     algorithms::{HashAlgorithm, SignatureAlgorithm, GcmAlgorithm},
     config::CryptoConfig,
-    impls::{Ed25519, Sha256, Sm3},
+    impls::{Ed25519, Sha256, Sm3, Sm4Gcm},
     CryptoError, CryptoResult, Hash256, PublicKey, SecretKey, Signature, keypair::KeyPair,
 };
 use once_cell::sync::OnceCell;
@@ -20,6 +20,7 @@ use std::sync::Arc;
 pub struct Crypto {
     hash: Arc<dyn HashAlgorithm>,
     signer: Arc<dyn SignatureAlgorithm>,
+    cipher: Arc<dyn GcmAlgorithm>,
 }
 
 impl Crypto {
@@ -36,7 +37,12 @@ impl Crypto {
             _ => return Err(CryptoError::ConfigurationError(format!("unknown signature algorithm: {}", config.signature))),
         };
 
-        Ok(Self { hash, signer })
+        let cipher: Arc<dyn GcmAlgorithm> = match config.cipher.as_str() {
+            "sm4-gcm" => Arc::new(Sm4Gcm),
+            _ => return Err(CryptoError::ConfigurationError(format!("unknown cipher algorithm: {}", config.cipher))),
+        };
+
+        Ok(Self { hash, signer, cipher })
     }
 
     /// 获取全局单例（惰性初始化）
@@ -91,6 +97,38 @@ impl Crypto {
     pub fn signature_algorithm_name(&self) -> &'static str {
         self.signer.name()
     }
+
+    /// 获取当前使用的加密算法名
+    pub fn cipher_algorithm_name(&self) -> &'static str {
+        self.cipher.name()
+    }
+
+    // =========================================================================
+    // GCM 加密 API
+    // =========================================================================
+
+    /// GCM 加密（使用配置的加密算法）
+    pub fn encrypt_gcm(
+        &self,
+        key: &[u8],
+        nonce: &[u8],
+        aad: &[u8],
+        plaintext: &[u8],
+    ) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
+        self.cipher.encrypt_gcm(key, nonce, aad, plaintext)
+    }
+
+    /// GCM 解密（使用配置的加密算法）
+    pub fn decrypt_gcm(
+        &self,
+        key: &[u8],
+        nonce: &[u8],
+        aad: &[u8],
+        ciphertext: &[u8],
+        tag: &[u8],
+    ) -> CryptoResult<Vec<u8>> {
+        self.cipher.decrypt_gcm(key, nonce, aad, ciphertext, tag)
+    }
 }
 
 // ============================================================================
@@ -144,19 +182,19 @@ pub fn decrypt_cbc(_key: &[u8], _iv_ciphertext: &[u8]) -> CryptoResult<Vec<u8>> 
     Err(CryptoError::CipherError("CBC decryption temporarily disabled".into()))
 }
 
-/// GCM 加密（SM4-GCM）
+/// GCM 加密（使用配置的加密算法）
 pub fn encrypt_gcm(
     key: &[u8],
     nonce: &[u8],
     aad: &[u8],
     plaintext: &[u8],
 ) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
-    use crate::impls::Sm4Gcm;
-    let algo = Sm4Gcm;
-    algo.encrypt_gcm(key, nonce, aad, plaintext)
+    let cell = Crypto::global();
+    let crypto = cell.get().unwrap();
+    crypto.as_ref().unwrap().encrypt_gcm(key, nonce, aad, plaintext)
 }
 
-/// GCM 解密（SM4-GCM）
+/// GCM 解密（使用配置的加密算法）
 pub fn decrypt_gcm(
     key: &[u8],
     nonce: &[u8],
@@ -164,9 +202,9 @@ pub fn decrypt_gcm(
     ciphertext: &[u8],
     tag: &[u8],
 ) -> CryptoResult<Vec<u8>> {
-    use crate::impls::Sm4Gcm;
-    let algo = Sm4Gcm;
-    algo.decrypt_gcm(key, nonce, aad, ciphertext, tag)
+    let cell = Crypto::global();
+    let crypto = cell.get().unwrap();
+    crypto.as_ref().unwrap().decrypt_gcm(key, nonce, aad, ciphertext, tag)
 }
 
 // ============================================================================

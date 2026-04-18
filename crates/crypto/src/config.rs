@@ -12,6 +12,9 @@ pub struct CryptoConfig {
 
     /// 签名算法: "ed25519" (默认) 或 "sm2"
     pub signature: String,
+
+    /// 加密算法: "sm4-gcm" (默认)，未来支持 "aes-gcm"
+    pub cipher: String,
 }
 
 impl Default for CryptoConfig {
@@ -19,6 +22,7 @@ impl Default for CryptoConfig {
         Self {
             hash: "sha256".to_string(),
             signature: "ed25519".to_string(),
+            cipher: "sm4-gcm".to_string(),
         }
     }
 }
