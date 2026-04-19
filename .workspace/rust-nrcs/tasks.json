@@ -1,0 +1,14 @@
+{
+  "tasks": [
+    {
+      "id": "TASK-P2P-002",
+      "status": "done",
+      "artifacts": [
+        "crates/p2p/src/handlers/get_peers.rs",
+        "crates/p2p/src/handlers/add_peers.rs",
+        "crates/p2p/src/peer.rs"
+      ],
+      "notes": "Implemented GetPeers with pagination and size limit (max 1000). Implemented AddPeers with validation, deduplication, capacity enforcement (max 2000), and detailed statistics. Added helper methods to Peers. Added unit tests."
+    }
+  ]
+}

@@ -265,6 +265,17 @@ impl Peers {
         blacklist.insert(addr);
         warn!("Peer blacklisted: {}", addr);
     }
+
+    /// Check if a peer address is already known
+    pub async fn contains_peer(&self, addr: &SocketAddr) -> bool {
+        let known = self.known_peers.read().await;
+        known.contains_key(addr)
+    }
+
+    /// Get count of known peers
+    pub async fn known_peers_count(&self) -> usize {
+        self.known_peers.read().await.len()
+    }
 }
 
 fn current_timestamp() -> i64 {
