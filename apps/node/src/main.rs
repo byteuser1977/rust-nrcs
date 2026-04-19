@@ -22,7 +22,20 @@ use p2p::{
     Handler,
 };
 
+use blockchain_types::prelude::*;
+
 use config::{Config, File, Environment};
+use async_trait::async_trait;
+
+/// 简单的 DummyBlockVerifier
+struct DummyBlockVerifier;
+
+#[async_trait]
+impl p2p::handlers::BlockVerifier for DummyBlockVerifier {
+    async fn verify_and_process(&self, _block: Block) -> Result<()> {
+        Ok(())
+    }
+}
 
 /// 节点配置结构（与 TOML 映射）
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -136,7 +149,8 @@ async fn main() -> Result<()> {
 
     // 初始化 P2P 管理器
     let peers = Arc::new(Peers::new(my_peer.clone()));
-    let handler = Arc::new(Handler::new(Arc::clone(&peers)));
+    let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(DummyBlockVerifier);
+    let handler = Arc::new(Handler::new(Arc::clone(&peers), Arc::clone(&block_verifier)));
 
     // 启动出站连接任务（连接 bootstrap 节点）
     if !cfg.p2p.bootstrap_nodes.is_empty() {

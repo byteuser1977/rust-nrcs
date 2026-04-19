@@ -51,7 +51,8 @@ impl PoWEngine {
 
         let mut hasher2 = Sha256::new();
         hasher2.update(first);
-        hasher2.finalize().try_into().unwrap()
+        let hash_arr: [u8; 32] = hasher2.finalize().into();
+        Hash256(hash_arr)
     }
 }
 
@@ -113,8 +114,8 @@ impl ConsensusEngine for PoWEngine {
         buf.extend_from_slice(&block.version.to_be_bytes());
         buf.extend_from_slice(&block.timestamp.to_be_bytes());
         buf.extend_from_slice(&block.height.to_be_bytes());
-        buf.extend_from_slice(&block.previous_block_hash);
-        buf.extend_from_slice(&block.payload_hash);
+        buf.extend_from_slice(&block.previous_block_hash.0);
+        buf.extend_from_slice(&block.payload_hash.0);
         buf.extend_from_slice(&block.generator_id.to_be_bytes());
         buf.extend_from_slice(&block.nonce.to_be_bytes());
         buf.extend_from_slice(&block.base_target.to_be_bytes());
@@ -123,7 +124,7 @@ impl ConsensusEngine for PoWEngine {
         buf.extend_from_slice(&block.total_amount.to_be_bytes());
         buf.extend_from_slice(&block.total_fee.to_be_bytes());
         buf.extend_from_slice(&block.payload_length.to_be_bytes());
-        buf.extend_from_slice(&block.generation_signature);
+        buf.extend_from_slice(&block.generation_signature.0);
         buf
     }
 }

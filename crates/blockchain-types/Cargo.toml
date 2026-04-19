@@ -15,6 +15,7 @@ hex = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 fxd = { version = "0.1", optional = true } # Decimal type, optional
 sha2 = "0.10"
+serde-big-array = "0.5"
 
 # 密码学依赖（用于签名验证）
 ed25519-dalek = "1.0"

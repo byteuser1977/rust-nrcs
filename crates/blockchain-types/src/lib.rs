@@ -18,7 +18,8 @@
 //! - 时间戳使用 `u32`（Unix 秒），与 Java 原版兼容
 //! - 所有字段均使用驼峰命名（snake_case），Rust 惯例
 
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
+use std::ops::{Deref, DerefMut};
 
 pub mod block;
 pub mod transaction;
@@ -56,6 +57,9 @@ pub enum BlockchainError {
     #[error("invalid transaction: {0}")]
     InvalidTransaction(String),
 
+    #[error("invalid signature: {0}")]
+    InvalidSignature(String),
+
     #[error("insufficient balance: have {have}, need {need}")]
     InsufficientBalance { have: u64, need: u64 },
 
@@ -69,15 +73,116 @@ pub enum BlockchainError {
 pub type Result<T> = std::result::Result<T, BlockchainError>;
 
 /// 固定大小的 SHA-256 哈希（32 字节）
-pub type Hash256 = [u8; 32];
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hash256(#[serde(with = "serde_big_array::BigArray")] pub [u8; 32]);
+
+impl std::hash::Hash for Hash256 {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl AsRef<[u8]> for Hash256 {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// 固定大小的 SHA-512 哈希（64 字节）
-pub type Hash512 = [u8; 64];
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hash512(#[serde(with = "serde_big_array::BigArray")] pub [u8; 64]);
+
+impl std::hash::Hash for Hash512 {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl AsRef<[u8]> for Hash512 {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// 签名类型（Ed25519 和 SM2 均为 64 字节）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Signature(#[serde(with = "serde_big_array::BigArray")] pub [u8; 64]);
+
+impl std::hash::Hash for Signature {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl AsRef<[u8]> for Signature {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Deref for Hash256 {
+    type Target = [u8; 32];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Hash256 {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl From<[u8; 32]> for Hash256 {
+    fn from(arr: [u8; 32]) -> Self {
+        Self(arr)
+    }
+}
+
+impl Deref for Hash512 {
+    type Target = [u8; 64];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Hash512 {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl From<[u8; 64]> for Hash512 {
+    fn from(arr: [u8; 64]) -> Self {
+        Self(arr)
+    }
+}
+
+impl Deref for Signature {
+    type Target = [u8; 64];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Signature {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl From<[u8; 64]> for Signature {
+    fn from(arr: [u8; 64]) -> Self {
+        Self(arr)
+    }
+}
 
 /// 公钥类型（目前仅支持 Ed25519 32 字节）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum PublicKey {
     /// Ed25519 公钥（32 字节）
+    #[serde(with = "serde_big_array::BigArray")]
     Ed25519([u8; 32]),
 }
 
@@ -104,10 +209,11 @@ impl PublicKey {
 }
 
 /// 私钥类型（目前仅支持 Ed25519 64 字节）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum SecretKey {
     /// Ed25519 私钥（64 字节，包含 seed+public）
+    #[serde(with = "serde_big_array::BigArray")]
     Ed25519([u8; 64]),
 }
 
@@ -128,8 +234,7 @@ impl SecretKey {
 
 }
 
-/// 签名类型（Ed25519 和 SM2 均为 64 字节）
-pub type Signature = [u8; 64];
+
 
 /// 时间戳（Unix 时间戳，秒）
 pub type Timestamp = u32;
@@ -158,7 +263,7 @@ pub type AliasId = u64;
 pub type AliasOfferId = u64;
 
 /// 交易类型枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum TransactionType {
     /// 常规支付（0）
@@ -210,7 +315,7 @@ impl From<TransactionType> for u8 {
 }
 
 /// 交易收据（Transaction Receipt）
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TxReceipt {
     /// 交易 ID
     pub transaction_id: TransactionId,

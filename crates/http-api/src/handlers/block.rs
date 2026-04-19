@@ -123,5 +123,5 @@ pub async fn list_blocks(
 fn compute_block_hash(block: &Block) -> Hash256 {
     // 应该使用 Block::compute_hash()
     // 这里由于 Block 结构体已有方法，直接调用
-    block.compute_hash().unwrap_or([0u8; 32])
+    block.compute_hash().unwrap_or(Hash256([0u8; 32]))
 }

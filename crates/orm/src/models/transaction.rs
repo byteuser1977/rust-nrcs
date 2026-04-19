@@ -54,8 +54,8 @@ impl TransactionModel {
             fee: self.fee as Amount,
             height: self.height as Height,
             block_id: self.block_id as BlockId,
-            signature: self.signature.as_slice().try_into().unwrap_or([0u8; 64]),
-            full_hash: self.full_hash.as_slice().try_into().map_err(|_| {
+            signature: self.signature.as_slice().try_into().map(Signature).unwrap_or(Signature([0u8; 64])),
+            full_hash: self.full_hash.as_slice().try_into().map(Hash256).map_err(|_| {
                 BlockchainError::InvalidHash("full_hash length mismatch".to_string())
             })?,
             attachment_bytes: self.attachment_bytes.clone().unwrap_or_default(),
@@ -80,10 +80,10 @@ impl TransactionModel {
             recipient_id: tx.recipient_id.map(|id| id as i64),
             amount: tx.amount as i64,
             fee: tx.fee as i64,
-            full_hash: tx.full_hash.to_vec(),
+            full_hash: tx.full_hash.0.to_vec(),
             height: tx.height as i32,
             block_id: tx.block_id as i64,
-            signature: tx.signature.to_vec(),
+            signature: tx.signature.0.to_vec(),
             timestamp: tx.timestamp as i32,
             r#type: u8::from(tx.type_id) as i16,
             subtype: tx.subtype as i16,

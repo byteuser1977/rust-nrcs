@@ -36,10 +36,10 @@ impl BlockModel {
             previous_block_hash: self
                 .previous_block_hash
                 .as_ref()
-                .map(|h| h.as_slice().try_into().ok())
-                .flatten()
-                .unwrap_or([0u8; 32]),
-            payload_hash: self.payload_hash.as_slice().try_into().map_err(|_| {
+                .and_then(|h| h.as_slice().try_into().ok())
+                .map(Hash256)
+                .unwrap_or(Hash256([0u8; 32])),
+            payload_hash: self.payload_hash.as_slice().try_into().map(Hash256).map_err(|_| {
                 BlockchainError::InvalidHash("payload_hash length mismatch".to_string())
             })?,
             generator_id: self.generator_id as AccountId,
@@ -53,12 +53,14 @@ impl BlockModel {
                 .generation_signature
                 .as_slice()
                 .try_into()
-                .unwrap_or([0u8; 64]),
+                .map(Hash512)
+                .unwrap_or(Hash512([0u8; 64])),
             block_signature: self
                 .block_signature
                 .as_slice()
                 .try_into()
-                .unwrap_or([0u8; 64]),
+                .map(Hash512)
+                .unwrap_or(Hash512([0u8; 64])),
             transactions: vec![],
         };
         Ok(block)
@@ -74,14 +76,14 @@ impl BlockModel {
             total_amount: block.total_amount as i64,
             total_fee: block.total_fee as i64,
             payload_length: block.payload_length as i32,
-            previous_block_hash: Some(block.previous_block_hash.to_vec()),
+            previous_block_hash: Some(block.previous_block_hash.0.to_vec()),
             cumulative_difficulty: block.cumulative_difficulty.clone(),
             base_target: block.base_target as i64,
             next_block_id: None,
             height: block.height as i32,
-            generation_signature: block.generation_signature.to_vec(),
-            block_signature: block.block_signature.to_vec(),
-            payload_hash: block.payload_hash.to_vec(),
+            generation_signature: block.generation_signature.0.to_vec(),
+            block_signature: block.block_signature.0.to_vec(),
+            payload_hash: block.payload_hash.0.to_vec(),
             generator_id: block.generator_id as i64,
         })
     }

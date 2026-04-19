@@ -68,7 +68,7 @@ impl Block {
             timestamp: 0, // 需填充
             height,
             previous_block_hash,
-            payload_hash: [0u8; 32],
+            payload_hash: Hash256([0u8; 32]),
             generator_id,
             nonce: 0,
             base_target: 1_000_000, // 默认值
@@ -76,8 +76,8 @@ impl Block {
             total_amount: 0,
             total_fee: 0,
             payload_length: 0,
-            generation_signature: [0u8; 64],
-            block_signature: [0u8; 64],
+            generation_signature: Hash512([0u8; 64]),
+            block_signature: Hash512([0u8; 64]),
             transactions: vec![],
         }
     }
@@ -92,7 +92,8 @@ impl Block {
         let mut hasher = Sha256::new();
         hasher.update(data);
         let hash = hasher.finalize();
-        Ok(hash.try_into().map_err(|_| BlockchainError::InvalidHash("length mismatch".to_string()))?)
+        let hash_arr: [u8; 32] = hash.try_into().map_err(|_| BlockchainError::InvalidHash("length mismatch".to_string()))?;
+        Ok(Hash256(hash_arr))
     }
 
     /// 验证区块签名
@@ -104,12 +105,12 @@ impl Block {
             PublicKey::Ed25519(bytes) => bytes,
         };
         let pk = ed25519_dalek::PublicKey::from_bytes(pk_bytes)
-            .map_err(|_| BlockchainError::InvalidSignature)?;
+            .map_err(|_| BlockchainError::InvalidSignature("invalid public key".to_string()))?;
         // 转换签名
-        let sig = EdSignature::from_bytes(&self.block_signature)
-            .map_err(|_| BlockchainError::InvalidSignature)?;
+        let sig = EdSignature::from_bytes(&self.block_signature.0)
+            .map_err(|_| BlockchainError::InvalidSignature("invalid signature".to_string()))?;
         // 验证
-        pk.verify(&data, &sig).map_err(|_| BlockchainError::InvalidSignature)?;
+        pk.verify(&data, &sig).map_err(|_| BlockchainError::InvalidSignature("signature verification failed".to_string()))?;
         Ok(())
     }
 
@@ -119,8 +120,8 @@ impl Block {
         buf.extend_from_slice(&self.version.to_be_bytes());
         buf.extend_from_slice(&self.timestamp.to_be_bytes());
         buf.extend_from_slice(&self.height.to_be_bytes());
-        buf.extend_from_slice(&self.previous_block_hash);
-        buf.extend_from_slice(&self.payload_hash);
+        buf.extend_from_slice(&self.previous_block_hash.0);
+        buf.extend_from_slice(&self.payload_hash.0);
         buf.extend_from_slice(&self.generator_id.to_be_bytes());
         buf.extend_from_slice(&self.nonce.to_be_bytes());
         buf.extend_from_slice(&self.base_target.to_be_bytes());
@@ -130,7 +131,7 @@ impl Block {
         buf.extend_from_slice(&self.total_amount.to_be_bytes());
         buf.extend_from_slice(&self.total_fee.to_be_bytes());
         buf.extend_from_slice(&self.payload_length.to_be_bytes());
-        buf.extend_from_slice(&self.generation_signature);
+        buf.extend_from_slice(&self.generation_signature.0);
         // block_signature 不包含在 hash 中（签名部分单独计算）
         buf
     }
@@ -145,7 +146,7 @@ impl Block {
     /// 计算 Merkle Root（从交易列表）
     pub fn compute_merkle_root(transactions: &[Transaction]) -> Result<Hash256> {
         if transactions.is_empty() {
-            return Ok([0u8; 32]); // 创世区块或空区块
+            return Ok(Hash256([0u8; 32])); // 创世区块或空区块
         }
 
         let mut hashes: Vec<Hash256> = transactions
@@ -157,18 +158,19 @@ impl Block {
             let mut next = Vec::with_capacity((hashes.len() + 1) / 2);
             for chunk in hashes.chunks(2) {
                 let mut combined = Vec::with_capacity(64);
-                combined.extend_from_slice(&chunk[0]);
+                combined.extend_from_slice(&chunk[0].0);
                 if chunk.len() == 2 {
-                    combined.extend_from_slice(&chunk[1]);
+                    combined.extend_from_slice(&chunk[1].0);
                 } else {
                     // 奇数个元素，重复最后一个
-                    combined.extend_from_slice(&chunk[0]);
+                    combined.extend_from_slice(&chunk[0].0);
                 }
                 use sha2::{Digest, Sha256};
                 let mut hasher = Sha256::new();
                 hasher.update(combined);
                 let hash = hasher.finalize();
-                next.push(hash.try_into().unwrap());
+                let hash_arr: [u8; 32] = hash.try_into().unwrap();
+                next.push(Hash256(hash_arr));
             }
             hashes = next;
         }
@@ -251,7 +253,7 @@ mod tests {
 
     #[test]
     fn test_block_creation() {
-        let mut block = Block::new(1, [0u8; 32], 1234567890);
+        let mut block = Block::new(1, Hash256([0u8; 32]), 1234567890);
         block.timestamp = 1_704_000_000;
         block.total_amount = 1_000_000_000;
         assert_eq!(block.height, 1);
@@ -280,6 +282,6 @@ mod tests {
         );
 
         let root = Block::compute_merkle_root(&[tx1, tx2]).unwrap();
-        assert_ne!(root, [0u8; 32]); // non-zero
+        assert_ne!(*root, [0u8; 32]); // non-zero
     }
 }

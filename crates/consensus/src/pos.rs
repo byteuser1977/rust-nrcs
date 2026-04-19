@@ -61,7 +61,7 @@ impl PosEngine {
 
         // 2. 从上一区块的 generation_signature 和当前时间生成随机数
         // 算法示例：rand = (gen_sig + timestamp) % total_effective
-        let mut rand_input = Vec::from(&state.last_generation_signature[..]);
+        let mut rand_input = Vec::from(&state.last_generation_signature.0[..]);
         rand_input.extend_from_slice(&timestamp.to_be_bytes());
 
         // 简化：使用 SHA-256 生成随机数
@@ -118,8 +118,8 @@ impl ConsensusEngine for PosEngine {
         buf.extend_from_slice(&block.version.to_be_bytes());
         buf.extend_from_slice(&block.timestamp.to_be_bytes());
         buf.extend_from_slice(&block.height.to_be_bytes());
-        buf.extend_from_slice(&block.previous_block_hash);
-        buf.extend_from_slice(&block.payload_hash);
+        buf.extend_from_slice(&block.previous_block_hash.0);
+        buf.extend_from_slice(&block.payload_hash.0);
         buf.extend_from_slice(&block.generator_id.to_be_bytes());
         buf.extend_from_slice(&block.nonce.to_be_bytes());
         buf.extend_from_slice(&block.base_target.to_be_bytes());
@@ -128,7 +128,7 @@ impl ConsensusEngine for PosEngine {
         buf.extend_from_slice(&block.total_amount.to_be_bytes());
         buf.extend_from_slice(&block.total_fee.to_be_bytes());
         buf.extend_from_slice(&block.payload_length.to_be_bytes());
-        buf.extend_from_slice(&block.generation_signature);
+        buf.extend_from_slice(&block.generation_signature.0);
         buf
     }
 }
@@ -158,10 +158,10 @@ impl crate::PoSEngine for PosEngine {
     fn generate_signature(&self, account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512 {
         // 生成签名使用私有密钥（应调用者提供）
         // 这里仅返回占位符
-        let mut gen_sig = *prev_gen_sig;
+        let mut gen_sig = prev_gen_sig.0;
         // 翻转让签名不重复
         gen_sig.reverse();
-        gen_sig
+        Hash512(gen_sig)
     }
 }
 
@@ -169,10 +169,10 @@ impl PosEngine {
     pub(crate) fn generate_signature(&self, account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512 {
         // 生成签名使用私有密钥（应调用者提供）
         // 这里仅返回占位符
-        let mut gen_sig = *prev_gen_sig;
+        let mut gen_sig = prev_gen_sig.0;
         // 翻转让签名不重复
         gen_sig.reverse();
-        gen_sig
+        Hash512(gen_sig)
     }
 }
 

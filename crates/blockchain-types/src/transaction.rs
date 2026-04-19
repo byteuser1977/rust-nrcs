@@ -86,8 +86,8 @@ impl Default for Transaction {
             fee: 0,
             height: 0,
             block_id: 0,
-            signature: [0u8; 64],
-            full_hash: [0u8; 32],
+            signature: Signature([0u8; 64]),
+            full_hash: Hash256([0u8; 32]),
             attachment_bytes: vec![],
             phased: false,
             has_message: false,
@@ -126,8 +126,8 @@ impl Transaction {
             fee,
             height: 0,
             block_id: 0,
-            signature: [0u8; 64],
-            full_hash: [0u8; 32], // placeholder
+            signature: Signature([0u8; 64]),
+            full_hash: Hash256([0u8; 32]), // placeholder
             attachment_bytes: vec![],
             phased: false,
             has_message: false,
@@ -166,7 +166,8 @@ impl Transaction {
         hasher.update(&self.attachment_bytes);
 
         let hash = hasher.finalize();
-        Ok(hash.try_into().unwrap())
+        let hash_arr: [u8; 32] = hash.try_into().map_err(|_| BlockchainError::InvalidHash("hash conversion failed".to_string()))?;
+        Ok(Hash256(hash_arr))
     }
 
     /// 验证交易基本字段
@@ -227,7 +228,7 @@ impl Transaction {
             recipient_id: Option<AccountId>,
             amount: Amount,
             fee: Amount,
-            full_hash: Hash256,
+            full_hash: &'a Hash256,
             attachment_bytes: &'a [u8],
             phased: bool,
             has_message: bool,
@@ -242,7 +243,7 @@ impl Transaction {
             recipient_id: self.recipient_id,
             amount: self.amount,
             fee: self.fee,
-            full_hash: self.full_hash,
+            full_hash: &self.full_hash,
             attachment_bytes: &self.attachment_bytes,
             phased: self.phased,
             has_message: self.has_message,
@@ -318,7 +319,7 @@ mod tests {
             1234567890,
             Some(9876543210),
             1_000_000_000, // 10 NRC
-            100_000,       // 0.001 NRC fee
+            100_000, // 0.001 NRC fee
             1_704_000_000,
             32767,
         );
@@ -341,10 +342,10 @@ mod tests {
             32767,
         );
         let hash = tx.compute_hash().unwrap();
-        assert_ne!(hash, [0u8; 32]);
-        assert_eq!(tx.full_hash, [0u8; 32]); // 还未设置
+        assert_ne!(*hash, [0u8; 32]);
+        assert_eq!(*tx.full_hash, [0u8; 32]); // 还未设置
 
         tx.full_hash = hash;
-        assert_ne!(tx.full_hash, [0u8; 32]);
+        assert_ne!(*tx.full_hash, [0u8; 32]);
     }
 }
