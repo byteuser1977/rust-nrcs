@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::transaction::Transaction;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use std::ops::{Deref, DerefMut};
 use chrono::Utc;
 
@@ -15,7 +15,7 @@ use ed25519_dalek::{Verifier, Signature as EdSignature};
 /// 区块头部信息用于共识验证、链式连接等。
 ///
 /// 参考 Java: `BaseBlock`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Block {
     /// 区块版本
     pub version: u32,
@@ -49,14 +49,10 @@ pub struct Block {
     pub payload_length: u32,
     /// 生成签名
     /// PoS 中出块者使用私钥生成，用于下一个出块者选择
-    #[serde(skip)]
     pub generation_signature: Hash512,
     /// 区块签名（出块者对区块头签名）
-    #[serde(skip)]
     pub block_signature: Hash512,
-    /// 交易列表（内存中，未序列化到 P2P 消息体时）
-    /// JSON 序列化/反序列化时忽略，避免性能问题
-    #[serde(skip)]
+    /// 交易列表
     pub transactions: Vec<Transaction>,
 }
 
@@ -100,8 +96,20 @@ impl Block {
     }
 
     /// 验证区块签名
-    /// 验证区块签名 (simplified)
-    pub fn verify_signature(&self, _public_key: &PublicKey) -> Result<()> {
+    pub fn verify_signature(&self, public_key: &PublicKey) -> Result<()> {
+        // 序列化区块头（用于签名）
+        let data = self.serialize_header_for_signing();
+        // 提取公钥
+        let pk_bytes = match public_key {
+            PublicKey::Ed25519(bytes) => bytes,
+        };
+        let pk = ed25519_dalek::PublicKey::from_bytes(pk_bytes)
+            .map_err(|_| BlockchainError::InvalidSignature)?;
+        // 转换签名
+        let sig = EdSignature::from_bytes(&self.block_signature)
+            .map_err(|_| BlockchainError::InvalidSignature)?;
+        // 验证
+        pk.verify(&data, &sig).map_err(|_| BlockchainError::InvalidSignature)?;
         Ok(())
     }
 

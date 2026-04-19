@@ -2,6 +2,9 @@ use crate::{peer::Peers, protocol::PeerRequest};
 use serde_json;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
+use super::BlockVerifier;
+use blockchain_types::prelude::*;
+use anyhow::anyhow; // for error handling
 
 /// ProcessBlock 处理器
 /// 请求：完整的区块 JSON（同 Block.getJSONObject() 结构）
@@ -9,48 +12,46 @@ use tracing::{debug, info, warn};
 /// 响应：空 JSON {}
 pub struct ProcessBlockHandler {
     peers: Arc<Peers>,
+    verifier: Arc<dyn BlockVerifier>,
 }
 
 impl ProcessBlockHandler {
-    pub fn new(peers: Arc<Peers>) -> Self {
-        Self { peers }
+    pub fn new(peers: Arc<Peers>, verifier: Arc<dyn BlockVerifier>) -> Self {
+        Self { peers, verifier }
     }
 
     pub async fn handle(&self, request: PeerRequest, peers: Arc<Peers>) -> serde_json::Value {
         debug!("Handling ProcessBlock request");
 
-        // 提取区块数据
-        // Java 通常发送一个包含 "block" 字段的对象，或者在顶层
         let block_json = match request.get::<serde_json::Value>("block") {
             Some(block) => block,
             None => {
-                // 尝试从请求的 extra 字段直接获取（未包装）
-                warn!("ProcessBlock request missing 'block' field, checking top-level");
-                // 这里需要更深入的 JSON 检查，暂时返回错误
+                warn!("ProcessBlock request missing 'block' field");
                 return serde_json::json!({ "error": "MISSING_BLOCK" });
             }
         };
 
-        // TODO: 区块验证逻辑
-        // 1. 验证签名
-        // 2. 验证难度目标
-        // 3. 验证时间戳
-        // 4. 验证前一区块哈希链
+        // Deserialize the block JSON into a Block struct
+        let block: Block = match serde_json::from_value(block_json.clone()) {
+            Ok(b) => b,
+            Err(e) => {
+                warn!("Failed to deserialize block: {}", e);
+                return serde_json::json!({ "error": "INVALID_BLOCK_JSON", "details": e.to_string() });
+            }
+        };
 
-        debug!("Received block: timestamp={:?}", block_json.get("timestamp"));
+        debug!("Received block: height={}, generator={}", block.height, block.generator_id);
 
-        // TODO: 异步提交到 blockchain_processor.process_peer_block()
-        // 需要使用 tokio::spawn 避免阻塞 P2P 处理线程
-        let block_clone = block_json.clone();
-        let peers_clone = Arc::clone(&peers);
-        tokio::spawn(async move {
-            info!("Async processing block from peer");
-            // TODO: 实际处理逻辑
-            // blockchain_processor.process_peer_block(block_clone).await;
-            warn!("Block processing not implemented");
-        });
-
-        // 立即返回成功（与 Java 行为一致）
-        serde_json::json!({})
+        // Verify and process the block using the injected verifier
+        match self.verifier.verify_and_process(block).await {
+            Ok(_) => {
+                info!("Block verified and processed successfully");
+                serde_json::json!({})
+            }
+            Err(e) => {
+                warn!("Block verification/processing failed: {}", e);
+                serde_json::json!({ "error": "BLOCK_REJECTED", "reason": e.to_string() })
+            }
+        }
     }
 }

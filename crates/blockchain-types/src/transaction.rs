@@ -1,7 +1,7 @@
 //! 交易数据结构定义
 
 use super::*;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use chrono::Utc;
 
 // 密码学依赖
@@ -12,7 +12,7 @@ use ed25519_dalek::{Verifier, Signature as EdSignature};
 /// 交易是区块链中的基本操作单元，代表账户间的价值转移或合约调用。
 ///
 /// 参考 Java: `BaseTransaction`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Transaction {
     /// 交易版本
     pub version: u8,
@@ -41,7 +41,6 @@ pub struct Transaction {
     /// 0 表示未打包
     pub block_id: BlockId,
     /// 交易签名（发送者对交易内容签名）
-    #[serde(skip)]
     pub signature: Signature,
     /// 交易完整哈希（所有字段序列化 SHA-256）
     pub full_hash: Hash256,

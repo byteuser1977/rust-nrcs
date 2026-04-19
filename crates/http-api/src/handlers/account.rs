@@ -34,10 +34,16 @@ pub struct TransferRequest {
 /// 获取账户信息（根据地址或ID）
 pub async fn get_account(
     State(state): State<crate::state::ApiState>,
-    Path(account_id): Path<u64>,
+    Path(identifier): Path<String>,
 ) -> ApiResult<Json<AccountResponse>> {
-    let account = state.account_manager.get_account_info(account_id).await?;
-    Ok(Json(account.into()))
+    // 尝试作为 account_id 解析
+    if let Ok(account_id) = identifier.parse::<u64>() {
+        let account = state.account_manager.get_account_info(account_id).await?;
+        return Ok(Json(account.into()));
+    }
+    // 否则作为地址查询（实际需要实现地址到 ID 的映射）
+    // TODO: 地址查询暂未实现，返回错误
+    Err(crate::error::ApiError::NotFound(format!("account with address '{}' not found (address lookup not implemented)", identifier)))
 }
 
 /// 创建新账户
@@ -81,4 +87,14 @@ pub async fn get_balance(
         "account_id": account_id,
         "balance": balance,
     })))
+}
+
+/// 列出账户（支持分页）
+pub async fn list_accounts(
+    State(state): State<crate::ApiState>,
+    Query(query): Query<AccountQuery>,
+) -> ApiResult<Json<Vec<AccountResponse>>> {
+    // TODO: 实现分页查询（当前 AccountManager 无 list 方法）
+    // 暂时返回空列表，后续将使用 repository 直接查询
+    Ok(Json(vec![]))
 }

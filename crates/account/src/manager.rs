@@ -13,7 +13,8 @@ use thiserror::Error;
 
 use blockchain_types::*;
 use blockchain_types::prelude::Account;
-use orm::{AccountRepository, AccountAssetRepository, RepositoryError};
+use blockchain_types::account_ext::AccountPublicKey;
+use orm::{AccountRepository, AccountAssetRepository, PublicKeyRepository, RepositoryError};
 use crypto::KeyPair;
 use crate::AccountAsset;
 
@@ -101,6 +102,9 @@ pub trait AccountManager: Send + Sync {
 
     /// 回收资产（仅 admin）
     async fn burn_asset(&self, asset_id: AssetId, from: AccountId, amount: Amount) -> AccountResult<()>;
+
+    /// 获取账户公钥（用于签名验证）
+    async fn get_public_key(&self, account_id: AccountId) -> AccountResult<Option<PublicKey>>;
 }
 
 /// Database-backed AccountManager implementation
@@ -108,6 +112,7 @@ pub struct DatabaseAccountManager {
     store: Arc<dyn AccountStore>,
     account_repo: Arc<dyn AccountRepository>,
     account_asset_repo: Arc<dyn AccountAssetRepository>,
+    public_key_repo: Arc<dyn PublicKeyRepository>,
     config: AccountConfig,
 }
 
@@ -116,12 +121,14 @@ impl DatabaseAccountManager {
         store: Arc<dyn AccountStore>,
         account_repo: Arc<dyn AccountRepository>,
         account_asset_repo: Arc<dyn AccountAssetRepository>,
+        public_key_repo: Arc<dyn PublicKeyRepository>,
         config: AccountConfig,
     ) -> Self {
         Self {
             store,
             account_repo,
             account_asset_repo,
+            public_key_repo,
             config,
         }
     }
@@ -295,5 +302,13 @@ impl AccountManager for DatabaseAccountManager {
         // 减少资产持仓
         self.account_asset_repo.decrease_quantity(from as i64, asset_id as i64, amount as i64).await?;
         Ok(())
+    }
+
+    async fn get_public_key(&self, account_id: AccountId) -> AccountResult<Option<PublicKey>> {
+        let pk_opt = self.public_key_repo
+            .find_latest_by_account_id(account_id as i64)
+            .await
+            .map_err(AccountError::Repository)?;
+        Ok(pk_opt.map(|pk| PublicKey::Ed25519(pk.public_key)))
     }
 }

@@ -14,8 +14,9 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/health", get(system::health_check))
         // 账户相关
         .route("/api/v1/accounts", post(account::create_account))
-        .route("/api/v1/accounts/:address", get(account::get_account))
+        .route("/api/v1/accounts/:id", get(account::get_account))
         .route("/api/v1/accounts/:id/balance", get(account::get_balance))
+        .route("/api/v1/accounts", get(account::list_accounts))
         .route("/api/v1/accounts/transfer", post(account::transfer))
         // 交易相关
         .route("/api/v1/transactions", post(transaction::submit_transaction))

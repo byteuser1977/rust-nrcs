@@ -27,6 +27,15 @@ pub use unknown::UnknownHandler;
 use crate::{peer::Peers, protocol::PeerRequest};
 use std::sync::Arc;
 use tracing::warn;
+use anyhow::Result;
+use async_trait::async_trait;
+use blockchain_types::prelude::*;
+
+/// Trait for verifying and processing blocks from peers.
+#[async_trait]
+pub trait BlockVerifier: Send + Sync {
+    async fn verify_and_process(&self, block: Block) -> Result<()>;
+}
 
 /// 请求处理器聚合（类似 Java 的 peerRequestHandlers map）
 pub struct Handler {
@@ -45,7 +54,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(peers: Arc<Peers>) -> Self {
+    pub fn new(peers: Arc<Peers>, block_verifier: Arc<dyn BlockVerifier>) -> Self {
         Self {
             get_info: Arc::new(GetInfoHandler::new(Arc::clone(&peers))),
             get_peers: Arc::new(GetPeersHandler::new(Arc::clone(&peers))),
@@ -56,7 +65,7 @@ impl Handler {
             get_next_blocks: Arc::new(GetNextBlocksHandler::new(Arc::clone(&peers))),
             get_transactions: Arc::new(GetTransactionsHandler {}),
             get_unconfirmed_transactions: Arc::new(GetTransactionsHandler {}),
-            process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers))),
+            process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier)),
             process_transactions: Arc::new(ProcessTransactionsHandler::new(Arc::clone(&peers))),
             bundler_rate: Arc::new(BundlerRateHandler {}),
         }
