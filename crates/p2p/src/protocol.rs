@@ -151,8 +151,6 @@ impl PeerResponse {
 pub struct FrameCodec;
 
 impl FrameCodec {
-    const MAGIC: [u8; 4] = [0x50, 0x32, 0x50, 0x00]; // "P2P\0"
-
     pub fn encode(&self, payload: &[u8], compressed: bool) -> Vec<u8> {
         let mut flags: i32 = 0;
         let body = if compressed {
@@ -165,8 +163,7 @@ impl FrameCodec {
         let length = body.len() as i32;
         let mut buf = Vec::new();
 
-        // Magic + Version(4) + RequestID(8) + Flags(4) + Length(4) + Body
-        buf.extend(&Self::MAGIC);
+        // Version(4) + RequestID(8) + Flags(4) + Length(4) + Body
         buf.extend(&1i32.to_be_bytes()); // version = 1
         buf.extend(&0i64.to_be_bytes()); // request_id (占位)
         buf.extend(&flags.to_be_bytes());
@@ -181,19 +178,15 @@ impl FrameCodec {
             return Err(ProtocolError::InvalidFrame("Frame too short".into()));
         }
 
-        if &data[0..4] != &Self::MAGIC {
-            return Err(ProtocolError::InvalidFrame("Invalid magic bytes".into()));
-        }
-
-        let version = i32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+        let version = i32::from_be_bytes([data[0], data[1], data[2], data[3]]);
         let request_id = i64::from_be_bytes([
+            data[4], data[5], data[6], data[7],
             data[8], data[9], data[10], data[11],
-            data[12], data[13], data[14], data[15],
         ]);
-        let flags = i32::from_be_bytes([data[16], data[17], data[18], data[19]]);
-        let length = i32::from_be_bytes([data[20], data[21], data[22], data[23]]);
+        let flags = i32::from_be_bytes([data[12], data[13], data[14], data[15]]);
+        let length = i32::from_be_bytes([data[16], data[17], data[18], data[19]]);
 
-        let body_start = 24;
+        let body_start = 20;
         let body_end = body_start + length as usize;
 
         if data.len() < body_end {

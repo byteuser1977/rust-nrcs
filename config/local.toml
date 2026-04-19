@@ -12,7 +12,7 @@ host = "0.0.0.0"
 listen_addr = "/ip4/0.0.0.0/tcp/17974"
 external_addr = "/ip4/192.168.2.164/tcp/17974"
 bootstrap_nodes = [
-    "/ip4/192.168.2.164/tcp/17974/p2p/12D3KooWQHx7U6yZiHqWLmJ88sLJDZhk7hL",  # TODO: 替换为实际的 Java Peer ID
+    "192.168.2.164:17974"
 ]
 max_connections = 100
 connection_ttl_secs = 600

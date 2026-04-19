@@ -8,3 +8,4 @@ pub mod peer;
 pub mod handlers;
 
 pub use protocol::*;
+pub use handlers::Handler;
