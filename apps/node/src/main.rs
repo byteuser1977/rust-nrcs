@@ -26,6 +26,7 @@ use blockchain_types::prelude::*;
 
 use config::{Config, File, Environment};
 use async_trait::async_trait;
+use sqlx::PgPool;
 
 /// 简单的 DummyBlockVerifier
 struct DummyBlockVerifier;
@@ -127,6 +128,17 @@ async fn main() -> Result<()> {
         "Config loaded: p2p={}, api={}:{}",
         cfg.p2p.listen_addr, cfg.api.host, cfg.api.port
     );
+
+    // 初始化数据库
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://nrcs:password@localhost:5432/nrcs_db".to_string());
+    let pool = PgPool::connect(&database_url)
+        .await
+        .context("Failed to connect to database")?;
+    
+    // 暂不创建创世区块，等待从 Java-NRCS 同步
+    // orm::ensure_genesis(&pool).await.context("Failed to create genesis block")?;
+    info!("Database connected, genesis creation skipped - awaiting sync from Java-NRCS");
 
     // 解析本机 P2P 地址
     let listen_addr: SocketAddr = cfg.p2p_listen_addr()?;

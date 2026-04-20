@@ -1,0 +1,31 @@
+# NRCS Node Configuration aligned with Java reference implementation
+# 使用方式：复制为 config/local.toml 或通过环境变量覆盖
+
+[p2p]
+# P2P 网络配置 - 对齐 Java NRCS
+listen_addr = "/ip4/0.0.0.0/tcp/17974"
+external_addr = "/ip4/0.0.0.0/tcp/17974"
+bootstrap_nodes = [
+  "/ip4/192.168.2.164/tcp/17974",  # Java-NRCS 节点
+]
+max_connections = 2000
+connection_ttl_secs = 600
+protocol_id = "/nrcs/1.0.0"
+
+[api]
+# API 服务器配置 - 对齐 Java NRCS
+host = "0.0.0.0"
+port = 17976  # Java NRCS API 端口
+cors_allowed_origins = ["*"]
+debug = false
+
+[database]
+# 数据库配置 - 继续使用 PostgreSQL
+url = "postgres://nrcs:password@localhost:5432/nrcs_db"
+pool_size = 10
+
+[mining]
+enabled = false
+
+[consensus]
+algorithm = "pos"

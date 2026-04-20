@@ -30,6 +30,8 @@ pub mod order;
 pub mod alias;
 pub mod account_ext;
 
+pub mod genesis; // Genesis block creation
+
 pub mod prelude {
     pub use crate::block::*;
     pub use crate::transaction::*;
@@ -39,6 +41,8 @@ pub mod prelude {
     pub use crate::order::*;
     pub use crate::alias::*;
     pub use crate::account_ext::*;
+    pub use crate::genesis::*;
+    pub use crate::processor::*;
     pub use crate::{
         Hash256, Hash512, PublicKey, SecretKey, Signature,
         Timestamp, Height, Amount, AccountId, AssetId, BlockId,
