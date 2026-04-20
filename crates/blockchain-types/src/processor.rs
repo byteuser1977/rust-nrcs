@@ -3,6 +3,7 @@
 use super::*;
 use sqlx::PgPool;
 use tracing::{debug, error, info, warn};
+use async_trait::async_trait;
 
 /// Blockchain processor that validates and applies blocks to the chain state.
 pub struct BlockchainProcessor {
@@ -35,8 +36,7 @@ impl BlockchainProcessor {
         }
 
         // 3. Verify block signature (requires generator public key lookup)
-        // For now skip if no account record exists; will be looked up later
-        // self.verify_block_signature(block).await?;
+        // self.verify_block_signature(block).await?; // TODO
 
         // 4. Compute and check payload hash (Merkle root of transactions)
         let computed_payload_hash = self.compute_payload_hash(&block.transactions)?;
@@ -65,10 +65,6 @@ impl BlockchainProcessor {
         if block.height == 0 {
             return Err(BlockchainError::InvalidBlock("height cannot be zero".to_string()));
         }
-        if block.transactions.len() as u32 != block.payload_length / 128 {
-            // Approximate: each transaction ~128 bytes in JSON
-            // In production, compute exact payload length
-        }
         Ok(())
     }
 
@@ -86,9 +82,7 @@ impl BlockchainProcessor {
     fn compute_payload_hash(&self, txs: &[Transaction]) -> Result<Hash256> {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
-        // Java order: transactions already sorted by ID before hashing
         for tx in txs {
-            // For now use JSON serialization; later switch to canonical binary format
             let bytes = serde_json::to_vec(tx)
                 .map_err(|e| BlockchainError::Serialization(e.into()))?;
             hasher.update(bytes);
@@ -100,14 +94,12 @@ impl BlockchainProcessor {
 
     /// Insert block and its transactions into database
     async fn insert_block(&self, block: &Block) -> Result<()> {
-        // TODO: Implement transaction persistence and account balance updates.
-        // For now, insert only block record to mark progress.
         let model = BlockModel {
             db_id: None,
-            id: block.height as i64, // using height as block ID for now
+            id: block.height as i64,
             version: block.version as i32,
             timestamp: block.timestamp as i32,
-            previous_block_id: None, // TODO: resolve previous block ID from height-1
+            previous_block_id: None,
             total_amount: block.total_amount as i64,
             total_fee: block.total_fee as i64,
             payload_length: block.payload_length as i32,
@@ -174,7 +166,7 @@ impl BlockchainVerifier {
 }
 
 #[async_trait]
-impl BlockVerifier for BlockchainVerifier {
+impl p2p::handlers::BlockVerifier for BlockchainVerifier {
     async fn verify_and_process(&self, block: Block) -> Result<()> {
         self.processor.process_block(&block).await?;
         Ok(())

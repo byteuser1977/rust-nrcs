@@ -42,7 +42,6 @@ pub mod prelude {
     pub use crate::alias::*;
     pub use crate::account_ext::*;
     pub use crate::genesis::*;
-    pub use crate::processor::*;
     pub use crate::{
         Hash256, Hash512, PublicKey, SecretKey, Signature,
         Timestamp, Height, Amount, AccountId, AssetId, BlockId,

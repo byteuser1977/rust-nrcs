@@ -3,30 +3,30 @@
 use sqlx::PgPool;
 use serde_json::Value;
 use std::fs;
-use chrono::{NaiveDate, NaiveDateTime, FixedOffset};
+use chrono::{NaiveDate, FixedOffset, TimeZone};
 
 /// Load genesis configuration from config/genesis.json.
 /// Returns (timestamp, Vec<(account_id, balance)>)
 fn load_genesis_config() -> sqlx::Result<(i64, Vec<(i64, i64)>)> {
     let content = fs::read_to_string("config/genesis.json")
-        .map_err(|e| sqlx::Error::Decode(e.into()))?;
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
     let json: Value = serde_json::from_str(&content)
-        .map_err(|e| sqlx::Error::Decode(e.into()))?;
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
 
     let time_str = json["genesis_time"].as_str()
-        .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "missing genesis_time",
-        )))?;
+        ))))?;
 
     // secret_phrase is optional (Java may prompt separately). Ignored here.
     let _ = json.get("secret_phrase");
 
     let transactions = json["transactions"].as_array()
-        .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "missing transactions array",
-        )))?;
+        ))))?;
 
     // Parse time in GMT+8, format: "yyyy-M-d HH:mm:ss.SSS"
     let timestamp = parse_genesis_time(time_str)?;
@@ -35,17 +35,17 @@ fn load_genesis_config() -> sqlx::Result<(i64, Vec<(i64, i64)>)> {
     let mut accounts = Vec::new();
     for tx in transactions {
         let recipient = tx["recipient"].as_str()
-            .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+            .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "recipient not a string",
-            )))?;
+            ))))?;
         let recipient_id: i64 = recipient.parse()
-            .map_err(|e| sqlx::Error::Decode(e.into()))?;
+            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
         let amount = tx["amount"].as_i64()
-            .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+            .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "invalid amount",
-            )))?;
+            ))))?;
         accounts.push((recipient_id, amount));
     }
 
@@ -57,80 +57,80 @@ fn parse_genesis_time(s: &str) -> sqlx::Result<i64> {
     // Split date and time
     let parts: Vec<&str> = s.split_whitespace().collect();
     if parts.len() != 2 {
-        return Err(sqlx::Error::Decode(std::io::Error::new(
+        return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "expected date and time parts",
-        )));
+        ))));
     }
 
     // Date: yyyy-M-d
     let date_fields: Vec<&str> = parts[0].split('-').collect();
     if date_fields.len() != 3 {
-        return Err(sqlx::Error::Decode(std::io::Error::new(
+        return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "invalid date format",
-        )));
+        ))));
     }
     let year = date_fields[0].parse::<i32>()
-        .map_err(|e| sqlx::Error::Decode(e.into()))?;
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
     let month = date_fields[1].parse::<u32>()
-        .map_err(|e| sqlx::Error::Decode(e.into()))?;
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
     let day = date_fields[2].parse::<u32>()
-        .map_err(|e| sqlx::Error::Decode(e.into()))?;
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
 
     // Time: HH:mm:ss.SSS
     let time_str = parts[1];
     let mut time_parts = time_str.split(':');
     let hour = time_parts.next()
         .and_then(|s| s.parse::<u32>().ok())
-        .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "invalid hour",
-        )))?;
+        ))))?;
     let minute = time_parts.next()
         .and_then(|s| s.parse::<u32>().ok())
-        .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "invalid minute",
-        )))?;
+        ))))?;
     let sec_ms = time_parts.next()
-        .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "missing seconds",
-        )))?;
+        ))))?;
 
     let (second, millisecond) = if let Some((sec, ms)) = sec_ms.split_once('.') {
         let sec = sec.parse::<u32>()
-            .map_err(|e| sqlx::Error::Decode(e.into()))?;
+            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
         let ms = ms.parse::<u32>()
-            .map_err(|e| sqlx::Error::Decode(e.into()))?;
+            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
         (sec, ms)
     } else {
         let sec = sec_ms.parse::<u32>()
-            .map_err(|e| sqlx::Error::Decode(e.into()))?;
+            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
         (sec, 0)
     };
 
     // Build NaiveDateTime
     let ndt = NaiveDate::from_ymd_opt(year, month, day)
         .and_then(|d| d.and_hms_milli_opt(hour, minute, second, millisecond))
-        .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "invalid date/time values",
-        )))?;
+        ))))?;
 
     // Convert to GMT+8 timestamp (seconds since epoch)
     let tz = FixedOffset::east_opt(8 * 3600)
-        .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "invalid timezone offset",
-        )))?;
+        ))))?;
     let dt = tz.from_local_datetime(&ndt)
         .single()
-        .ok_or_else(|| sqlx::Error::Decode(std::io::Error::new(
+        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "datetime ambiguity or out-of-range",
-        )))?;
+        ))))?;
     Ok(dt.timestamp())
 }
 
@@ -162,7 +162,7 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
             1, 1, $1, NULL, $2, 0, 0, NULL, '{}', 1000000, NULL, 1, NULL, NULL, NULL, 1
         )
         "#,
-        timestamp,
+        timestamp as i32,
         total_amount
     )
     .execute(pool)
@@ -188,13 +188,14 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
             r#"
             INSERT INTO account_ledger (
                 account_id, event_type, event_id, holding_type, holding_id,
-                "change", balance, block_id, height, timestamp
-            ) VALUES ($1, 0, 1, 0, NULL, $2, $2, $3, $3, $4)
+                "CHANGE", balance, block_id, height, timestamp
+            ) VALUES ($1, 0, 1, 0, NULL, $2, $2, $3, $4, $5)
             "#,
             account_id,
             balance,
             block_id,
-            timestamp
+            height,
+            timestamp as i32
         )
         .execute(pool)
         .await?;
