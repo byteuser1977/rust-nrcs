@@ -287,6 +287,23 @@ fn current_timestamp() -> i64 {
 }
 
 #[cfg(test)]
+impl Peers {
+    /// Create a Peers instance without spawning the background connection loop.
+    /// Useful for unit tests.
+    pub fn new_for_test(pool: PgPool) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(Inner {
+                pool,
+                repository: PeerRepository::new(),
+                cooldown_until: HashMap::new(),
+                retry_counts: HashMap::new(),
+                outbound_senders: HashMap::new(),
+            })),
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
