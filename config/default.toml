@@ -3,7 +3,7 @@
 
 [database]
 # 数据库连接
-url = "postgres://nrcs:password@localhost:5432/nrcs_db"
+url = "postgres://nrcs_user:password@localhost:5432/nrcs_db"
 pool_size = 10
 min_connections = 5
 max_connections = 50
@@ -38,13 +38,13 @@ port = 8081
 ping_interval_secs = 30
 
 [p2p]
-# P2P 网络配置
-listen_addr = "/ip4/0.0.0.0/tcp/30000"
-external_addr = "/ip4/0.0.0.0/tcp/30000"
+# P2P 网络配置 - 对齐 Java NRCS
+listen_addr = "/ip4/0.0.0.0/tcp/17974"
+external_addr = "/ip4/0.0.0.0/tcp/17974"
 bootstrap_nodes = [
-    "/ip4/123.45.67.89/tcp/30000/p2p/12D3KooW...", # 示例引导节点
+  "/ip4/192.168.2.164/tcp/17974",  # Java-NRCS 节点
 ]
-max_connections = 100
+max_connections = 2000
 connection_ttl_secs = 600
 protocol_id = "/nrcs/1.0.0"
 
