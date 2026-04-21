@@ -88,7 +88,7 @@ impl AddPeersHandler {
             }
 
             // 检查黑名单
-            if peers.is_blacklisted(&addr).await {
+            if peers.is_blacklisted(&addr.to_string()).await {
                 warn!("Peer {} is blacklisted, skipping", addr);
                 blacklisted_count += 1;
                 continue;

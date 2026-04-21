@@ -6,34 +6,70 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 
 /// 节点状态
+/// 
+/// 对应 NRCS Java: PeerState.java
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PeerState {
+    /// 未连接 (NON_CONNECTED)
+    NonConnected,
+    /// 已连接 (CONNECTED)
     Connected,
+    /// 已断开 (DISCONNECTED)
     Disconnected,
-    Blacklisted,
-    Banned,
 }
 
 /// 对等节点信息
+/// 
+/// 对应 NRCS Java: Peer.java
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Peer {
+    /// 节点地址
     pub address: SocketAddr,
+    /// 公告地址
     #[serde(skip_serializing_if = "Option::is_none")]
     pub announced_address: Option<String>,
+    /// 版本
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    /// 应用名称
     #[serde(skip_serializing_if = "Option::is_none")]
     pub application: Option<String>,
+    /// 平台
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
+    /// 服务标志
     pub services: u64,
+    /// API 端口
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_port: Option<u16>,
+    /// API SSL 端口
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_ssl_port: Option<u16>,
+    /// 节点状态
     pub state: PeerState,
+    /// 是否为入站连接
     pub is_inbound: bool,
-    pub last_updated: i64, // timestamp
+    /// 最后更新时间戳
+    pub last_updated: i64,
+    /// 最后连接尝试时间戳
+    pub last_connect_attempt: i64,
+    /// 最后入站请求时间戳
+    pub last_inbound_request: i64,
+    /// 黑名单时间戳
+    pub blacklisting_time: i64,
+    /// 黑名单原因
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blacklisting_cause: Option<String>,
+    /// 是否为旧版本
+    pub is_old_version: bool,
+    /// 是否分享地址
+    pub share_address: bool,
+    /// 下载流量
+    pub downloaded_volume: u64,
+    /// 上传流量
+    pub uploaded_volume: u64,
+    /// 端口号
+    pub port: u16,
 }
 
 impl Peer {
@@ -47,10 +83,71 @@ impl Peer {
             services: 0,
             api_port: None,
             api_ssl_port: None,
-            state: PeerState::Disconnected,
+            state: PeerState::NonConnected,
             is_inbound,
             last_updated: current_timestamp(),
+            last_connect_attempt: 0,
+            last_inbound_request: 0,
+            blacklisting_time: 0,
+            blacklisting_cause: None,
+            is_old_version: false,
+            share_address: true,
+            downloaded_volume: 0,
+            uploaded_volume: 0,
+            port: address.port(),
         }
+    }
+
+    /// 黑名单节点
+    /// 
+    /// 对应 NRCS Java: Peer.blacklist(String cause)
+    pub fn blacklist(&mut self, cause: String) {
+        self.blacklisting_time = current_timestamp();
+        self.blacklisting_cause = Some(cause);
+        self.state = PeerState::NonConnected;
+        self.last_inbound_request = 0;
+        debug!("Peer {} blacklisted: {:?}", self.address, self.blacklisting_cause);
+    }
+
+    /// 解除黑名单
+    /// 
+    /// 对应 NRCS Java: Peer.unBlacklist()
+    pub fn un_blacklist(&mut self) {
+        if self.blacklisting_time == 0 {
+            return;
+        }
+        self.state = PeerState::NonConnected;
+        self.blacklisting_time = 0;
+        self.blacklisting_cause = None;
+        debug!("Peer {} unblacklisted", self.address);
+    }
+
+    /// 更新黑名单状态
+    /// 
+    /// 对应 NRCS Java: Peer.updateBlacklistedStatus(int curTime)
+    pub fn update_blacklisted_status(&mut self, cur_time: i64, blacklisting_period: i64) {
+        if self.blacklisting_time > 0
+            && self.blacklisting_time + blacklisting_period <= cur_time {
+            self.un_blacklist();
+        }
+        if self.is_old_version && self.last_updated < cur_time - 3600 {
+            self.is_old_version = false;
+        }
+    }
+
+    /// 停用节点
+    /// 
+    /// 对应 NRCS Java: Peer.deactivate()
+    pub fn deactivate(&mut self) {
+        self.state = PeerState::Disconnected;
+        self.last_updated = current_timestamp();
+    }
+
+    /// 检查是否提供服务
+    /// 
+    /// 对应 NRCS Java: Peer.providesService(PeerService)
+    pub fn provides_service(&self, service_flag: u64) -> bool {
+        self.services & service_flag != 0
     }
 
     pub fn update_metadata(
@@ -254,7 +351,18 @@ impl Peers {
     }
 
     /// 检查是否在黑名单中
-    pub async fn is_blacklisted(&self, addr: &SocketAddr) -> bool {
+    pub async fn is_blacklisted(&self, addr: &str) -> bool {
+        let blacklist = self.blacklist.read().await;
+        // 尝试解析地址
+        if let Ok(socket_addr) = addr.parse::<SocketAddr>() {
+            blacklist.contains(&socket_addr)
+        } else {
+            false
+        }
+    }
+
+    /// 检查 SocketAddr 是否在黑名单中
+    pub async fn is_blacklisted_addr(&self, addr: &SocketAddr) -> bool {
         let blacklist = self.blacklist.read().await;
         blacklist.contains(addr)
     }
@@ -275,6 +383,39 @@ impl Peers {
     /// Get count of known peers
     pub async fn known_peers_count(&self) -> usize {
         self.known_peers.read().await.len()
+    }
+
+    /// Get any peer with specified state
+    /// 
+    /// 对应 NRCS Java: Peers.getAnyPeer(PeerState state, boolean applyHallmark)
+    pub async fn get_any_peer(&self, state: PeerState, _prefer_hallmarked: bool) -> Option<Peer> {
+        let known = self.known_peers.read().await;
+        
+        for p in known.values() {
+            let peer = p.lock().await;
+            if peer.state == state && self.blacklist.read().await.contains(&peer.address) {
+                continue;
+            }
+            if peer.state == state {
+                return Some(peer.clone());
+            }
+        }
+        None
+    }
+
+    /// Remove a peer
+    /// 
+    /// 对应 NRCS Java: Peers.removePeer(Peer peer)
+    pub async fn remove_peer(&self, addr: &SocketAddr) {
+        let mut known = self.known_peers.write().await;
+        known.remove(addr);
+        debug!("Removed peer: {}", addr);
+    }
+
+    /// Get peer by address
+    pub async fn get_peer(&self, addr: &SocketAddr) -> Option<Arc<Mutex<Peer>>> {
+        let known = self.known_peers.read().await;
+        known.get(addr).cloned()
     }
 }
 
