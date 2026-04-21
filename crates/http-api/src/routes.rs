@@ -6,7 +6,9 @@ use axum::{
     Router,
     routing::{get, post},
     body::Body,
+    http::{header, Response, StatusCode},
 };
+use tower_http::services::ServeDir;
 
 use crate::{state::ApiState, nrcs_handler, test_page};
 
@@ -23,5 +25,6 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/api/v1/transactions/:hash", get(crate::handlers::transaction::get_transaction))
         .route("/api/v1/node/info", get(crate::handlers::node::get_node_info))
         .route("/metrics", get(crate::handlers::system::metrics))
+        .fallback_service(ServeDir::new("crates/http-api/ui"))
         .with_state(state)
 }

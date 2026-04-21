@@ -66,6 +66,11 @@ pub fn init_api_handlers() {
     register_api("setAccountInfo", Arc::new(SetAccountInfoHandler::new()));
     register_api("setAccountProperty", Arc::new(SetAccountPropertyHandler::new()));
     
+    // Account Control APIs
+    register_api("getAccountControl", Arc::new(GetAccountControlHandler::new()));
+    register_api("setAccountControl", Arc::new(SetAccountControlHandler::new()));
+    register_api("removeAccountControl", Arc::new(RemoveAccountControlHandler::new()));
+    
     // Block APIs
     register_api("getBlock", Arc::new(GetBlockHandler::new()));
     register_api("getBlocks", Arc::new(GetBlocksHandler::new()));
@@ -191,4 +196,46 @@ pub fn init_api_handlers() {
     register_api("castVote", Arc::new(CastVoteHandler::new()));
     register_api("getPollVotes", Arc::new(GetPollVotesHandler::new()));
     register_api("getPollVoters", Arc::new(GetPollVotersHandler::new()));
+    
+    // Phasing APIs
+    register_api("getPhasingPoll", Arc::new(GetPhasingPollHandler::new()));
+    register_api("getPhasingPolls", Arc::new(GetPhasingPollsHandler::new()));
+    register_api("getPhasingPollVotes", Arc::new(GetPhasingPollVotesHandler::new()));
+    register_api("approveTransaction", Arc::new(ApproveTransactionHandler::new()));
+    register_api("getAccountPhasingTransactionCount", Arc::new(GetAccountPhasingTransactionCountHandler::new()));
+    
+    // Tagged Data APIs
+    register_api("getTaggedData", Arc::new(GetTaggedDataHandler::new()));
+    register_api("getAllTaggedData", Arc::new(GetAllTaggedDataHandler::new()));
+    register_api("getAccountTaggedData", Arc::new(GetAccountTaggedDataHandler::new()));
+    register_api("uploadTaggedData", Arc::new(UploadTaggedDataHandler::new()));
+    register_api("downloadTaggedData", Arc::new(DownloadTaggedDataHandler::new()));
+    register_api("verifyTaggedData", Arc::new(VerifyTaggedDataHandler::new()));
+    register_api("searchTaggedData", Arc::new(SearchTaggedDataHandler::new()));
+    
+    // Shuffling APIs
+    register_api("getShuffling", Arc::new(GetShufflingHandler::new()));
+    register_api("getAllShufflings", Arc::new(GetAllShufflingsHandler::new()));
+    register_api("getAccountShufflings", Arc::new(GetAccountShufflingsHandler::new()));
+    register_api("shufflingCreate", Arc::new(ShufflingCreateHandler::new()));
+    register_api("shufflingRegister", Arc::new(ShufflingRegisterHandler::new()));
+    register_api("shufflingProcess", Arc::new(ShufflingProcessHandler::new()));
+    register_api("shufflingVerify", Arc::new(ShufflingVerifyHandler::new()));
+    register_api("shufflingCancel", Arc::new(ShufflingCancelHandler::new()));
+    
+    // Search APIs
+    register_api("searchAccounts", Arc::new(SearchAccountsHandler::new()));
+    register_api("searchAssets", Arc::new(SearchAssetsHandler::new()));
+    register_api("searchCurrencies", Arc::new(SearchCurrenciesHandler::new()));
+    register_api("searchPolls", Arc::new(SearchPollsHandler::new()));
+    register_api("searchDGSGoods", Arc::new(SearchDGSGoodsHandler::new()));
+    
+    // Debug APIs
+    register_api("getLog", Arc::new(GetLogHandler::new()));
+    register_api("getStackTraces", Arc::new(GetStackTracesHandler::new()));
+    register_api("clearUnconfirmedTransactions", Arc::new(ClearUnconfirmedTransactionsHandler::new()));
+    register_api("popOff", Arc::new(PopOffHandler::new()));
+    register_api("scan", Arc::new(ScanHandler::new()));
+    register_api("shutdown", Arc::new(ShutdownHandler::new()));
+    register_api("getPeerInfo", Arc::new(GetPeerInfoHandler::new()));
 }
