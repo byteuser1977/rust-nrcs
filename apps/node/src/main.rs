@@ -145,19 +145,14 @@ async fn main() -> Result<()> {
     let external_addr = cfg.p2p_external_addr()?;
 
     // 构建本节点 Peer 信息
-    let my_peer = Peer {
-        address: listen_addr,
-        announced_address: external_addr.map(|a| a.to_string()),
-        version: Some("0.1.0".to_string()),
-        application: Some("NRCS".to_string()),
-        platform: Some("Rust".to_string()),
-        services: 4, // API service bit (0b100)
-        api_port: Some(cfg.api.port),
-        api_ssl_port: None,
-        state: PeerState::Disconnected,
-        is_inbound: false,
-        last_updated: current_timestamp(),
-    };
+    let mut my_peer = Peer::new(listen_addr, false);
+    my_peer.announced_address = external_addr.map(|a| a.to_string());
+    my_peer.version = Some("0.1.0".to_string());
+    my_peer.application = Some("NRCS".to_string());
+    my_peer.platform = Some("Rust".to_string());
+    my_peer.services = 4; // API service bit (0b100)
+    my_peer.api_port = Some(cfg.api.port);
+    my_peer.state = PeerState::Disconnected;
 
     // 初始化 P2P 管理器
     let peers = Arc::new(Peers::new(my_peer.clone()));

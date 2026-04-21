@@ -27,8 +27,8 @@ impl RequestHandler for GetTransactionHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
-        let transaction_id = req.get_u64("transaction");
-        let full_hash = req.get_string("fullHash");
+        let _transaction_id = req.get_u64("transaction");
+        let _full_hash = req.get_string("fullHash");
         
         let mut builder = RsRespBuilder::new();
         
@@ -75,9 +75,9 @@ impl RequestHandler for GetTransactionsHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
-        let account = req.get_u64("account");
-        let first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let last_index = req.get_i32("lastIndex").unwrap_or(99);
+        let _account = req.get_u64("account");
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(99);
         
         let mut builder = RsRespBuilder::new();
         builder.insert("transactions", serde_json::json!([]));
@@ -104,7 +104,7 @@ impl RequestHandler for GetUnconfirmedTransactionsHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("unconfirmedTransactions", serde_json::json!([]));
         
@@ -135,50 +135,11 @@ impl RequestHandler for SendMoneyHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
-        let secret_phrase = req.require_string("secretPhrase")?;
-        let recipient = req.require_u64("recipient")?;
-        let amount = req.require_string("amountNQT")?;
-        let fee = req.require_string("feeNQT")?;
-        let deadline = req.require_i32("deadline")?;
-        
-        let mut builder = RsRespBuilder::new();
-        
-        builder
-            .insert("transaction", "0")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "")
-            .insert("signatureHash", "");
-        
-        Ok(builder.build())
-    }
-}
-
-pub struct SendMessageHandler;
-
-impl SendMessageHandler {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl RequestHandler for SendMessageHandler {
-    fn parameters(&self) -> Vec<&'static str> {
-        vec!["secretPhrase", "recipient", "message", "messageIsText", "feeNQT", "deadline"]
-    }
-    
-    fn api_tags(&self) -> Vec<ApiTag> {
-        vec![ApiTag::Messages, ApiTag::CreateTransaction]
-    }
-    
-    fn require_post(&self) -> bool {
-        true
-    }
-    
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
-        let secret_phrase = req.require_string("secretPhrase")?;
-        let recipient = req.get_u64("recipient");
-        let message = req.get_string("message");
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _recipient = req.require_u64("recipient")?;
+        let _amount = req.require_string("amountNQT")?;
+        let _fee = req.require_string("feeNQT")?;
+        let _deadline = req.require_i32("deadline")?;
         
         let mut builder = RsRespBuilder::new();
         
@@ -214,7 +175,7 @@ impl RequestHandler for BroadcastTransactionHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         
         builder

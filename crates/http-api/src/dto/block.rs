@@ -117,11 +117,8 @@ pub struct ApiTransaction {
     #[serde(rename = "feeNQT", skip_serializing_if = "Option::is_none")]
     pub fee_nqt: Option<String>,
     
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub type: Option<u8>,
-    
-    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
-    pub type_: Option<u8>,
+    #[serde(rename = "type")]
+    pub tx_type: Option<u8>,
     
     #[serde(rename = "subtype", skip_serializing_if = "Option::is_none")]
     pub subtype: Option<u8>,

@@ -7,18 +7,17 @@ use axum::{
     extract::{Query, State},
     http::{header, Method, StatusCode},
     response::{IntoResponse, Response},
-    Json,
 };
 use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::api_registry::{get_api_handler, is_api_disabled};
 use crate::error::ApiError;
-use crate::request_handler::{responses, ApiRequest, HandlerContext, RsRespWithData};
+use crate::request_handler::{responses, ApiRequest, RsRespWithData};
 use crate::state::ApiState;
 
 pub async fn handle_nrcs_api(
-    State(state): State<ApiState>,
+    State(_state): State<ApiState>,
     method: Method,
     Query(query): Query<HashMap<String, String>>,
     body: Bytes,
@@ -65,14 +64,32 @@ pub async fn handle_nrcs_api(
             json_response(resp, start_time.elapsed().as_millis() as u64)
         }
         Err(e) => {
-            let resp = match e {
-                ApiError::MissingParameter(p) => responses::missing_parameter(&p),
-                ApiError::IncorrectValue(p) => responses::incorrect_value(&p),
-                ApiError::NotFound(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(6, msg)),
-                _ => RsRespWithData::from(crate::request_handler::RsResp::error(4, e.to_string())),
-            };
+            let resp = error_to_response(&e);
             json_response(resp, start_time.elapsed().as_millis() as u64)
         }
+    }
+}
+
+fn error_to_response(e: &ApiError) -> RsRespWithData {
+    match e {
+        ApiError::MissingParameter(p) => responses::missing_parameter(p),
+        ApiError::IncorrectValue(p) => responses::incorrect_value(p),
+        ApiError::UnknownAccount => responses::unknown_account(),
+        ApiError::UnknownBlock => responses::unknown_block(),
+        ApiError::UnknownTransaction => responses::unknown_transaction(),
+        ApiError::IncorrectAccount => responses::incorrect_account(),
+        ApiError::IncorrectBlock => responses::incorrect_block(),
+        ApiError::IncorrectHeight => responses::incorrect_height(),
+        ApiError::IncorrectTimestamp => responses::incorrect_timestamp(),
+        ApiError::NotFound(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(6, msg.clone())),
+        ApiError::Validation(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(4, msg.clone())),
+        ApiError::Unauthorized(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(2, msg.clone())),
+        ApiError::Internal(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(4, msg.clone())),
+        ApiError::Blockchain(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
+        ApiError::Repository(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
+        ApiError::Account(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
+        ApiError::TxEngine(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
+        ApiError::Io(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
     }
 }
 

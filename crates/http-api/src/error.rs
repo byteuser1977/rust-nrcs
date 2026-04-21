@@ -92,7 +92,6 @@ impl ApiError {
     }
 }
 
-/// API 响应信封（统一格式）
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
     pub code: i32,
@@ -138,6 +137,15 @@ impl IntoResponse for ApiError {
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, 404, msg),
             ApiError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, 401, msg),
             ApiError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, 500, msg),
+            ApiError::MissingParameter(msg) => (StatusCode::BAD_REQUEST, 12, msg),
+            ApiError::IncorrectValue(msg) => (StatusCode::BAD_REQUEST, 13, msg),
+            ApiError::UnknownAccount => (StatusCode::NOT_FOUND, 5, "Unknown account".to_string()),
+            ApiError::UnknownBlock => (StatusCode::NOT_FOUND, 6, "Unknown block".to_string()),
+            ApiError::UnknownTransaction => (StatusCode::NOT_FOUND, 7, "Unknown transaction".to_string()),
+            ApiError::IncorrectAccount => (StatusCode::BAD_REQUEST, 8, "Incorrect account".to_string()),
+            ApiError::IncorrectBlock => (StatusCode::BAD_REQUEST, 9, "Incorrect block".to_string()),
+            ApiError::IncorrectHeight => (StatusCode::BAD_REQUEST, 10, "Incorrect height".to_string()),
+            ApiError::IncorrectTimestamp => (StatusCode::BAD_REQUEST, 11, "Incorrect timestamp".to_string()),
             ApiError::Blockchain(e) => (StatusCode::BAD_REQUEST, 400, e.to_string()),
             ApiError::Repository(e) => (StatusCode::INTERNAL_SERVER_ERROR, 500, e.to_string()),
             ApiError::Account(e) => (StatusCode::BAD_REQUEST, 400, e.to_string()),
@@ -150,10 +158,8 @@ impl IntoResponse for ApiError {
     }
 }
 
-/// 结果类型别名
 pub type ApiResult<T> = Result<T, ApiError>;
 
-/// 从 (StatusCode, Json) 创建响应的便捷函数
 pub fn response<T: Serialize>(status: StatusCode, data: ApiResponse<T>) -> impl IntoResponse {
     (status, Json(data))
 }
