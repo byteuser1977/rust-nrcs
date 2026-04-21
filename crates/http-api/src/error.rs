@@ -1,4 +1,6 @@
 //! API 错误处理
+//!
+//! 与 Java 版本错误码对齐
 
 use axum::{
     http::StatusCode,
@@ -8,7 +10,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// API 错误类型
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
     #[error("validation error: {0}")]
@@ -22,6 +23,33 @@ pub enum ApiError {
 
     #[error("internal server error: {0}")]
     Internal(String),
+
+    #[error("missing parameter: {0}")]
+    MissingParameter(String),
+
+    #[error("incorrect value: {0}")]
+    IncorrectValue(String),
+
+    #[error("unknown account")]
+    UnknownAccount,
+
+    #[error("unknown block")]
+    UnknownBlock,
+
+    #[error("unknown transaction")]
+    UnknownTransaction,
+
+    #[error("incorrect account")]
+    IncorrectAccount,
+
+    #[error("incorrect block")]
+    IncorrectBlock,
+
+    #[error("incorrect height")]
+    IncorrectHeight,
+
+    #[error("incorrect timestamp")]
+    IncorrectTimestamp,
 
     #[error("blockchain error: {0}")]
     Blockchain(#[from] blockchain_types::BlockchainError),
@@ -37,6 +65,31 @@ pub enum ApiError {
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+impl ApiError {
+    pub fn error_code(&self) -> i32 {
+        match self {
+            ApiError::Validation(_) => 4,
+            ApiError::NotFound(_) => 6,
+            ApiError::Unauthorized(_) => 2,
+            ApiError::Internal(_) => 4,
+            ApiError::MissingParameter(_) => 12,
+            ApiError::IncorrectValue(_) => 13,
+            ApiError::UnknownAccount => 5,
+            ApiError::UnknownBlock => 6,
+            ApiError::UnknownTransaction => 7,
+            ApiError::IncorrectAccount => 8,
+            ApiError::IncorrectBlock => 9,
+            ApiError::IncorrectHeight => 10,
+            ApiError::IncorrectTimestamp => 11,
+            ApiError::Blockchain(_) => 4,
+            ApiError::Repository(_) => 4,
+            ApiError::Account(_) => 4,
+            ApiError::TxEngine(_) => 4,
+            ApiError::Io(_) => 4,
+        }
+    }
 }
 
 /// API 响应信封（统一格式）
