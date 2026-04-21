@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct SearchAccountsHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for SearchAccountsHandler {
         vec![ApiTag::Search, ApiTag::Accounts]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _query = req.require_string("query")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -57,7 +58,7 @@ impl RequestHandler for SearchAssetsHandler {
         vec![ApiTag::Search, ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _query = req.require_string("query")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -87,7 +88,7 @@ impl RequestHandler for SearchCurrenciesHandler {
         vec![ApiTag::Search, ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _query = req.get_string("query");
         let _code = req.get_string("code");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -118,7 +119,7 @@ impl RequestHandler for SearchPollsHandler {
         vec![ApiTag::Search, ApiTag::Vs]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _query = req.require_string("query")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -148,7 +149,7 @@ impl RequestHandler for SearchDGSGoodsHandler {
         vec![ApiTag::Search, ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _query = req.get_string("query");
         let _tag = req.get_string("tag");
         let _seller = req.get_u64("seller");

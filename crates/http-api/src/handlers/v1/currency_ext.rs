@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetAccountCurrencyCountHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetAccountCurrencyCountHandler {
         vec![ApiTag::Accounts, ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         let _height = req.get_i32("height");
         
@@ -56,7 +57,7 @@ impl RequestHandler for GetCurrencyAccountCountHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _currency_id = req.require_u64("currency")?;
         let _height = req.get_i32("height");
         
@@ -85,7 +86,7 @@ impl RequestHandler for GetCurrencyFoundersHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _currency_id = req.require_u64("currency")?;
         
         let mut builder = RsRespBuilder::new();
@@ -117,7 +118,7 @@ impl RequestHandler for CurrencyMintHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _currency_id = req.require_u64("currency")?;
         let _nonce = req.require_string("nonce")?;
@@ -154,7 +155,7 @@ impl RequestHandler for CurrencyReserveIncreaseHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _currency_id = req.require_u64("currency")?;
         let _amount = req.require_string("amountNQT")?;
@@ -190,7 +191,7 @@ impl RequestHandler for CurrencyReserveClaimHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _currency_id = req.require_u64("currency")?;
         let _units = req.require_string("unitsQNT")?;

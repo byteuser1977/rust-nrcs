@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetAccountAssetCountHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetAccountAssetCountHandler {
         vec![ApiTag::Accounts, ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         let _height = req.get_i32("height");
         
@@ -56,7 +57,7 @@ impl RequestHandler for GetAssetAccountCountHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.require_u64("asset")?;
         let _height = req.get_i32("height");
         
@@ -85,7 +86,7 @@ impl RequestHandler for GetAssetHistoryHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.require_u64("asset")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -115,7 +116,7 @@ impl RequestHandler for GetAssetDividendsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.get_u64("asset");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -149,7 +150,7 @@ impl RequestHandler for DividendPaymentHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _asset_id = req.require_u64("asset")?;
         let _height = req.require_i32("height")?;
@@ -185,7 +186,7 @@ impl RequestHandler for IncreaseAssetSharesHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _asset_id = req.require_u64("asset")?;
         let _quantity = req.require_string("quantityQNT")?;
@@ -217,7 +218,7 @@ impl RequestHandler for GetAssetPropertiesHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.get_u64("asset");
         let _property = req.get_string("property");
         let _setter = req.get_u64("setter");
@@ -251,7 +252,7 @@ impl RequestHandler for SetAssetPropertyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _asset_id = req.require_u64("asset")?;
         let _property = req.require_string("property")?;

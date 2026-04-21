@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetLogHandler;
 
@@ -31,7 +32,7 @@ impl RequestHandler for GetLogHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _log_level = req.get_string("logLevel");
         let _count = req.get_i32("count").unwrap_or(100);
         
@@ -64,7 +65,7 @@ impl RequestHandler for GetStackTracesHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _depth = req.get_i32("depth").unwrap_or(10);
         
         let mut builder = RsRespBuilder::new();
@@ -100,7 +101,7 @@ impl RequestHandler for ClearUnconfirmedTransactionsHandler {
         true
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("done", true);
         
@@ -134,7 +135,7 @@ impl RequestHandler for PopOffHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _num_blocks = req.get_i32("numBlocks");
         let _height = req.get_i32("height");
         
@@ -171,7 +172,7 @@ impl RequestHandler for ScanHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _num_blocks = req.get_i32("numBlocks");
         let _height = req.get_i32("height");
         
@@ -208,7 +209,7 @@ impl RequestHandler for ShutdownHandler {
         true
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("shutdown", true);
         
@@ -234,7 +235,7 @@ impl RequestHandler for GetPeerInfoHandler {
         vec![ApiTag::Debug, ApiTag::Network]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _peer = req.get_string("peer");
         
         let mut builder = RsRespBuilder::new();

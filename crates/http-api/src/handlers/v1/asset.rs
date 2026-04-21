@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetAssetHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetAssetHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.require_u64("asset")?;
         let _include_counts = req.get_bool("includeCounts");
         
@@ -66,7 +67,7 @@ impl RequestHandler for GetAssetsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _assets = req.get_string("assets");
         
         let mut builder = RsRespBuilder::new();
@@ -94,7 +95,7 @@ impl RequestHandler for GetAllAssetsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         
@@ -123,7 +124,7 @@ impl RequestHandler for GetAssetIdsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         
@@ -152,7 +153,7 @@ impl RequestHandler for GetAssetsByIssuerHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -182,7 +183,7 @@ impl RequestHandler for GetAssetAccountsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.require_u64("asset")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -213,7 +214,7 @@ impl RequestHandler for GetAssetTransfersHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.get_u64("asset");
         let _account = req.get_u64("account");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -248,7 +249,7 @@ impl RequestHandler for IssueAssetHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _name = req.require_string("name")?;
         let _description = req.get_string("description");
@@ -287,7 +288,7 @@ impl RequestHandler for TransferAssetHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _recipient = req.require_u64("recipient")?;
         let _asset_id = req.require_u64("asset")?;
@@ -325,7 +326,7 @@ impl RequestHandler for PlaceAskOrderHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _asset_id = req.require_u64("asset")?;
         let _quantity = req.require_string("quantityQNT")?;
@@ -363,7 +364,7 @@ impl RequestHandler for PlaceBidOrderHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _asset_id = req.require_u64("asset")?;
         let _quantity = req.require_string("quantityQNT")?;
@@ -401,7 +402,7 @@ impl RequestHandler for CancelAskOrderHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _order_id = req.require_u64("order")?;
         
@@ -436,7 +437,7 @@ impl RequestHandler for CancelBidOrderHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _order_id = req.require_u64("order")?;
         
@@ -467,7 +468,7 @@ impl RequestHandler for GetAskOrderHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _order_id = req.require_u64("order")?;
         
         let mut builder = RsRespBuilder::new();
@@ -500,7 +501,7 @@ impl RequestHandler for GetBidOrderHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _order_id = req.require_u64("order")?;
         
         let mut builder = RsRespBuilder::new();
@@ -533,7 +534,7 @@ impl RequestHandler for GetAskOrdersHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.require_u64("asset")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -563,7 +564,7 @@ impl RequestHandler for GetBidOrdersHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.require_u64("asset")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -593,7 +594,7 @@ impl RequestHandler for GetTradesHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _asset_id = req.get_u64("asset");
         let _account = req.get_u64("account");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);

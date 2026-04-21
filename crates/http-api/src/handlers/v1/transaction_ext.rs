@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetTransactionBytesHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetTransactionBytesHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.require_u64("transaction")?;
         
         let mut builder = RsRespBuilder::new();
@@ -55,7 +56,7 @@ impl RequestHandler for GetUnconfirmedTransactionIdsHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.get_u64("account");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -89,7 +90,7 @@ impl RequestHandler for SignTransactionHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _unsigned_bytes = req.get_string("unsignedTransactionBytes");
         
@@ -120,7 +121,7 @@ impl RequestHandler for GetReferencedTransactionsHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.require_u64("transaction")?;
         let _include_indirect = req.get_bool("includeIndirect");
         

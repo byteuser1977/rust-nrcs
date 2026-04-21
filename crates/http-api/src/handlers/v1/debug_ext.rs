@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct DumpPeersHandler;
 
@@ -31,7 +32,7 @@ impl RequestHandler for DumpPeersHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _exclude_active = req.get_bool("excludeActive");
         
         let mut builder = RsRespBuilder::new();
@@ -67,7 +68,7 @@ impl RequestHandler for TrimDerivedTablesHandler {
         true
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("done", true);
         
@@ -101,7 +102,7 @@ impl RequestHandler for LuceneReindexHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _force = req.get_bool("force");
         
         let mut builder = RsRespBuilder::new();
@@ -137,7 +138,7 @@ impl RequestHandler for RebroadcastUnconfirmedTransactionsHandler {
         true
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("done", true);
         
@@ -167,7 +168,7 @@ impl RequestHandler for RetrievePrunedDataHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.get_u64("transaction");
         
         let mut builder = RsRespBuilder::new();
@@ -195,7 +196,7 @@ impl RequestHandler for GetExecutedTransactionsHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _executed_phased = req.get_u64("executedPhasedTransaction");
         let _failed_phased = req.get_u64("failedPhasedTransaction");
         

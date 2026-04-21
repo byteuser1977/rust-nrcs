@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetCoinExchangeOrderHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetCoinExchangeOrderHandler {
         vec![ApiTag::Ce]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _order_id = req.require_u64("order")?;
         
         let mut builder = RsRespBuilder::new();
@@ -63,7 +64,7 @@ impl RequestHandler for GetCoinExchangeOrderIdsHandler {
         vec![ApiTag::Ce]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.get_u64("account");
         let _exchange = req.get_u64("exchange");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -94,7 +95,7 @@ impl RequestHandler for GetCoinExchangeOrdersHandler {
         vec![ApiTag::Ce]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.get_u64("account");
         let _exchange = req.get_u64("exchange");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -125,7 +126,7 @@ impl RequestHandler for GetCoinExchangeTradesHandler {
         vec![ApiTag::Ce]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.get_u64("account");
         let _exchange = req.get_u64("exchange");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -160,7 +161,7 @@ impl RequestHandler for ExchangeCoinsHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _exchange = req.require_u64("exchange")?;
         let _pair_currency = req.get_i32("pairCurrency").unwrap_or(0);
@@ -199,7 +200,7 @@ impl RequestHandler for CancelCoinExchangeOrderHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _order_id = req.require_u64("order")?;
         
@@ -230,7 +231,7 @@ impl RequestHandler for SimulateCoinExchangeHandler {
         vec![ApiTag::Ce]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _exchange = req.require_u64("exchange")?;
         let _pair_currency = req.get_i32("pairCurrency").unwrap_or(0);
         let _quantity = req.require_string("quantityQNT")?;

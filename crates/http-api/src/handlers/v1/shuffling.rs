@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetShufflingHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetShufflingHandler {
         vec![ApiTag::Shuffling]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _shuffling_id = req.require_u64("shuffling")?;
         
         let mut builder = RsRespBuilder::new();
@@ -64,7 +65,7 @@ impl RequestHandler for GetAllShufflingsHandler {
         vec![ApiTag::Shuffling]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         let _include_finished = req.get_bool("includeFinished");
@@ -94,7 +95,7 @@ impl RequestHandler for GetAccountShufflingsHandler {
         vec![ApiTag::Shuffling]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -129,7 +130,7 @@ impl RequestHandler for ShufflingCreateHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _holding = req.get_u64("holding");
         let _amount = req.require_string("amount")?;
@@ -167,7 +168,7 @@ impl RequestHandler for ShufflingRegisterHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _shuffling_id = req.get_u64("shuffling");
         
@@ -202,7 +203,7 @@ impl RequestHandler for ShufflingProcessHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _shuffling_id = req.require_u64("shuffling")?;
         
@@ -237,7 +238,7 @@ impl RequestHandler for ShufflingVerifyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _shuffling_id = req.require_u64("shuffling")?;
         
@@ -272,7 +273,7 @@ impl RequestHandler for ShufflingCancelHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _shuffling_id = req.require_u64("shuffling")?;
         

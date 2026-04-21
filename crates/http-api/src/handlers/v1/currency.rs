@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetCurrencyHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetCurrencyHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _currency_id = req.get_u64("currency");
         let _code = req.get_string("code");
         let _include_counts = req.get_bool("includeCounts");
@@ -68,7 +69,7 @@ impl RequestHandler for GetCurrenciesHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _currencies = req.get_string("currencies");
         
         let mut builder = RsRespBuilder::new();
@@ -96,7 +97,7 @@ impl RequestHandler for GetAllCurrenciesHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         
@@ -125,7 +126,7 @@ impl RequestHandler for GetCurrencyIdsHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         
@@ -154,7 +155,7 @@ impl RequestHandler for GetCurrenciesByIssuerHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -184,7 +185,7 @@ impl RequestHandler for GetCurrencyAccountsHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _currency_id = req.require_u64("currency")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -214,7 +215,7 @@ impl RequestHandler for GetCurrencyTransfersHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _currency_id = req.get_u64("currency");
         let _account = req.get_u64("account");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -251,7 +252,7 @@ impl RequestHandler for IssueCurrencyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _name = req.require_string("name")?;
         let _code = req.require_string("code")?;
@@ -290,7 +291,7 @@ impl RequestHandler for TransferCurrencyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _recipient = req.require_u64("recipient")?;
         let _currency_id = req.require_u64("currency")?;
@@ -328,7 +329,7 @@ impl RequestHandler for CurrencyBuyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _currency_id = req.require_u64("currency")?;
         let _rate = req.require_string("rateNQT")?;
@@ -365,7 +366,7 @@ impl RequestHandler for CurrencySellHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _currency_id = req.require_u64("currency")?;
         let _rate = req.require_string("rateNQT")?;
@@ -398,7 +399,7 @@ impl RequestHandler for CanDeleteCurrencyHandler {
         vec![ApiTag::Ms]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         let _currency_id = req.require_u64("currency")?;
         
@@ -431,7 +432,7 @@ impl RequestHandler for DeleteCurrencyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _currency_id = req.require_u64("currency")?;
         

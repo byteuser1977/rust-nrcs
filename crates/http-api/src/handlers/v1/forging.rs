@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct StartForgingHandler;
 
@@ -31,7 +32,7 @@ impl RequestHandler for StartForgingHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         
         let mut builder = RsRespBuilder::new();
@@ -68,7 +69,7 @@ impl RequestHandler for StopForgingHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.get_string("secretPhrase");
         let _account = req.get_u64("account");
         
@@ -100,7 +101,7 @@ impl RequestHandler for GetForgingHandler {
         vec![ApiTag::Forging]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.get_string("secretPhrase");
         let _account_id = req.get_u64("accountId");
         
@@ -129,7 +130,7 @@ impl RequestHandler for GetNextBlockGeneratorsHandler {
         vec![ApiTag::Forging]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _limit = req.get_i32("limit").unwrap_or(10);
         
         let mut builder = RsRespBuilder::new();
@@ -160,7 +161,7 @@ impl RequestHandler for GetAccountCurrentAskOrderIdsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         let _asset = req.get_u64("asset");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -191,7 +192,7 @@ impl RequestHandler for GetAccountCurrentBidOrderIdsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         let _asset = req.get_u64("asset");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -222,7 +223,7 @@ impl RequestHandler for GetAllOpenAskOrdersHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         
@@ -251,7 +252,7 @@ impl RequestHandler for GetAllOpenBidOrdersHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         

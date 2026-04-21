@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct HashHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for HashHandler {
         vec![ApiTag::Utils]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _hash_algorithm = req.get_i32("hashAlgorithm").unwrap_or(0);
         let _secret = req.get_string("secret");
         let _secret_is_text = req.get_bool("secretIsText");
@@ -57,7 +58,7 @@ impl RequestHandler for HexConvertHandler {
         vec![ApiTag::Utils]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _string = req.require_string("string")?;
         
         let mut builder = RsRespBuilder::new();
@@ -85,7 +86,7 @@ impl RequestHandler for LongConvertHandler {
         vec![ApiTag::Utils]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _id = req.require_string("id")?;
         
         let mut builder = RsRespBuilder::new();
@@ -115,7 +116,7 @@ impl RequestHandler for RsConvertHandler {
         vec![ApiTag::Utils]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_string("account")?;
         
         let mut builder = RsRespBuilder::new();
@@ -145,7 +146,7 @@ impl RequestHandler for ParseTransactionHandler {
         vec![ApiTag::Utils, ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_bytes = req.get_string("transactionBytes");
         let _transaction_json = req.get_string("transactionJSON");
         
@@ -188,7 +189,7 @@ impl RequestHandler for FullHashToIdHandler {
         vec![ApiTag::Utils]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _full_hash = req.require_string("fullHash")?;
         
         let mut builder = RsRespBuilder::new();
@@ -216,7 +217,7 @@ impl RequestHandler for GetECBlockHandler {
         vec![ApiTag::Blocks, ApiTag::Utils]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _timestamp = req.get_i32("timestamp");
         
         let mut builder = RsRespBuilder::new();
@@ -247,7 +248,7 @@ impl RequestHandler for CalculateFeeHandler {
         vec![ApiTag::Utils, ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_bytes = req.get_string("transactionBytes");
         let _transaction_json = req.get_string("transactionJSON");
         

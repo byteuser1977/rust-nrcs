@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetPeersHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetPeersHandler {
         vec![ApiTag::Network]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _state = req.get_string("state");
         let _include_info = req.get_bool("includePeerInfo");
         let _active = req.get_bool("active");
@@ -58,7 +59,7 @@ impl RequestHandler for GetPeerHandler {
         vec![ApiTag::Network]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _peer_address = req.require_string("peer")?;
         
         let mut builder = RsRespBuilder::new();
@@ -96,7 +97,7 @@ impl RequestHandler for GetInboundPeersHandler {
         vec![ApiTag::Network]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _include_info = req.get_bool("includePeerInfo");
         
         let mut builder = RsRespBuilder::new();
@@ -128,7 +129,7 @@ impl RequestHandler for AddPeerHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _peer_address = req.require_string("peer")?;
         
         let mut builder = RsRespBuilder::new();
@@ -160,7 +161,7 @@ impl RequestHandler for BlacklistPeerHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _peer_address = req.require_string("peer")?;
         
         let mut builder = RsRespBuilder::new();
@@ -188,7 +189,7 @@ impl RequestHandler for GetMyInfoHandler {
         vec![ApiTag::Network]
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder
             .insert("application", "NRCS")
@@ -221,7 +222,7 @@ impl RequestHandler for GetPluginsHandler {
         vec![ApiTag::Network]
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("plugins", json!([]));
         

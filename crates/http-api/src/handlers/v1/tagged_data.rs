@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetTaggedDataHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetTaggedDataHandler {
         vec![ApiTag::Data]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.require_u64("transaction")?;
         let _include_data = req.get_bool("includeData");
         
@@ -67,7 +68,7 @@ impl RequestHandler for GetAllTaggedDataHandler {
         vec![ApiTag::Data]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         
@@ -96,7 +97,7 @@ impl RequestHandler for GetAccountTaggedDataHandler {
         vec![ApiTag::Data]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -135,7 +136,7 @@ impl RequestHandler for UploadTaggedDataHandler {
         Some("file")
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _name = req.require_string("name")?;
         
@@ -167,7 +168,7 @@ impl RequestHandler for DownloadTaggedDataHandler {
         vec![ApiTag::Data]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.require_u64("transaction")?;
         let _retrieve = req.get_bool("retrieve");
         
@@ -198,7 +199,7 @@ impl RequestHandler for VerifyTaggedDataHandler {
         vec![ApiTag::Data]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.require_u64("transaction")?;
         let _data = req.get_string("data");
         let _hash = req.get_string("hash");
@@ -228,7 +229,7 @@ impl RequestHandler for SearchTaggedDataHandler {
         vec![ApiTag::Data, ApiTag::Search]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _query = req.get_string("query");
         let _tag = req.get_string("tag");
         let _channel = req.get_string("channel");

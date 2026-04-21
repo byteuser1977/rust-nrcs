@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GenerateTokenHandler;
 
@@ -30,7 +31,7 @@ impl RequestHandler for GenerateTokenHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _website = req.require_string("website")?;
         
@@ -64,7 +65,7 @@ impl RequestHandler for DecodeTokenHandler {
         vec![ApiTag::Tokens]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _token = req.require_string("token")?;
         let _website = req.get_string("website");
         
@@ -99,7 +100,7 @@ impl RequestHandler for DetectMimeTypeHandler {
         vec![ApiTag::Utils]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _data = req.get_string("data");
         let _filename = req.get_string("filename");
         

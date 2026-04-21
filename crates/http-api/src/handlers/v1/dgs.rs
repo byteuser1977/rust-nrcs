@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetDGSGoodHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetDGSGoodHandler {
         vec![ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _goods_id = req.require_u64("goods")?;
         
         let mut builder = RsRespBuilder::new();
@@ -65,7 +66,7 @@ impl RequestHandler for GetDGSGoodsHandler {
         vec![ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _seller = req.get_u64("seller");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -96,7 +97,7 @@ impl RequestHandler for GetAllDGSGoodsHandler {
         vec![ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         
@@ -125,7 +126,7 @@ impl RequestHandler for GetDGSPurchaseHandler {
         vec![ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _purchase_id = req.require_u64("purchase")?;
         
         let mut builder = RsRespBuilder::new();
@@ -164,7 +165,7 @@ impl RequestHandler for GetDGSPurchasesHandler {
         vec![ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _seller = req.get_u64("seller");
         let _buyer = req.get_u64("buyer");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -199,7 +200,7 @@ impl RequestHandler for DGSListingHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _name = req.require_string("name")?;
         let _description = req.get_string("description");
@@ -238,7 +239,7 @@ impl RequestHandler for DGSDelistingHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _goods_id = req.require_u64("goods")?;
         
@@ -273,7 +274,7 @@ impl RequestHandler for DGSPurchaseHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _goods_id = req.require_u64("goods")?;
         let _quantity = req.get_i32("quantity").unwrap_or(1);
@@ -311,7 +312,7 @@ impl RequestHandler for DGSDeliveryHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _purchase_id = req.require_u64("purchase")?;
         
@@ -346,7 +347,7 @@ impl RequestHandler for DGSFeedbackHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _purchase_id = req.require_u64("purchase")?;
         
@@ -381,7 +382,7 @@ impl RequestHandler for DGSRefundHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _purchase_id = req.require_u64("purchase")?;
         let _refund = req.get_string("refundNQT");

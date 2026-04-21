@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct ReadMessageHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for ReadMessageHandler {
         vec![ApiTag::Messages]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.require_u64("transaction")?;
         let _secret_phrase = req.get_string("secretPhrase");
         let _retrieve = req.get_bool("retrieve");
@@ -67,7 +68,7 @@ impl RequestHandler for SendMessageHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _recipient = req.get_u64("recipient");
         let _message = req.get_string("message");
@@ -102,7 +103,7 @@ impl RequestHandler for GetPrunableMessageHandler {
         vec![ApiTag::Messages]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.require_u64("transaction")?;
         let _secret_phrase = req.get_string("secretPhrase");
         
@@ -133,7 +134,7 @@ impl RequestHandler for GetPrunableMessagesHandler {
         vec![ApiTag::Messages]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.get_u64("account");
         let _other_account = req.get_u64("otherAccount");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -164,7 +165,7 @@ impl RequestHandler for DownloadPrunableMessageHandler {
         vec![ApiTag::Messages]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.require_u64("transaction")?;
         
         let mut builder = RsRespBuilder::new();
@@ -194,7 +195,7 @@ impl RequestHandler for VerifyPrunableMessageHandler {
         vec![ApiTag::Messages]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.require_u64("transaction")?;
         let _message = req.get_string("message");
         let _message_is_text = req.get_bool("messageIsText");

@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetTransactionHandler;
 
@@ -26,7 +27,7 @@ impl RequestHandler for GetTransactionHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _transaction_id = req.get_u64("transaction");
         let _full_hash = req.get_string("fullHash");
         
@@ -74,7 +75,7 @@ impl RequestHandler for GetTransactionsHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.get_u64("account");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(99);
@@ -104,7 +105,7 @@ impl RequestHandler for GetUnconfirmedTransactionsHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("unconfirmedTransactions", serde_json::json!([]));
         
@@ -134,7 +135,7 @@ impl RequestHandler for SendMoneyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _recipient = req.require_u64("recipient")?;
         let _amount = req.require_string("amountNQT")?;
@@ -175,7 +176,7 @@ impl RequestHandler for BroadcastTransactionHandler {
         true
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         
         builder

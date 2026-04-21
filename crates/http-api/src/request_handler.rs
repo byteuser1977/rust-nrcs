@@ -4,10 +4,12 @@
 
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
+use crate::state::ApiState;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Instant;
+use std::sync::Arc;
 use async_trait::async_trait;
 
 pub struct ApiRequest {
@@ -194,7 +196,7 @@ pub trait RequestHandler: Send + Sync {
         true
     }
     
-    fn start_db_transaction(&self) -> bool {
+    fn start_db_transactions(&self) -> bool {
         false
     }
     
@@ -202,7 +204,7 @@ pub trait RequestHandler: Send + Sync {
         false
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError>;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError>;
 }
 
 pub type HandlerPtr = std::sync::Arc<dyn RequestHandler>;

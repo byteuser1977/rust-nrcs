@@ -17,7 +17,7 @@ use crate::request_handler::{responses, ApiRequest, RsRespWithData};
 use crate::state::ApiState;
 
 pub async fn handle_nrcs_api(
-    State(_state): State<ApiState>,
+    State(state): State<ApiState>,
     method: Method,
     Query(query): Query<HashMap<String, String>>,
     body: Bytes,
@@ -58,7 +58,7 @@ pub async fn handle_nrcs_api(
     
     let api_request = ApiRequest::new(params);
     
-    match handler.process_request(&api_request).await {
+    match handler.process_request(&api_request, &state).await {
         Ok(mut resp) => {
             resp.base.request_processing_time = start_time.elapsed().as_millis() as u64;
             json_response(resp, start_time.elapsed().as_millis() as u64)

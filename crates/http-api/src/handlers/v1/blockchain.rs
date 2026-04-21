@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetBlockchainStatusHandler;
 
@@ -30,16 +31,27 @@ impl RequestHandler for GetBlockchainStatusHandler {
         false
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let latest_block = state.block_repo
+            .find_latest()
+            .await
+            .map_err(ApiError::Repository)?;
+        
+        let (last_block_id, last_block_height, cumulative_difficulty) = match latest_block {
+            Some(b) => (b.id.to_string(), b.height, hex::encode(&b.cumulative_difficulty)),
+            None => ("0".to_string(), 0, "0".to_string()),
+        };
+        
         let mut builder = RsRespBuilder::new();
         
         builder
             .insert("application", "NRCS")
             .insert("version", "2.1.0")
             .insert("time", get_epoch_time())
-            .insert("lastBlock", "0")
-            .insert("cumulativeDifficulty", "0")
-            .insert("numberOfBlocks", 1i32)
+            .insert("lastBlock", last_block_id)
+            .insert("lastBlockHeight", last_block_height)
+            .insert("cumulativeDifficulty", cumulative_difficulty)
+            .insert("numberOfBlocks", last_block_height + 1)
             .insert("lastBlockchainFeeder", "")
             .insert("lastBlockchainFeederHeight", 0i32)
             .insert("isScanning", false)
@@ -87,7 +99,7 @@ impl RequestHandler for GetTimeHandler {
         false
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("time", get_epoch_time());
         
@@ -113,8 +125,18 @@ impl RequestHandler for GetStateHandler {
         vec![ApiTag::Info]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let include_counts = req.get_bool("includeCounts");
+        
+        let latest_block = state.block_repo
+            .find_latest()
+            .await
+            .map_err(ApiError::Repository)?;
+        
+        let (last_block_id, last_block_height, cumulative_difficulty) = match latest_block {
+            Some(b) => (b.id.to_string(), b.height, hex::encode(&b.cumulative_difficulty)),
+            None => ("0".to_string(), 0, "0".to_string()),
+        };
         
         let mut builder = RsRespBuilder::new();
         
@@ -122,9 +144,9 @@ impl RequestHandler for GetStateHandler {
             .insert("application", "NRCS")
             .insert("version", "2.1.0")
             .insert("time", get_epoch_time())
-            .insert("lastBlock", "0")
-            .insert("cumulativeDifficulty", "0")
-            .insert("numberOfBlocks", 1i32);
+            .insert("lastBlock", last_block_id)
+            .insert("cumulativeDifficulty", cumulative_difficulty)
+            .insert("numberOfBlocks", last_block_height + 1);
         
         if include_counts {
             builder
@@ -160,7 +182,7 @@ impl RequestHandler for GetConstantsHandler {
         false
     }
     
-    async fn process_request(&self, _req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         
         builder

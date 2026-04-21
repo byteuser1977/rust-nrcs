@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+use crate::state::ApiState;
 
 pub struct GetAliasHandler;
 
@@ -27,7 +28,7 @@ impl RequestHandler for GetAliasHandler {
         vec![ApiTag::Aliases]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _alias_id = req.get_u64("alias");
         let _alias_name = req.get_string("aliasName");
         
@@ -63,7 +64,7 @@ impl RequestHandler for GetAliasesHandler {
         vec![ApiTag::Aliases]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.get_u64("account");
         let _timestamp = req.get_i32("timestamp");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -94,7 +95,7 @@ impl RequestHandler for GetAliasesLikeHandler {
         vec![ApiTag::Aliases]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _alias_prefix = req.require_string("aliasPrefix")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
@@ -124,7 +125,7 @@ impl RequestHandler for GetAliasCountHandler {
         vec![ApiTag::Aliases]
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
         
         let mut builder = RsRespBuilder::new();
@@ -156,7 +157,7 @@ impl RequestHandler for SetAliasHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _alias_name = req.require_string("aliasName")?;
         let _alias_uri = req.get_string("aliasURI");
@@ -193,7 +194,7 @@ impl RequestHandler for DeleteAliasHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _alias_id = req.get_u64("alias");
         let _alias_name = req.get_string("aliasName");
@@ -229,7 +230,7 @@ impl RequestHandler for SellAliasHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _alias_id = req.get_u64("alias");
         let _alias_name = req.get_string("aliasName");
@@ -267,7 +268,7 @@ impl RequestHandler for BuyAliasHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _alias_id = req.get_u64("alias");
         let _alias_name = req.get_string("aliasName");
