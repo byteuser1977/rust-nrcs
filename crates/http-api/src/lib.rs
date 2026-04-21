@@ -65,6 +65,8 @@ pub fn init_api_handlers() {
     register_api("getGuaranteedBalance", Arc::new(GetGuaranteedBalanceHandler::new()));
     register_api("setAccountInfo", Arc::new(SetAccountInfoHandler::new()));
     register_api("setAccountProperty", Arc::new(SetAccountPropertyHandler::new()));
+    register_api("getAccountAssetCount", Arc::new(GetAccountAssetCountHandler::new()));
+    register_api("getAccountCurrencyCount", Arc::new(GetAccountCurrencyCountHandler::new()));
     
     // Account Control APIs
     register_api("getAccountControl", Arc::new(GetAccountControlHandler::new()));
@@ -84,9 +86,14 @@ pub fn init_api_handlers() {
     register_api("getTransaction", Arc::new(GetTransactionHandler::new()));
     register_api("getTransactions", Arc::new(GetTransactionsHandler::new()));
     register_api("getUnconfirmedTransactions", Arc::new(GetUnconfirmedTransactionsHandler::new()));
+    register_api("getUnconfirmedTransactionIds", Arc::new(GetUnconfirmedTransactionIdsHandler::new()));
+    register_api("getTransactionBytes", Arc::new(GetTransactionBytesHandler::new()));
     register_api("sendMoney", Arc::new(SendMoneyHandler::new()));
     register_api("sendMessage", Arc::new(SendMessageHandler::new()));
     register_api("broadcastTransaction", Arc::new(BroadcastTransactionHandler::new()));
+    register_api("signTransaction", Arc::new(SignTransactionHandler::new()));
+    register_api("getReferencedTransactions", Arc::new(GetReferencedTransactionsHandler::new()));
+    register_api("getExecutedTransactions", Arc::new(GetExecutedTransactionsHandler::new()));
     
     // Asset APIs
     register_api("getAsset", Arc::new(GetAssetHandler::new()));
@@ -96,6 +103,10 @@ pub fn init_api_handlers() {
     register_api("getAssetsByIssuer", Arc::new(GetAssetsByIssuerHandler::new()));
     register_api("getAssetAccounts", Arc::new(GetAssetAccountsHandler::new()));
     register_api("getAssetTransfers", Arc::new(GetAssetTransfersHandler::new()));
+    register_api("getAssetAccountCount", Arc::new(GetAssetAccountCountHandler::new()));
+    register_api("getAssetHistory", Arc::new(GetAssetHistoryHandler::new()));
+    register_api("getAssetDividends", Arc::new(GetAssetDividendsHandler::new()));
+    register_api("getAssetProperties", Arc::new(GetAssetPropertiesHandler::new()));
     register_api("issueAsset", Arc::new(IssueAssetHandler::new()));
     register_api("transferAsset", Arc::new(TransferAssetHandler::new()));
     register_api("placeAskOrder", Arc::new(PlaceAskOrderHandler::new()));
@@ -111,6 +122,9 @@ pub fn init_api_handlers() {
     register_api("getAccountCurrentBidOrderIds", Arc::new(GetAccountCurrentBidOrderIdsHandler::new()));
     register_api("getAllOpenAskOrders", Arc::new(GetAllOpenAskOrdersHandler::new()));
     register_api("getAllOpenBidOrders", Arc::new(GetAllOpenBidOrdersHandler::new()));
+    register_api("dividendPayment", Arc::new(DividendPaymentHandler::new()));
+    register_api("increaseAssetShares", Arc::new(IncreaseAssetSharesHandler::new()));
+    register_api("setAssetProperty", Arc::new(SetAssetPropertyHandler::new()));
     
     // Alias APIs
     register_api("getAlias", Arc::new(GetAliasHandler::new()));
@@ -167,10 +181,15 @@ pub fn init_api_handlers() {
     register_api("getCurrenciesByIssuer", Arc::new(GetCurrenciesByIssuerHandler::new()));
     register_api("getCurrencyAccounts", Arc::new(GetCurrencyAccountsHandler::new()));
     register_api("getCurrencyTransfers", Arc::new(GetCurrencyTransfersHandler::new()));
+    register_api("getCurrencyAccountCount", Arc::new(GetCurrencyAccountCountHandler::new()));
+    register_api("getCurrencyFounders", Arc::new(GetCurrencyFoundersHandler::new()));
     register_api("issueCurrency", Arc::new(IssueCurrencyHandler::new()));
     register_api("transferCurrency", Arc::new(TransferCurrencyHandler::new()));
     register_api("currencyBuy", Arc::new(CurrencyBuyHandler::new()));
     register_api("currencySell", Arc::new(CurrencySellHandler::new()));
+    register_api("currencyMint", Arc::new(CurrencyMintHandler::new()));
+    register_api("currencyReserveIncrease", Arc::new(CurrencyReserveIncreaseHandler::new()));
+    register_api("currencyReserveClaim", Arc::new(CurrencyReserveClaimHandler::new()));
     register_api("canDeleteCurrency", Arc::new(CanDeleteCurrencyHandler::new()));
     register_api("deleteCurrency", Arc::new(DeleteCurrencyHandler::new()));
     
@@ -212,6 +231,8 @@ pub fn init_api_handlers() {
     register_api("downloadTaggedData", Arc::new(DownloadTaggedDataHandler::new()));
     register_api("verifyTaggedData", Arc::new(VerifyTaggedDataHandler::new()));
     register_api("searchTaggedData", Arc::new(SearchTaggedDataHandler::new()));
+    register_api("extendTaggedData", Arc::new(ExtendTaggedDataHandler::new()));
+    register_api("getTaggedDataExtendTransactions", Arc::new(GetTaggedDataExtendTransactionsHandler::new()));
     
     // Shuffling APIs
     register_api("getShuffling", Arc::new(GetShufflingHandler::new()));
@@ -238,4 +259,18 @@ pub fn init_api_handlers() {
     register_api("scan", Arc::new(ScanHandler::new()));
     register_api("shutdown", Arc::new(ShutdownHandler::new()));
     register_api("getPeerInfo", Arc::new(GetPeerInfoHandler::new()));
+    register_api("dumpPeers", Arc::new(DumpPeersHandler::new()));
+    register_api("trimDerivedTables", Arc::new(TrimDerivedTablesHandler::new()));
+    register_api("luceneReindex", Arc::new(LuceneReindexHandler::new()));
+    register_api("rebroadcastUnconfirmedTransactions", Arc::new(RebroadcastUnconfirmedTransactionsHandler::new()));
+    register_api("retrievePrunedData", Arc::new(RetrievePrunedDataHandler::new()));
+    
+    // Coin Exchange APIs
+    register_api("getCoinExchangeOrder", Arc::new(GetCoinExchangeOrderHandler::new()));
+    register_api("getCoinExchangeOrderIds", Arc::new(GetCoinExchangeOrderIdsHandler::new()));
+    register_api("getCoinExchangeOrders", Arc::new(GetCoinExchangeOrdersHandler::new()));
+    register_api("getCoinExchangeTrades", Arc::new(GetCoinExchangeTradesHandler::new()));
+    register_api("exchangeCoins", Arc::new(ExchangeCoinsHandler::new()));
+    register_api("cancelCoinExchangeOrder", Arc::new(CancelCoinExchangeOrderHandler::new()));
+    register_api("simulateCoinExchange", Arc::new(SimulateCoinExchangeHandler::new()));
 }
