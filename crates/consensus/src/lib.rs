@@ -14,21 +14,24 @@
 pub mod pow;
 pub mod pos;
 
+pub mod generator;
+pub mod target;
+pub mod selection;
+pub mod block_gen;
+pub mod generation_signature;
+
 pub use pos::PosEngine;
 pub use pow::PoWEngine;
 
-pub mod prelude {
-    pub use crate::{
-        ConsensusEngine,
-        PoSEngine,
-        PosEngine,
-        PoWEngine,
-        BlockchainState,
-        AccountSnapshot,
-        DifficultyAdjustmentParams,
-        adjust_difficulty,
-    };
-}
+pub use generator::{Generator, GeneratorInfo, GeneratorRegistry, ActiveGenerator};
+pub use target::{TargetCalculator, TargetInfo};
+pub use selection::{ForgerSelector, ForgerSelection, ForgerInfo, ForgerCandidate, ActiveGeneratorList};
+pub use block_gen::{BlockGenerator, BlockTemplate};
+pub use generation_signature::{
+    calculate_generation_signature,
+    verify_generation_signature,
+    derive_hit_from_signature,
+};
 
 use blockchain_types::*;
 use thiserror::Error;
@@ -252,4 +255,30 @@ mod tests {
         let normal = adjust_difficulty(current, &[14, 15, 16], &params);
         assert_eq!(normal, current);
     }
+}
+
+pub mod prelude {
+    pub use crate::{
+        ConsensusEngine,
+        PoSEngine,
+        PosEngine,
+        PoWEngine,
+        BlockchainState,
+        AccountSnapshot,
+        DifficultyAdjustmentParams,
+        adjust_difficulty,
+        Generator,
+        GeneratorInfo,
+        GeneratorRegistry,
+        ActiveGenerator,
+        TargetCalculator,
+        TargetInfo,
+        ForgerSelector,
+        ForgerSelection,
+        ForgerInfo,
+        ForgerCandidate,
+        ActiveGeneratorList,
+        BlockGenerator,
+        BlockTemplate,
+    };
 }

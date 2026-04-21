@@ -73,10 +73,10 @@ fn test_forger_selection() {
     
     let state = consensus::BlockchainState::new(
         1,
-        [0u8; 32],
+        Hash256([0u8; 32]),
         1_000_000,
         vec![0u8; 32],
-        [0u8; 64],
+        Hash512([0u8; 64]),
         1000,
         accounts,
     );
@@ -113,10 +113,10 @@ fn test_blockchain_state_total_effective_balance() {
     
     let state = consensus::BlockchainState::new(
         1,
-        [0u8; 32],
+        Hash256([0u8; 32]),
         1_000_000,
         vec![0u8; 32],
-        [0u8; 64],
+        Hash512([0u8; 64]),
         1000,
         accounts,
     );
