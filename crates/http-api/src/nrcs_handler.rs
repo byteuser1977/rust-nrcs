@@ -81,6 +81,7 @@ fn error_to_response(e: &ApiError) -> RsRespWithData {
         ApiError::IncorrectBlock => responses::incorrect_block(),
         ApiError::IncorrectHeight => responses::incorrect_height(),
         ApiError::IncorrectTimestamp => responses::incorrect_timestamp(),
+        ApiError::IncorrectPeerAddress => RsRespWithData::from(crate::request_handler::RsResp::error(13, "Incorrect peer address")),
         ApiError::NotFound(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(6, msg.clone())),
         ApiError::Validation(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(4, msg.clone())),
         ApiError::Unauthorized(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(2, msg.clone())),

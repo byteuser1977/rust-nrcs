@@ -133,6 +133,15 @@ impl RsRespBuilder {
         self
     }
     
+    pub fn extend_json(&mut self, json: Value) -> &mut Self {
+        if let Value::Object(map) = json {
+            for (k, v) in map {
+                self.data.insert(k, v);
+            }
+        }
+        self
+    }
+    
     pub fn build(self) -> RsRespWithData {
         RsRespWithData {
             base: RsResp::success(),

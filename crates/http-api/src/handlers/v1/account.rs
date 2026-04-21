@@ -517,6 +517,13 @@ fn format_account_rs(account_id: u64) -> String {
     )
 }
 
-fn derive_account_id(_secret_phrase: &str) -> u64 {
-    0u64
+fn derive_account_id(secret_phrase: &str) -> u64 {
+    let seed = crypto::sha256(secret_phrase.as_bytes());
+    let kp = crypto::keypair_from_seed(&seed);
+    let public_key = kp.public_key();
+    let pk_bytes = public_key.as_bytes();
+    let hash = crypto::sha256(pk_bytes);
+    let mut bytes = [0u8; 8];
+    bytes.copy_from_slice(&hash[0..8]);
+    u64::from_le_bytes(bytes)
 }

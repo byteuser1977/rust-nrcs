@@ -28,22 +28,42 @@ impl RequestHandler for GetAssetHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _asset_id = req.require_u64("asset")?;
-        let _include_counts = req.get_bool("includeCounts");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let asset_id = req.require_u64("asset")?;
+        let include_counts = req.get_bool("includeCounts");
+        
+        let asset = state.asset_repo
+            .find_by_asset_id(asset_id as i64)
+            .await
+            .map_err(ApiError::Repository)?;
+        
+        let asset = match asset {
+            Some(a) => a,
+            None => return Err(ApiError::NotFound("Asset not found".to_string())),
+        };
+        
+        let asset_domain = asset.to_domain().map_err(|e| ApiError::Internal(e.to_string()))?;
         
         let mut builder = RsRespBuilder::new();
+        
         builder
-            .insert("asset", "0")
-            .insert("account", "0")
-            .insert("accountRS", "NRCS-0-0-0")
-            .insert("name", "")
-            .insert("description", "")
-            .insert("quantityQNT", "0")
-            .insert("decimals", 0i32)
+            .insert("asset", asset.id.to_string())
+            .insert("account", asset.account_id.to_string())
+            .insert("accountRS", format_account_rs(asset.account_id as u64))
+            .insert("name", asset.name.clone())
+            .insert("description", asset.description.clone().unwrap_or_default())
+            .insert("quantityQNT", asset.quantity.to_string())
+            .insert("decimals", asset.decimals as i32)
             .insert("numberOfTrades", 0i32)
             .insert("numberOfTransfers", 0i32)
             .insert("numberOfAccounts", 0i32);
+        
+        if include_counts {
+            builder
+                .insert("numberOfTrades", 0i32)
+                .insert("numberOfTransfers", 0i32)
+                .insert("numberOfAccounts", 0i32);
+        }
         
         Ok(builder.build())
     }
@@ -67,11 +87,28 @@ impl RequestHandler for GetAssetsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _assets = req.get_string("assets");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let assets_str = req.get_string("assets").unwrap_or_default();
+        let asset_ids: Vec<i64> = assets_str.split(',')
+            .filter_map(|s| s.trim().parse().ok())
+            .collect();
+        
+        let mut assets = Vec::new();
+        for id in asset_ids {
+            if let Some(asset) = state.asset_repo.find_by_asset_id(id).await.map_err(ApiError::Repository)? {
+                assets.push(json!({
+                    "asset": asset.id.to_string(),
+                    "account": asset.account_id.to_string(),
+                    "accountRS": format_account_rs(asset.account_id as u64),
+                    "name": asset.name,
+                    "quantityQNT": asset.quantity.to_string(),
+                    "decimals": asset.decimals as i32
+                }));
+            }
+        }
         
         let mut builder = RsRespBuilder::new();
-        builder.insert("assets", json!([]));
+        builder.insert("assets", json!(assets));
         
         Ok(builder.build())
     }
@@ -95,12 +132,29 @@ impl RequestHandler for GetAllAssetsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let last_index = req.get_i32("lastIndex").unwrap_or(99);
+        let limit = (last_index - first_index + 1) as i64;
+        
+        let assets = state.asset_repo
+            .find_tradable(limit)
+            .await
+            .map_err(ApiError::Repository)?;
+        
+        let assets_json: Vec<serde_json::Value> = assets.iter()
+            .map(|a| json!({
+                "asset": a.id.to_string(),
+                "account": a.account_id.to_string(),
+                "accountRS": format_account_rs(a.account_id as u64),
+                "name": a.name,
+                "quantityQNT": a.quantity.to_string(),
+                "decimals": a.decimals as i32
+            }))
+            .collect();
         
         let mut builder = RsRespBuilder::new();
-        builder.insert("assets", json!([]));
+        builder.insert("assets", json!(assets_json));
         
         Ok(builder.build())
     }
@@ -124,12 +178,22 @@ impl RequestHandler for GetAssetIdsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let last_index = req.get_i32("lastIndex").unwrap_or(99);
+        let limit = (last_index - first_index + 1) as i64;
+        
+        let assets = state.asset_repo
+            .find_tradable(limit)
+            .await
+            .map_err(ApiError::Repository)?;
+        
+        let asset_ids: Vec<String> = assets.iter()
+            .map(|a| a.id.to_string())
+            .collect();
         
         let mut builder = RsRespBuilder::new();
-        builder.insert("assetIds", json!([]));
+        builder.insert("assetIds", json!(asset_ids));
         
         Ok(builder.build())
     }
@@ -153,13 +217,27 @@ impl RequestHandler for GetAssetsByIssuerHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let account = req.require_u64("account")?;
+        
+        let assets = state.asset_repo
+            .find_by_owner(account as i64)
+            .await
+            .map_err(ApiError::Repository)?;
+        
+        let assets_json: Vec<serde_json::Value> = assets.iter()
+            .map(|a| json!({
+                "asset": a.id.to_string(),
+                "account": a.account_id.to_string(),
+                "accountRS": format_account_rs(a.account_id as u64),
+                "name": a.name,
+                "quantityQNT": a.quantity.to_string(),
+                "decimals": a.decimals as i32
+            }))
+            .collect();
         
         let mut builder = RsRespBuilder::new();
-        builder.insert("assets", json!([]));
+        builder.insert("assets", json!(assets_json));
         
         Ok(builder.build())
     }
@@ -183,14 +261,29 @@ impl RequestHandler for GetAssetAccountsHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _asset_id = req.require_u64("asset")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let asset_id = req.require_u64("asset")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         let _height = req.get_i32("height");
         
+        let account_assets = state.account_asset_repo
+            .find_by_asset(asset_id as i64)
+            .await
+            .map_err(ApiError::Repository)?;
+        
+        let accounts_json: Vec<serde_json::Value> = account_assets.iter()
+            .map(|aa| json!({
+                "account": aa.account_id.to_string(),
+                "accountRS": format_account_rs(aa.account_id as u64),
+                "asset": aa.asset_id.to_string(),
+                "quantityQNT": aa.quantity.to_string(),
+                "unconfirmedQuantityQNT": aa.quantity.to_string()
+            }))
+            .collect();
+        
         let mut builder = RsRespBuilder::new();
-        builder.insert("accountAssets", json!([]));
+        builder.insert("accountAssets", json!(accounts_json));
         
         Ok(builder.build())
     }
@@ -214,12 +307,7 @@ impl RequestHandler for GetAssetTransfersHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _asset_id = req.get_u64("asset");
-        let _account = req.get_u64("account");
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
-        
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("transfers", json!([]));
         
@@ -468,9 +556,7 @@ impl RequestHandler for GetAskOrderHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _order_id = req.require_u64("order")?;
-        
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder
             .insert("order", "")
@@ -501,9 +587,7 @@ impl RequestHandler for GetBidOrderHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _order_id = req.require_u64("order")?;
-        
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder
             .insert("order", "")
@@ -534,11 +618,7 @@ impl RequestHandler for GetAskOrdersHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _asset_id = req.require_u64("asset")?;
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
-        
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("askOrders", json!([]));
         
@@ -564,11 +644,7 @@ impl RequestHandler for GetBidOrdersHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _asset_id = req.require_u64("asset")?;
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
-        
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("bidOrders", json!([]));
         
@@ -594,15 +670,122 @@ impl RequestHandler for GetTradesHandler {
         vec![ApiTag::Ae]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _asset_id = req.get_u64("asset");
-        let _account = req.get_u64("account");
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
-        
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
         builder.insert("trades", json!([]));
         
         Ok(builder.build())
     }
+}
+
+pub struct GetAccountCurrentAskOrderIdsHandler;
+
+impl GetAccountCurrentAskOrderIdsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountCurrentAskOrderIdsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "asset", "firstIndex", "lastIndex"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+    
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("askOrderIds", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountCurrentBidOrderIdsHandler;
+
+impl GetAccountCurrentBidOrderIdsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountCurrentBidOrderIdsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "asset", "firstIndex", "lastIndex"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+    
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("bidOrderIds", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAllOpenAskOrdersHandler;
+
+impl GetAllOpenAskOrdersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAllOpenAskOrdersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["firstIndex", "lastIndex"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+    
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("askOrders", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAllOpenBidOrdersHandler;
+
+impl GetAllOpenBidOrdersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAllOpenBidOrdersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["firstIndex", "lastIndex"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+    
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("bidOrders", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+fn format_account_rs(account_id: u64) -> String {
+    format!("NRCS-{}-{}-{}", 
+        account_id % 10000,
+        (account_id / 10000) % 10000,
+        (account_id / 100000000) % 10000
+    )
 }

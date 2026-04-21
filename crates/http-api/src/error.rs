@@ -51,6 +51,9 @@ pub enum ApiError {
     #[error("incorrect timestamp")]
     IncorrectTimestamp,
 
+    #[error("incorrect peer address")]
+    IncorrectPeerAddress,
+
     #[error("blockchain error: {0}")]
     Blockchain(#[from] blockchain_types::BlockchainError),
 
@@ -83,6 +86,7 @@ impl ApiError {
             ApiError::IncorrectBlock => 9,
             ApiError::IncorrectHeight => 10,
             ApiError::IncorrectTimestamp => 11,
+            ApiError::IncorrectPeerAddress => 13,
             ApiError::Blockchain(_) => 4,
             ApiError::Repository(_) => 4,
             ApiError::Account(_) => 4,
@@ -146,6 +150,7 @@ impl IntoResponse for ApiError {
             ApiError::IncorrectBlock => (StatusCode::BAD_REQUEST, 9, "Incorrect block".to_string()),
             ApiError::IncorrectHeight => (StatusCode::BAD_REQUEST, 10, "Incorrect height".to_string()),
             ApiError::IncorrectTimestamp => (StatusCode::BAD_REQUEST, 11, "Incorrect timestamp".to_string()),
+            ApiError::IncorrectPeerAddress => (StatusCode::BAD_REQUEST, 13, "Incorrect peer address".to_string()),
             ApiError::Blockchain(e) => (StatusCode::BAD_REQUEST, 400, e.to_string()),
             ApiError::Repository(e) => (StatusCode::INTERNAL_SERVER_ERROR, 500, e.to_string()),
             ApiError::Account(e) => (StatusCode::BAD_REQUEST, 400, e.to_string()),

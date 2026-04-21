@@ -28,16 +28,37 @@ impl RequestHandler for GetPeersHandler {
         vec![ApiTag::Network]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _state = req.get_string("state");
-        let _include_info = req.get_bool("includePeerInfo");
-        let _active = req.get_bool("active");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _state_filter = req.get_string("state");
+        let include_info = req.get_bool("includePeerInfo");
+        let active = req.get_bool("active");
         let _service = req.get_string("service");
         
-        let mut builder = RsRespBuilder::new();
-        builder.insert("peers", json!([]));
+        let peers = if let Some(ref p2p) = state.p2p_manager {
+            if active {
+                p2p.get_active_peers().await
+            } else {
+                p2p.get_peers().await
+            }
+        } else {
+            vec![]
+        };
         
-        Ok(builder.build())
+        if include_info {
+            let peers_json: Vec<serde_json::Value> = peers.iter()
+                .map(|p| peer_to_json(p))
+                .collect();
+            let mut builder = RsRespBuilder::new();
+            builder.insert("peers", json!(peers_json));
+            Ok(builder.build())
+        } else {
+            let peer_addresses: Vec<String> = peers.iter()
+                .filter_map(|p| p.announced_address.clone())
+                .collect();
+            let mut builder = RsRespBuilder::new();
+            builder.insert("peers", json!(peer_addresses));
+            Ok(builder.build())
+        }
     }
 }
 
@@ -59,13 +80,22 @@ impl RequestHandler for GetPeerHandler {
         vec![ApiTag::Network]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _peer_address = req.require_string("peer")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let peer_address = req.require_string("peer")?;
+        
+        if let Some(ref p2p) = state.p2p_manager {
+            let peers = p2p.get_peers().await;
+            if let Some(peer) = peers.iter().find(|p| p.announced_address.as_ref() == Some(&peer_address)) {
+                let mut builder = RsRespBuilder::new();
+                builder.extend_json(peer_to_json(peer));
+                return Ok(builder.build());
+            }
+        }
         
         let mut builder = RsRespBuilder::new();
         builder
             .insert("state", 0i32)
-            .insert("announcedAddress", "")
+            .insert("announcedAddress", peer_address)
             .insert("shareAddress", true)
             .insert("downloadedVolume", 0i64)
             .insert("uploadedVolume", 0i64)
@@ -97,13 +127,31 @@ impl RequestHandler for GetInboundPeersHandler {
         vec![ApiTag::Network]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _include_info = req.get_bool("includePeerInfo");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let include_info = req.get_bool("includePeerInfo");
         
-        let mut builder = RsRespBuilder::new();
-        builder.insert("peers", json!([]));
+        let inbound_peers = if let Some(ref p2p) = state.p2p_manager {
+            let all_peers = p2p.get_active_peers().await;
+            all_peers.into_iter().filter(|p| p.is_inbound).collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
         
-        Ok(builder.build())
+        if include_info {
+            let peers_json: Vec<serde_json::Value> = inbound_peers.iter()
+                .map(|p| peer_to_json(p))
+                .collect();
+            let mut builder = RsRespBuilder::new();
+            builder.insert("peers", json!(peers_json));
+            Ok(builder.build())
+        } else {
+            let peer_addresses: Vec<String> = inbound_peers.iter()
+                .filter_map(|p| p.announced_address.clone())
+                .collect();
+            let mut builder = RsRespBuilder::new();
+            builder.insert("peers", json!(peer_addresses));
+            Ok(builder.build())
+        }
     }
 }
 
@@ -129,8 +177,15 @@ impl RequestHandler for AddPeerHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _peer_address = req.require_string("peer")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let peer_address = req.require_string("peer")?;
+        
+        if let Some(ref p2p) = state.p2p_manager {
+            let addr: std::net::SocketAddr = peer_address.parse()
+                .map_err(|_| ApiError::IncorrectPeerAddress)?;
+            let peer = p2p::Peer::new(addr, false);
+            p2p.add_peer(peer).await;
+        }
         
         let mut builder = RsRespBuilder::new();
         builder.insert("state", 0i32);
@@ -161,8 +216,14 @@ impl RequestHandler for BlacklistPeerHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _peer_address = req.require_string("peer")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let peer_address = req.require_string("peer")?;
+        
+        if let Some(ref p2p) = state.p2p_manager {
+            let addr: std::net::SocketAddr = peer_address.parse()
+                .map_err(|_| ApiError::IncorrectPeerAddress)?;
+            p2p.blacklist_peer(&addr, "API blacklist".to_string()).await;
+        }
         
         let mut builder = RsRespBuilder::new();
         builder.insert("blacklisted", true);
@@ -189,16 +250,23 @@ impl RequestHandler for GetMyInfoHandler {
         vec![ApiTag::Network]
     }
     
-    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let my_info = if let Some(ref p2p) = state.p2p_manager {
+            p2p.get_my_peer_info().await
+        } else {
+            json!({
+                "application": "NRCS",
+                "version": "2.1.0",
+                "platform": "",
+                "shareAddress": true,
+                "announcedAddress": "",
+                "hallmark": "",
+                "services": []
+            })
+        };
+        
         let mut builder = RsRespBuilder::new();
-        builder
-            .insert("application", "NRCS")
-            .insert("version", "2.1.0")
-            .insert("platform", "")
-            .insert("shareAddress", true)
-            .insert("announcedAddress", "")
-            .insert("hallmark", "")
-            .insert("services", json!([]));
+        builder.extend_json(my_info);
         
         Ok(builder.build())
     }
@@ -228,4 +296,19 @@ impl RequestHandler for GetPluginsHandler {
         
         Ok(builder.build())
     }
+}
+
+fn peer_to_json(peer: &p2p::Peer) -> serde_json::Value {
+    json!({
+        "state": peer.state as i32,
+        "announcedAddress": peer.announced_address.clone().unwrap_or_default(),
+        "shareAddress": peer.share_address,
+        "downloadedVolume": peer.downloaded_volume as i64,
+        "uploadedVolume": peer.uploaded_volume as i64,
+        "application": peer.application.clone().unwrap_or_default(),
+        "version": peer.version.clone().unwrap_or_default(),
+        "platform": peer.platform.clone().unwrap_or_default(),
+        "blacklisted": peer.blacklisting_time > 0,
+        "lastUpdated": peer.last_updated as i32
+    })
 }

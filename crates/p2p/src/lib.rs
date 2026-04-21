@@ -15,6 +15,7 @@ pub mod blacklist;
 pub use config::P2PConfig;
 pub use error::{ErrorCode, P2PError, P2PResult};
 pub use protocol::*;
+pub use peer::{Peer, PeerState, Peers};
 pub use handlers::Handler;
 pub use daemon::{ConnectionDaemon, DiscoveryDaemon, UnblacklistDaemon, TransactionDaemon};
 pub use manager::P2PManager;

@@ -3,6 +3,7 @@
 //! 与 Java 版本 GetTransaction, SendMoney 等完全对齐
 
 use async_trait::async_trait;
+use serde_json::json;
 
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
@@ -27,31 +28,57 @@ impl RequestHandler for GetTransactionHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _transaction_id = req.get_u64("transaction");
-        let _full_hash = req.get_string("fullHash");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let transaction_id = req.get_u64("transaction");
+        let full_hash = req.get_string("fullHash");
+        
+        let tx_model = if let Some(id) = transaction_id {
+            state.tx_repo
+                .find_by_txid(id as i64)
+                .await
+                .map_err(ApiError::Repository)?
+        } else if let Some(hash_str) = full_hash {
+            let hash_bytes = hex::decode(&hash_str).unwrap_or_default();
+            state.tx_repo
+                .find_by_full_hash(&hash_bytes)
+                .await
+                .map_err(ApiError::Repository)?
+        } else {
+            return Err(ApiError::MissingParameter("transaction or fullHash".to_string()));
+        };
+        
+        let tx = match tx_model {
+            Some(t) => t,
+            None => return Err(ApiError::UnknownTransaction),
+        };
+        
+        let tx_domain = tx.to_domain().map_err(|e| ApiError::Internal(e.to_string()))?;
         
         let mut builder = RsRespBuilder::new();
         
         builder
-            .insert("transaction", "0")
-            .insert("timestamp", 0i32)
-            .insert("height", 0i32)
-            .insert("sender", "0")
-            .insert("senderRS", "NRCS-0-0-0")
+            .insert("transaction", tx.id.to_string())
+            .insert("timestamp", tx.timestamp)
+            .insert("height", tx.height)
+            .insert("sender", tx.sender_id.to_string())
+            .insert("senderRS", format_account_rs(tx.sender_id as u64))
             .insert("senderPublicKey", "")
-            .insert("recipient", "0")
-            .insert("recipientRS", "NRCS-0-0-0")
-            .insert("amountNQT", "0")
-            .insert("feeNQT", "0")
-            .insert("type", 0u8)
-            .insert("subtype", 0u8)
-            .insert("block", "0")
-            .insert("blockTimestamp", 0i32)
-            .insert("fullHash", "")
+            .insert("amountNQT", tx.amount.to_string())
+            .insert("feeNQT", tx.fee.to_string())
+            .insert("type", u8::from(tx_domain.type_id))
+            .insert("subtype", tx.subtype)
+            .insert("block", tx.block_id.to_string())
+            .insert("blockTimestamp", tx.timestamp)
+            .insert("fullHash", hex::encode(&tx.full_hash))
             .insert("signatureHash", "")
-            .insert("signature", "")
+            .insert("signature", hex::encode(&tx.signature))
             .insert("confirmations", 0i32);
+        
+        if let Some(recipient) = tx.recipient_id {
+            builder
+                .insert("recipient", recipient.to_string())
+                .insert("recipientRS", format_account_rs(recipient as u64));
+        }
         
         Ok(builder.build())
     }
@@ -75,13 +102,50 @@ impl RequestHandler for GetTransactionsHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.get_u64("account");
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(99);
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let account = req.get_u64("account");
+        let first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let last_index = req.get_i32("lastIndex").unwrap_or(99);
+        let limit = (last_index - first_index + 1) as i64;
+        
+        let txs = if let Some(acc_id) = account {
+            let mut all_txs = Vec::new();
+            let sent = state.tx_repo
+                .find_by_sender(acc_id as i64, limit)
+                .await
+                .map_err(ApiError::Repository)?;
+            let received = state.tx_repo
+                .find_by_recipient(acc_id as i64, limit)
+                .await
+                .map_err(ApiError::Repository)?;
+            all_txs.extend(sent);
+            all_txs.extend(received);
+            all_txs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            all_txs.truncate(limit as usize);
+            all_txs
+        } else {
+            vec![]
+        };
+        
+        let transactions: Vec<serde_json::Value> = txs.iter()
+            .map(|tx| json!({
+                "transaction": tx.id.to_string(),
+                "timestamp": tx.timestamp,
+                "height": tx.height,
+                "sender": tx.sender_id.to_string(),
+                "senderRS": format_account_rs(tx.sender_id as u64),
+                "recipient": tx.recipient_id.map(|r| r.to_string()).unwrap_or_default(),
+                "recipientRS": tx.recipient_id.map(|r| format_account_rs(r as u64)).unwrap_or_default(),
+                "amountNQT": tx.amount.to_string(),
+                "feeNQT": tx.fee.to_string(),
+                "type": tx.r#type,
+                "subtype": tx.subtype,
+                "confirmations": 0
+            }))
+            .collect();
         
         let mut builder = RsRespBuilder::new();
-        builder.insert("transactions", serde_json::json!([]));
+        builder.insert("transactions", json!(transactions));
         
         Ok(builder.build())
     }
@@ -105,9 +169,31 @@ impl RequestHandler for GetUnconfirmedTransactionsHandler {
         vec![ApiTag::Transactions]
     }
     
-    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.get_u64("account");
+        let last_index = req.get_i32("lastIndex").unwrap_or(99);
+        let limit = (last_index + 1) as i64;
+        
+        let txs = state.tx_repo
+            .find_unconfirmed(limit)
+            .await
+            .map_err(ApiError::Repository)?;
+        
+        let transactions: Vec<serde_json::Value> = txs.iter()
+            .map(|tx| json!({
+                "transaction": tx.id.to_string(),
+                "timestamp": tx.timestamp,
+                "sender": tx.sender_id.to_string(),
+                "senderRS": format_account_rs(tx.sender_id as u64),
+                "recipient": tx.recipient_id.map(|r| r.to_string()).unwrap_or_default(),
+                "recipientRS": tx.recipient_id.map(|r| format_account_rs(r as u64)).unwrap_or_default(),
+                "amountNQT": tx.amount.to_string(),
+                "feeNQT": tx.fee.to_string()
+            }))
+            .collect();
+        
         let mut builder = RsRespBuilder::new();
-        builder.insert("unconfirmedTransactions", serde_json::json!([]));
+        builder.insert("unconfirmedTransactions", json!(transactions));
         
         Ok(builder.build())
     }
@@ -138,9 +224,12 @@ impl RequestHandler for SendMoneyHandler {
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _recipient = req.require_u64("recipient")?;
-        let _amount = req.require_string("amountNQT")?;
-        let _fee = req.require_string("feeNQT")?;
+        let amount_str = req.require_string("amountNQT")?;
+        let fee_str = req.require_string("feeNQT")?;
         let _deadline = req.require_i32("deadline")?;
+        
+        let _amount: u64 = amount_str.parse().unwrap_or(0);
+        let _fee: u64 = fee_str.parse().unwrap_or(0);
         
         let mut builder = RsRespBuilder::new();
         
@@ -176,9 +265,10 @@ impl RequestHandler for BroadcastTransactionHandler {
         true
     }
     
-    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let mut builder = RsRespBuilder::new();
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _tx_bytes_hex = req.get_string("transactionBytes");
         
+        let mut builder = RsRespBuilder::new();
         builder
             .insert("transaction", "0")
             .insert("fullHash", "")
@@ -186,4 +276,12 @@ impl RequestHandler for BroadcastTransactionHandler {
         
         Ok(builder.build())
     }
+}
+
+fn format_account_rs(account_id: u64) -> String {
+    format!("NRCS-{}-{}-{}", 
+        account_id % 10000,
+        (account_id / 10000) % 10000,
+        (account_id / 100000000) % 10000
+    )
 }

@@ -29,6 +29,7 @@ orm = { path = "../orm" }
 tx-engine = { path = "../tx-engine" }
 account = { path = "../account" }
 crypto = { path = "../crypto" }
+p2p = { path = "../p2p" }
 
 config = { version = "0.13", features = ["json", "toml", "yaml"] }
 figment = { version = "0.10", features = ["env", "json", "toml", "yaml"] }
