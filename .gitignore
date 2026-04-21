@@ -6,6 +6,8 @@
 .rustfmt.toml
 .cargo/
 .toml
+**/PLAN/
+
 
 # Node.js / Vue
 frontend/node_modules/
