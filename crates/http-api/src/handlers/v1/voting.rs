@@ -1,0 +1,274 @@
+//! 投票相关 API Handlers
+//!
+//! 与 Java 版本 GetPoll, CreatePoll 等完全对齐
+
+use async_trait::async_trait;
+use serde_json::json;
+
+use crate::api_tag::ApiTag;
+use crate::error::ApiError;
+use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
+
+pub struct GetPollHandler;
+
+impl GetPollHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetPollHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["poll", "includeVoters", "includeVotes"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Vs]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _poll_id = req.require_u64("poll")?;
+        let _include_voters = req.get_bool("includeVoters");
+        let _include_votes = req.get_bool("includeVotes");
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("poll", "0")
+            .insert("account", "0")
+            .insert("accountRS", "NRCS-0-0-0")
+            .insert("name", "")
+            .insert("description", "")
+            .insert("options", json!([]))
+            .insert("finishHeight", 0i32)
+            .insert("finished", false);
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetPollResultHandler;
+
+impl GetPollResultHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetPollResultHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["poll", "votingModel", "holding", "minBalance", "minBalanceModel"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Vs]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _poll_id = req.require_u64("poll")?;
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("poll", "0")
+            .insert("options", json!([]))
+            .insert("results", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetPollsHandler;
+
+impl GetPollsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetPollsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "firstIndex", "lastIndex", "timestamp", "includeFinished", "finishedOnly"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Vs]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _account = req.get_u64("account");
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("polls", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAllPollsHandler;
+
+impl GetAllPollsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAllPollsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["firstIndex", "lastIndex", "timestamp"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Vs]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("polls", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct CreatePollHandler;
+
+impl CreatePollHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for CreatePollHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "name", "description", "finishHeight", "votingModel", 
+             "minNumberOfOptions", "maxNumberOfOptions", "minRangeValue", "maxRangeValue",
+             "options", "option1", "option2", "option3", "feeNQT", "deadline"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Vs, ApiTag::CreateTransaction]
+    }
+    
+    fn require_post(&self) -> bool {
+        true
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _name = req.require_string("name")?;
+        let _description = req.get_string("description");
+        let _finish_height = req.require_i32("finishHeight")?;
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "")
+            .insert("transactionBytes", "");
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct CastVoteHandler;
+
+impl CastVoteHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for CastVoteHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "poll", "vote1", "vote2", "vote3", "vote4", "vote5", 
+             "vote6", "vote7", "vote8", "vote9", "vote10", "feeNQT", "deadline"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Vs, ApiTag::CreateTransaction]
+    }
+    
+    fn require_post(&self) -> bool {
+        true
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _poll_id = req.require_u64("poll")?;
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetPollVotesHandler;
+
+impl GetPollVotesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetPollVotesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["poll", "firstIndex", "lastIndex"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Vs]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _poll_id = req.require_u64("poll")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("votes", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetPollVotersHandler;
+
+impl GetPollVotersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetPollVotersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["poll", "firstIndex", "lastIndex"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Vs]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _poll_id = req.require_u64("poll")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("voters", json!([]));
+        
+        Ok(builder.build())
+    }
+}

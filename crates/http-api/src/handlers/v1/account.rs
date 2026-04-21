@@ -51,6 +51,20 @@ impl RequestHandler for GetAccountHandler {
             builder.insert("effectiveBalanceNRCS", 0i64);
         }
         
+        if include_lessors {
+            builder.insert("lessors", json!([]));
+            builder.insert("lessorsRS", json!([]));
+        }
+        
+        if include_assets {
+            builder.insert("assetBalances", json!([]));
+            builder.insert("unconfirmedAssetBalances", json!([]));
+        }
+        
+        if include_currencies {
+            builder.insert("accountCurrencies", json!([]));
+        }
+        
         Ok(builder.build())
     }
 }
@@ -118,6 +132,323 @@ impl RequestHandler for GetAccountIdHandler {
         builder
             .insert("account", account_id.to_string())
             .insert("accountRS", format_account_rs(account_id));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountPublicKeyHandler;
+
+impl GetAccountPublicKeyHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountPublicKeyHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _account_id = req.require_u64("account")?;
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("publicKey", "");
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountAssetsHandler;
+
+impl GetAccountAssetsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountAssetsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "asset", "height", "firstIndex", "lastIndex"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::Ae]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _account_id = req.require_u64("account")?;
+        let _asset_id = req.get_u64("asset");
+        let _height = req.get_i32("height");
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("accountAssets", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountCurrenciesHandler;
+
+impl GetAccountCurrenciesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountCurrenciesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "currency", "height", "firstIndex", "lastIndex"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::Ms]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _account_id = req.require_u64("account")?;
+        let _currency_id = req.get_u64("currency");
+        let _height = req.get_i32("height");
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("accountCurrencies", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountPropertiesHandler;
+
+impl GetAccountPropertiesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountPropertiesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["recipient", "property", "setter", "firstIndex", "lastIndex"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _recipient = req.get_u64("recipient");
+        let _property = req.get_string("property");
+        let _setter = req.get_u64("setter");
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("properties", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountLessorsHandler;
+
+impl GetAccountLessorsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountLessorsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "height"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _account_id = req.require_u64("account")?;
+        let _height = req.get_i32("height");
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("lessors", json!([]))
+            .insert("lessorsRS", json!([]));
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetEffectiveBalanceHandler;
+
+impl GetEffectiveBalanceHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetEffectiveBalanceHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let account_id = req.require_u64("account")?;
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("account", account_id.to_string())
+            .insert("accountRS", format_account_rs(account_id))
+            .insert("effectiveBalanceNRCS", 0i64)
+            .insert("guaranteedBalanceNQT", "0");
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetGuaranteedBalanceHandler;
+
+impl GetGuaranteedBalanceHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetGuaranteedBalanceHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "numberOfConfirmations"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let account_id = req.require_u64("account")?;
+        let _confirmations = req.get_i32("numberOfConfirmations").unwrap_or(1440);
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("guaranteedBalanceNQT", "0");
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct SetAccountInfoHandler;
+
+impl SetAccountInfoHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SetAccountInfoHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "name", "description", "feeNQT", "deadline"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::CreateTransaction]
+    }
+    
+    fn require_post(&self) -> bool {
+        true
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _name = req.get_string("name");
+        let _description = req.get_string("description");
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "")
+            .insert("transactionBytes", "");
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct SetAccountPropertyHandler;
+
+impl SetAccountPropertyHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SetAccountPropertyHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "recipient", "property", "value", "feeNQT", "deadline"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::CreateTransaction]
+    }
+    
+    fn require_post(&self) -> bool {
+        true
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _recipient = req.get_u64("recipient");
+        let _property = req.require_string("property")?;
+        let _value = req.get_string("value");
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+        
+        Ok(builder.build())
+    }
+}
+
+pub struct GetBalancesHandler;
+
+impl GetBalancesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetBalancesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "includeEffectiveBalance", "height"]
+    }
+    
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts]
+    }
+    
+    async fn process_request(&self, req: &ApiRequest) -> Result<RsRespWithData, ApiError> {
+        let _account_ids = req.get_string("account");
+        let _include_effective = req.get_bool("includeEffectiveBalance");
+        let _height = req.get_i32("height");
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("balances", json!([]));
         
         Ok(builder.build())
     }
