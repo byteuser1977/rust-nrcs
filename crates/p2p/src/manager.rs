@@ -252,7 +252,9 @@ mod tests {
     async fn test_p2p_manager_creation() {
         let config = P2PConfig::default();
         let manager = P2PManager::new(config);
-        assert_eq!(manager.known_peers_count().await, 1); // 自己节点
+        // known_peers_count 只计算已知的外部节点，不包括自己节点
+        // 自己节点信息存储在 my_peer_info 中
+        assert_eq!(manager.known_peers_count().await, 0);
     }
 
     #[tokio::test]

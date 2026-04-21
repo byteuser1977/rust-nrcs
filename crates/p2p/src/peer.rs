@@ -428,23 +428,6 @@ fn current_timestamp() -> i64 {
 }
 
 #[cfg(test)]
-impl Peers {
-    /// Create a Peers instance without spawning the background connection loop.
-    /// Useful for unit tests.
-    pub fn new_for_test(pool: PgPool) -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(Inner {
-                pool,
-                repository: PeerRepository::new(),
-                cooldown_until: HashMap::new(),
-                retry_counts: HashMap::new(),
-                outbound_senders: HashMap::new(),
-            })),
-        }
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -462,6 +445,15 @@ mod tests {
             state: PeerState::Connected,
             is_inbound: false,
             last_updated: 1234567890,
+            last_connect_attempt: 0,
+            last_inbound_request: 0,
+            blacklisting_time: 0,
+            blacklisting_cause: None,
+            is_old_version: false,
+            share_address: true,
+            downloaded_volume: 0,
+            uploaded_volume: 0,
+            port: 8080,
         };
 
         let json = serde_json::to_string(&peer).unwrap();
