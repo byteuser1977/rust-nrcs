@@ -1,9 +1,5 @@
 //! # NRCS Blockchain Core Types
 //!
-#![allow(warnings)]
-
-//! # NRCS Blockchain Core Types
-//!
 //! 核心区块链数据结构定义，包括：
 //! - `Block`: 区块结构
 //! - `Transaction`: 交易结构
@@ -18,8 +14,15 @@
 //! - 时间戳使用 `u32`（Unix 秒），与 Java 原版兼容
 //! - 所有字段均使用驼峰命名（snake_case），Rust 惯例
 
+#![allow(warnings)]
+
 use serde::{Serialize, Deserialize};
 use std::ops::{Deref, DerefMut};
+
+pub mod constants;
+pub mod config;
+
+pub use constants::*;
 
 pub mod block;
 pub mod transaction;
@@ -30,7 +33,7 @@ pub mod order;
 pub mod alias;
 pub mod account_ext;
 
-pub mod genesis; // Genesis block creation
+pub mod genesis;
 
 pub mod prelude {
     pub use crate::block::*;
@@ -42,12 +45,14 @@ pub mod prelude {
     pub use crate::alias::*;
     pub use crate::account_ext::*;
     pub use crate::genesis::*;
+    pub use crate::constants::*;
+    pub use crate::config::GlobalConfig;
     pub use crate::{
         Hash256, Hash512, PublicKey, SecretKey, Signature,
         Timestamp, Height, Amount, AccountId, AssetId, BlockId,
         TransactionId, TransactionType, TxReceipt,
         CurrencyId, TransferId, OrderId, AliasId, AliasOfferId,
-        BLOCK_VERSION, TRANSACTION_VERSION, BlockchainError, Result,
+        BlockchainError, Result,
     };
 }
 
@@ -334,12 +339,6 @@ pub struct TxReceipt {
     pub executed_at: Timestamp,
 }
 
-/// 区块版本
-pub const BLOCK_VERSION: u32 = 1;
-
-/// 交易版本
-pub const TRANSACTION_VERSION: u8 = 1;
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -349,5 +348,12 @@ mod tests {
         assert_eq!(u8::from(TransactionType::Payment), 0);
         assert_eq!(TransactionType::from(0), TransactionType::Payment);
         assert_eq!(TransactionType::from(255), TransactionType::Custom(255));
+    }
+    
+    #[test]
+    fn test_constants_from_module() {
+        use crate::constants::{BLOCK_VERSION, TRANSACTION_VERSION};
+        assert_eq!(BLOCK_VERSION, 1);
+        assert_eq!(TRANSACTION_VERSION, 1);
     }
 }

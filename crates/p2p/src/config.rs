@@ -1,9 +1,11 @@
 //! P2P Configuration (对应 NRCS Peers.java 配置常量)
 //!
 //! 所有配置项与 NRCS Java 版本一一对应
+//! 默认值引用 blockchain-types 中的全局常量
 
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use blockchain_types::constants::*;
 
 /// P2P Configuration
 /// 
@@ -210,24 +212,24 @@ pub struct P2PConfig {
     pub bundler_rate_broadcast_interval_secs: u64,
 }
 
-// ============ 默认值函数 ============
+// ============ 默认值函数（引用全局常量） ============
 
-fn default_min_compress_size() -> usize { 256 }
-fn default_max_connections() -> usize { 20 }
-fn default_max_inbound_connections() -> usize { 100 }
-fn default_max_outbound_connections() -> usize { 20 }
-fn default_connect_timeout_ms() -> u64 { 4000 }
-fn default_read_timeout_ms() -> u64 { 4000 }
-fn default_websocket_idle_timeout_secs() -> u64 { 300 }
-fn default_max_request_size() -> usize { 64 * 1024 * 1024 }
-fn default_max_response_size() -> usize { 64 * 1024 * 1024 }
-fn default_max_message_size() -> usize { 40 * 1024 * 1024 }
-fn default_blacklisting_period_secs() -> i64 { 3600 }
+fn default_min_compress_size() -> usize { MIN_COMPRESS_SIZE }
+fn default_max_connections() -> usize { MAX_CONNECTIONS }
+fn default_max_inbound_connections() -> usize { MAX_INBOUND_CONNECTIONS }
+fn default_max_outbound_connections() -> usize { MAX_OUTBOUND_CONNECTIONS }
+fn default_connect_timeout_ms() -> u64 { CONNECT_TIMEOUT_MS }
+fn default_read_timeout_ms() -> u64 { READ_TIMEOUT_MS }
+fn default_websocket_idle_timeout_secs() -> u64 { WEBSOCKET_IDLE_TIMEOUT_SECS }
+fn default_max_request_size() -> usize { MAX_REQUEST_SIZE }
+fn default_max_response_size() -> usize { MAX_RESPONSE_SIZE }
+fn default_max_message_size() -> usize { MAX_MESSAGE_SIZE }
+fn default_blacklisting_period_secs() -> i64 { BLACKLISTING_PERIOD_SECS }
 fn default_blacklisting_enabled() -> bool { true }
-fn default_blacklisting_threshold() -> i32 { 10 }
+fn default_blacklisting_threshold() -> i32 { BLACKLISTING_THRESHOLD }
 fn default_get_more_peers() -> bool { true }
-fn default_max_known_peers() -> usize { 2000 }
-fn default_min_known_peers() -> usize { 100 }
+fn default_max_known_peers() -> usize { MAX_KNOWN_PEERS }
+fn default_min_known_peers() -> usize { MIN_KNOWN_PEERS }
 fn default_use_peers_db() -> bool { true }
 fn default_save_peers() -> bool { true }
 fn default_use_websockets() -> bool { true }
@@ -235,10 +237,10 @@ fn default_enable_hallmark_protection() -> bool { true }
 fn default_push_threshold() -> i32 { 0 }
 fn default_pull_threshold() -> i32 { 0 }
 fn default_send_to_peers_limit() -> usize { 10 }
-fn default_max_version_length() -> usize { 10 }
-fn default_max_application_length() -> usize { 20 }
-fn default_max_platform_length() -> usize { 30 }
-fn default_max_announced_address_length() -> usize { 100 }
+fn default_max_version_length() -> usize { MAX_VERSION_LENGTH }
+fn default_max_application_length() -> usize { MAX_APPLICATION_LENGTH }
+fn default_max_platform_length() -> usize { MAX_PLATFORM_LENGTH }
+fn default_max_announced_address_length() -> usize { MAX_ANNOUNCED_ADDRESS_LENGTH }
 fn default_listen_addr() -> SocketAddr { "0.0.0.0:16974".parse().unwrap() }
 fn default_share_my_address() -> bool { true }
 fn default_my_platform() -> String { 
@@ -247,12 +249,12 @@ fn default_my_platform() -> String {
         std::env::consts::ARCH
     )
 }
-fn default_connection_daemon_interval_secs() -> u64 { 5 }
-fn default_discovery_daemon_interval_secs() -> u64 { 30 }
-fn default_unblacklist_daemon_interval_secs() -> u64 { 60 }
-fn default_transaction_daemon_interval_secs() -> u64 { 30 }
-fn default_send_transactions_batch_size() -> usize { 10 }
-fn default_bundler_rate_broadcast_interval_secs() -> u64 { 30 * 60 }
+fn default_connection_daemon_interval_secs() -> u64 { CONNECTION_DAEMON_INTERVAL_SECS }
+fn default_discovery_daemon_interval_secs() -> u64 { DISCOVERY_DAEMON_INTERVAL_SECS }
+fn default_unblacklist_daemon_interval_secs() -> u64 { UNBLACKLIST_DAEMON_INTERVAL_SECS }
+fn default_transaction_daemon_interval_secs() -> u64 { TRANSACTION_DAEMON_INTERVAL_SECS }
+fn default_send_transactions_batch_size() -> usize { SEND_TRANSACTIONS_BATCH_SIZE }
+fn default_bundler_rate_broadcast_interval_secs() -> u64 { BUNDLER_RATE_BROADCAST_INTERVAL_SECS }
 
 impl Default for P2PConfig {
     fn default() -> Self {

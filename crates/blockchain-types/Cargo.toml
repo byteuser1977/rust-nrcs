@@ -13,11 +13,12 @@ bincode = "1.0"
 thiserror = "1.0"
 hex = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
-fxd = { version = "0.1", optional = true } # Decimal type, optional
+fxd = { version = "0.1", optional = true }
 sha2 = "0.10"
 serde-big-array = "0.5"
+toml = "0.8"
+once_cell = "1.19"
 
-# 密码学依赖（用于签名验证）
 ed25519-dalek = "1.0"
 
 [dev-dependencies]
@@ -26,5 +27,4 @@ proptest = "1.0"
 
 [features]
 default = []
-# 启用十进制精度支持（用于资产、金额）
 decimal = ["dep:fxd"]

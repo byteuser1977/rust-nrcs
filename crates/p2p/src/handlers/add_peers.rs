@@ -1,10 +1,9 @@
 use crate::{peer::Peers, protocol::PeerRequest};
+use blockchain_types::constants::MAX_KNOWN_PEERS;
 use serde_json;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
-
-const MAX_KNOWN_PEERS: usize = 2000;
 
 /// AddPeers 处理器
 /// 请求：peers 数组（每个 peer 包含 address, port, services 等）
