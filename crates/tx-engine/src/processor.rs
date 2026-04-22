@@ -11,7 +11,7 @@ use std::sync::Arc;
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
 use blockchain_types::prelude::Account;
-use orm::{AccountRepository, AccountAssetRepository, TransactionRepository, RepositoryError};
+use orm::{AccountRepository, AccountAssetRepository, TransactionRepository, RepositoryError, TransactionModel};
 use thiserror::Error;
 
 use crate::types::{TxReceiptInfo, TxStatus};
@@ -257,10 +257,9 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
 
         // 3. 计算 gas 消耗（简化固定值）
         let gas_used = match tx.type_id {
-            TransactionType::Payment => 100_000,  // 10^5
+            TransactionType::Payment => 100_000,
             TransactionType::AssetTransfer => 200_000,
             TransactionType::ContractInvocation => {
-                // TODO: 实际计算 gas 消耗
                 500_000
             }
             TransactionType::ContractDeployment => 1_000_000,
@@ -269,22 +268,23 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
 
         // 4. 创建收据记录
         let receipt = TxReceipt {
-            transaction_id: 0, // TODO: 从交易 full_hash 生成 ID
-            status: 1, // success
+            transaction_id: 0,
+            status: 1,
             gas_used,
-            logs: "[]".to_string(), // 暂无日志
-            contract_address: None, // 仅合约调用有
+            logs: "[]".to_string(),
+            contract_address: None,
             executed_at: Utc::now().timestamp() as Timestamp,
         };
 
-        // 5. 保存到数据库
-        // TODO: 实现 repository 插入
+        // 5. 保存交易到数据库
+        let tx_model = TransactionModel::from_domain(tx)?;
+        self.tx_repo.insert(&tx_model).await?;
 
         // 6. 返回收据信息
         let receipt_info = TxReceiptInfo {
             transaction_id: 0,
             status: TxStatus::Success,
-            block_height: None, // 打包后才填充
+            block_height: None,
             gas_used,
             logs: vec![],
             contract_address: None,

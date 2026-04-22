@@ -5,8 +5,10 @@
 //! - 交易执行
 //! - 未确认交易池管理
 //! - 交易广播
+//! - 交易附件打包/解包
 
 pub mod types;
+pub mod attachment;
 pub mod tx_types;
 pub mod validation;
 pub mod processor;
@@ -14,6 +16,13 @@ pub mod mempool;
 pub mod broadcast;
 
 pub use types::{TxPriority, TxReceiptInfo, TxStatus};
+pub use attachment::{
+    Attachment, AttachmentError, AttachmentResult,
+    PaymentAttachment, AssetTransferAttachment, AssetIssuanceAttachment,
+    ContractDeploymentAttachment, ContractInvocationAttachment,
+    LeaseAttachment, SetPropertyAttachment, MessageAttachment,
+    TransactionDbModel,
+};
 pub use tx_types::{
     TxTypeHandler, TxTypeRegistry, TxTypeError, TxTypeResult,
     TxExecutionContext,
@@ -37,6 +46,16 @@ pub mod prelude {
         TxPriority,
         TxReceiptInfo,
         TxStatus,
+        Attachment,
+        PaymentAttachment,
+        AssetTransferAttachment,
+        AssetIssuanceAttachment,
+        ContractDeploymentAttachment,
+        ContractInvocationAttachment,
+        LeaseAttachment,
+        SetPropertyAttachment,
+        MessageAttachment,
+        TransactionDbModel,
         TxTypeHandler,
         TxTypeRegistry,
         TxExecutionContext,
