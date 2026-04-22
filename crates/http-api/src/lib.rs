@@ -14,6 +14,7 @@ pub mod config;
 pub mod dto;
 pub mod error;
 pub mod nrcs_handler;
+pub mod proxy;
 pub mod request_handler;
 pub mod response;
 pub mod routes;

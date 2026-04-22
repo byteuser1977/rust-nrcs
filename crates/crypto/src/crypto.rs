@@ -246,6 +246,114 @@ pub fn zeroize_keypair(_keypair: &mut KeyPair) {
     // 暂时禁用
 }
 
+/// 从密码短语生成密钥对
+pub fn generate_keypair_from_passphrase(passphrase: &str) -> CryptoResult<KeyPair> {
+    let seed = sha256(passphrase.as_bytes());
+    Ok(keypair_from_seed(&seed))
+}
+
+/// 生成助记词
+pub fn generate_mnemonic(word_count: usize) -> CryptoResult<String> {
+    use rand::Rng;
+    
+    let words = [
+        "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract",
+        "absurd", "abuse", "access", "accident", "account", "accuse", "achieve", "acid",
+        "acoustic", "acquire", "across", "act", "action", "actor", "actress", "actual",
+        "adapt", "add", "addict", "address", "adjust", "admit", "adult", "advance",
+        "advice", "aerobic", "affair", "afford", "afraid", "again", "age", "agent",
+        "agree", "ahead", "aim", "air", "airport", "aisle", "alarm", "album",
+        "alcohol", "alert", "alien", "all", "alley", "allow", "almost", "alone",
+        "alpha", "already", "also", "alter", "always", "amateur", "amazing", "among",
+        "amount", "amused", "analyst", "anchor", "ancient", "anger", "angle", "angry",
+        "animal", "ankle", "announce", "annual", "another", "answer", "antenna", "antique",
+        "anxiety", "any", "apart", "apology", "appear", "apple", "approve", "april",
+        "arch", "arctic", "area", "arena", "argue", "arm", "armed", "armor",
+        "army", "around", "arrange", "arrest", "arrive", "arrow", "art", "artist",
+    ];
+    
+    let mut rng = rand::thread_rng();
+    let mnemonic: Vec<String> = (0..word_count)
+        .map(|_| words[rng.gen_range(0..words.len())].to_string())
+        .collect();
+    
+    Ok(mnemonic.join(" "))
+}
+
+/// 从助记词派生账户ID
+pub fn derive_account_id(mnemonic: &str) -> CryptoResult<String> {
+    let seed = sha256(mnemonic.as_bytes());
+    let kp = keypair_from_seed(&seed);
+    let pub_key = kp.public_key();
+    
+    let pub_key_bytes = match pub_key {
+        crate::PublicKey::Ed25519(bytes) => bytes,
+    };
+    
+    let hash = sha256(&pub_key_bytes);
+    let account_id = u64::from_be_bytes([
+        hash[24], hash[25], hash[26], hash[27],
+        hash[28], hash[29], hash[30], hash[31],
+    ]);
+    
+    Ok(format!("NRCS-{}-{}", account_id, encode_reed_solomon(&account_id)))
+}
+
+/// 从助记词派生公钥
+pub fn derive_public_key(mnemonic: &str) -> CryptoResult<Vec<u8>> {
+    let seed = sha256(mnemonic.as_bytes());
+    let kp = keypair_from_seed(&seed);
+    let pub_key = kp.public_key();
+    
+    Ok(match pub_key {
+        crate::PublicKey::Ed25519(bytes) => bytes.to_vec(),
+    })
+}
+
+/// Reed-Solomon 编码（简化版）
+fn encode_reed_solomon(value: &u64) -> String {
+    let chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+    let mut result = String::new();
+    let mut val = *value;
+    
+    for _ in 0..4 {
+        let idx = (val % 32) as usize;
+        result.insert(0, chars.chars().nth(idx).unwrap());
+        val /= 32;
+    }
+    
+    result.insert(2, '-');
+    result
+}
+
+/// 验证账户地址
+pub fn validate_account_address(address: &str) -> CryptoResult<String> {
+    if !address.starts_with("NRCS-") && !address.starts_with("NRCSTEST-") {
+        return Err(CryptoError::ConfigurationError("Invalid address prefix".to_string()));
+    }
+    
+    let parts: Vec<&str> = address.split('-').collect();
+    if parts.len() != 3 {
+        return Err(CryptoError::ConfigurationError("Invalid address format".to_string()));
+    }
+    
+    let account_id = parts[1].parse::<u64>()
+        .map_err(|_| CryptoError::ConfigurationError("Invalid account ID".to_string()))?;
+    
+    Ok(account_id.to_string())
+}
+
+/// 签名交易字节
+pub fn sign_transaction_bytes(tx_bytes: &[u8], passphrase: &str) -> CryptoResult<Vec<u8>> {
+    let kp = generate_keypair_from_passphrase(passphrase)?;
+    let signature = sign(&kp.secret_key(), tx_bytes);
+    
+    let mut signed = tx_bytes.to_vec();
+    signed.extend_from_slice(&signature);
+    
+    Ok(signed)
+}
+
 // #[cfg(test)]
 // mod tests {
 //     use super::*;

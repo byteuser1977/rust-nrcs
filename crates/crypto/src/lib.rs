@@ -176,6 +176,12 @@ pub use crypto::{blake3, hash, sha256, sm3};
 // Signature 函数
 pub use crypto::{generate_keypair, keypair_from_seed, sign, verify};
 
+// CLI 工具函数
+pub use crypto::{
+    generate_keypair_from_passphrase, generate_mnemonic, derive_account_id,
+    derive_public_key, validate_account_address, sign_transaction_bytes,
+};
+
 // 其他工具函数
 pub use crypto::{random_32, zeroize_keypair};
 
