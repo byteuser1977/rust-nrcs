@@ -19,6 +19,11 @@ config = { version = "0.13", default-features = false, features = ["toml"] }
 serde = { version = "1.0", features = ["derive"] }
 once_cell = "1.19"
 
+# Passphrase generation
+num-bigint = "0.4"
+num-traits = "0.2"
+lazy_static = "1.4"
+
 sm2 = "0.14.0-rc.8"
 sm3 = "0.5.0"
 sm4 = "0.6.0-rc.3"

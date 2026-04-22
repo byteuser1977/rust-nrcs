@@ -100,20 +100,23 @@ pub async fn generate_keypair(args: GenerateKeypairArgs) -> anyhow::Result<()> {
 pub async fn generate_passphrase(args: GeneratePassphraseArgs) -> anyhow::Result<()> {
     let word_count = args.words.unwrap_or(12);
     
-    if word_count != 12 && word_count != 24 {
-        anyhow::bail!("Word count must be 12 or 24");
+    if word_count != 12 {
+        anyhow::bail!("NRCS only supports 12-word passphrases");
     }
     
-    let mnemonic = crypto::generate_mnemonic(word_count)?;
+    let passphrase = crypto::generate_passphrase()?;
     
-    let account_id = crypto::derive_account_id(&mnemonic)?;
-    let public_key = crypto::derive_public_key(&mnemonic)?;
+    let keypair = crypto::passphrase_to_keypair(&passphrase)?;
+    let public_key = keypair.public_key();
+    
+    let public_key_hex = match public_key {
+        crypto::PublicKey::Ed25519(bytes) => hex::encode(bytes),
+    };
     
     println!("Generated Passphrase:");
     println!("====================");
-    println!("Passphrase: {}", mnemonic);
-    println!("Account ID: {}", account_id);
-    println!("Public Key: {}", hex::encode(public_key));
+    println!("Passphrase: {}", passphrase);
+    println!("Public Key: {}", public_key_hex);
     
     Ok(())
 }

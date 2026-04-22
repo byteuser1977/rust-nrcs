@@ -8,9 +8,7 @@
 //! - 账户管理
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
 use std::net::SocketAddr;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::time::Duration;
 use tracing::{error, info, warn};
@@ -132,7 +130,7 @@ async fn main() -> Result<()> {
     // 初始化数据库
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://nrcs:password@localhost:5432/nrcs_db".to_string());
-    let pool = PgPool::connect(&database_url)
+    let _pool = PgPool::connect(&database_url)
         .await
         .context("Failed to connect to database")?;
     

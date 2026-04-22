@@ -109,6 +109,7 @@ mod config;
 mod crypto;
 mod impls;
 mod keypair;
+pub mod passphrase;
 
 // 重新导出算法 trait（方便用户自定义算法）
 pub use algorithms::{
@@ -178,8 +179,15 @@ pub use crypto::{generate_keypair, keypair_from_seed, sign, verify};
 
 // CLI 工具函数
 pub use crypto::{
-    generate_keypair_from_passphrase, generate_mnemonic, derive_account_id,
+    generate_keypair_from_passphrase, derive_account_id,
     derive_public_key, validate_account_address, sign_transaction_bytes,
+};
+
+// Passphrase 模块函数
+pub use passphrase::{
+    generate_passphrase, passphrase_to_keypair, validate_passphrase,
+    secret_to_number, number_to_secret, is_12_words_secret,
+    NRCS_WORDS, WORD_COUNT,
 };
 
 // 其他工具函数
