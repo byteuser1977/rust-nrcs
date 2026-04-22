@@ -275,7 +275,7 @@ pub type AliasId = u64;
 pub type AliasOfferId = u64;
 
 /// 交易类型枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum TransactionType {
     /// 常规支付（0）

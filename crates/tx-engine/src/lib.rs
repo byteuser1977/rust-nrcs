@@ -1,15 +1,51 @@
-//! Transaction Processing Engine
+//! Transaction Engine
 //!
-//! 负责交易的生命周期管理：
-//! - Validation: 验证交易签名、余额、nonce 等
-//! - Execution: 应用交易到账户状态（余额、资产、合约）
-//! - Mempool: 内存池管理（去重、优先级排序、持久化可选）
-//! - Receipt: 生成交易收据（成功/失败、gas 消耗、日志）
+//! 交易处理引擎，负责：
+//! - 交易验证
+//! - 交易执行
+//! - 未确认交易池管理
+//! - 交易广播
 
+pub mod types;
+pub mod tx_types;
+pub mod validation;
 pub mod processor;
 pub mod mempool;
-pub mod types;
+pub mod broadcast;
 
+pub use types::{TxPriority, TxReceiptInfo, TxStatus};
+pub use tx_types::{
+    TxTypeHandler, TxTypeRegistry, TxTypeError, TxTypeResult,
+    TxExecutionContext,
+    PaymentHandler, AssetTransferHandler, AssetIssuanceHandler,
+    ContractDeploymentHandler, ContractInvocationHandler,
+    LeaseHandler, SetPropertyHandler,
+};
+pub use validation::{
+    TransactionValidator, TxValidationError, TxValidationResult,
+    PaymentValidator, AssetTransferValidator, LeaseValidator, ContractValidator,
+};
 pub use processor::{TransactionProcessor, DatabaseTransactionProcessor, ProcessorError, ProcessorResult};
-pub use mempool::{Mempool, MempoolConfig, MempoolStats};
-pub use types::{TxStatus, TxReceiptInfo, TxPriority};
+pub use mempool::{Mempool, MempoolConfig, MempoolError, MempoolStats};
+pub use broadcast::{
+    TxBroadcaster, BroadcastConfig, BroadcastError, BroadcastResult,
+    BroadcastedTx, TxConfirmationTracker,
+};
+
+pub mod prelude {
+    pub use crate::{
+        TxPriority,
+        TxReceiptInfo,
+        TxStatus,
+        TxTypeHandler,
+        TxTypeRegistry,
+        TxExecutionContext,
+        TransactionValidator,
+        TransactionProcessor,
+        DatabaseTransactionProcessor,
+        Mempool,
+        MempoolConfig,
+        TxBroadcaster,
+        BroadcastConfig,
+    };
+}
