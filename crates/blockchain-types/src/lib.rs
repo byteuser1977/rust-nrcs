@@ -34,6 +34,10 @@ pub mod alias;
 pub mod account_ext;
 
 pub mod genesis;
+pub mod sync;
+pub mod fork;
+pub mod validation;
+pub mod processor;
 
 pub mod prelude {
     pub use crate::block::*;

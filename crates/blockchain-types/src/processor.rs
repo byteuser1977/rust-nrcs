@@ -1,27 +1,28 @@
 //! Blockchain state processor for blocks and transactions.
 
+#[cfg(feature = "database")]
 use super::*;
+#[cfg(feature = "database")]
 use sqlx::PgPool;
+#[cfg(feature = "database")]
 use tracing::{debug, error, info, warn};
+#[cfg(feature = "database")]
 use async_trait::async_trait;
 
-/// Blockchain processor that validates and applies blocks to the chain state.
+#[cfg(feature = "database")]
 pub struct BlockchainProcessor {
     pool: PgPool,
 }
 
+#[cfg(feature = "database")]
 impl BlockchainProcessor {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
-    /// Process a received block: verify, validate, and persist to database.
-    /// Returns the new chain height if accepted.
     pub async fn process_block(&self, block: &Block) -> Result<Height> {
-        // 1. Basic validation
         self.validate_basic(block)?;
 
-        // 2. Check previous block linkage
         let prev_height = block.height.checked_sub(1).ok_or_else(||
             BlockchainError::InvalidTransaction("block height underflow".to_string())
         )?;
@@ -35,10 +36,6 @@ impl BlockchainProcessor {
             }
         }
 
-        // 3. Verify block signature (requires generator public key lookup)
-        // self.verify_block_signature(block).await?; // TODO
-
-        // 4. Compute and check payload hash (Merkle root of transactions)
         let computed_payload_hash = self.compute_payload_hash(&block.transactions)?;
         if computed_payload_hash != block.payload_hash {
             return Err(BlockchainError::InvalidBlock(
@@ -46,7 +43,6 @@ impl BlockchainProcessor {
             ));
         }
 
-        // 5. Persist block and transactions
         self.insert_block(block).await?;
 
         info!(target: "blockchain", "Accepted block: height={}, id={}, generator={}, txs={}",
@@ -55,7 +51,6 @@ impl BlockchainProcessor {
         Ok(block.height)
     }
 
-    /// Basic block field validation
     fn validate_basic(&self, block: &Block) -> Result<()> {
         if block.version != BLOCK_VERSION {
             return Err(BlockchainError::InvalidBlock(
@@ -68,7 +63,6 @@ impl BlockchainProcessor {
         Ok(())
     }
 
-    /// Check if a block with given height exists in database
     async fn block_exists(&self, height: Height) -> Result<bool> {
         let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM block WHERE height = $1")
             .bind(height as i32)
@@ -78,7 +72,6 @@ impl BlockchainProcessor {
         Ok(count.0 > 0)
     }
 
-    /// Compute payload hash: SHA-256 of concatenated serialized transactions (as Java does)
     fn compute_payload_hash(&self, txs: &[Transaction]) -> Result<Hash256> {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
@@ -92,7 +85,6 @@ impl BlockchainProcessor {
         Ok(Hash256(arr))
     }
 
-    /// Insert block and its transactions into database
     async fn insert_block(&self, block: &Block) -> Result<()> {
         let model = BlockModel {
             db_id: None,
@@ -146,17 +138,16 @@ impl BlockchainProcessor {
         .await
         .map_err(|e| BlockchainError::Database(e.to_string()))?;
 
-        // TODO: Insert transactions and update account balances
-
         Ok(())
     }
 }
 
-/// Block verifier that uses the blockchain processor.
+#[cfg(feature = "database")]
 pub struct BlockchainVerifier {
     processor: BlockchainProcessor,
 }
 
+#[cfg(feature = "database")]
 impl BlockchainVerifier {
     pub fn new(pool: PgPool) -> Self {
         Self {
@@ -165,6 +156,7 @@ impl BlockchainVerifier {
     }
 }
 
+#[cfg(all(feature = "database", feature = "p2p"))]
 #[async_trait]
 impl p2p::handlers::BlockVerifier for BlockchainVerifier {
     async fn verify_and_process(&self, block: Block) -> Result<()> {
