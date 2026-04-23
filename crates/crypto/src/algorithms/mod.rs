@@ -106,7 +106,7 @@ pub mod cipher;
 pub use hash::{Sha256, Sm3};
 
 // 重新导出签名算法
-pub use signature::{Ed25519, Curve25519};
+pub use signature::{Ed25519, Curve25519, Sm2};
 
 // 重新导出加密算法
 pub use cipher::Sm4Gcm;

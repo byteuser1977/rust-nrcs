@@ -230,9 +230,13 @@ pub fn blake3(data: &[u8]) -> Hash256 {
     result.into()
 }
 
-/// 计算 SM3 哈希（始终使用 SM3 - 暂时使用 SHA-256 替代）
+/// 计算 SM3 哈希（始终使用 SM3）
 pub fn sm3(data: &[u8]) -> Hash256 {
-    sha256(data)
+    use sm3::{Digest, Sm3 as Sm3Impl};
+    let mut hasher = Sm3Impl::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    result.into()
 }
 
 /// 生成随机 32 字节（用于 nonce、密钥等）
@@ -292,6 +296,9 @@ pub fn derive_account_id(passphrase: &str) -> CryptoResult<String> {
     let pub_key_bytes = match pub_key {
         crate::PublicKey::Ed25519(bytes) => bytes,
         crate::PublicKey::Curve25519(bytes) => bytes,
+        crate::PublicKey::Sm2 { .. } => {
+            return Err(CryptoError::ConfigurationError("SM2 not supported for NRCS account ID".to_string()));
+        }
     };
     
     let hash = sha256(&pub_key_bytes);
@@ -314,6 +321,7 @@ pub fn derive_public_key(passphrase: &str) -> CryptoResult<Vec<u8>> {
     Ok(match pub_key {
         crate::PublicKey::Ed25519(bytes) => bytes.to_vec(),
         crate::PublicKey::Curve25519(bytes) => bytes.to_vec(),
+        crate::PublicKey::Sm2 { public_key, .. } => public_key.to_vec(),
     })
 }
 

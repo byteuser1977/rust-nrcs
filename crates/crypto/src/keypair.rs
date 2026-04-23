@@ -22,6 +22,11 @@ pub enum KeyPair {
         public_key: [u8; 32],
         secret_key: [u8; 32],
     },
+    /// SM2 密钥对（国密）
+    Sm2 {
+        public_key: [u8; 65],
+        secret_key: [u8; 32],
+    },
 }
 
 impl KeyPair {
@@ -48,6 +53,9 @@ impl KeyPair {
                     secret_key: seed,
                 }
             }
+            "sm2" => {
+                crate::algorithms::Sm2.generate_keypair()
+            }
             _ => panic!("unsupported signature algorithm: {}", cfg.signature),
         }
     }
@@ -67,6 +75,9 @@ impl KeyPair {
             KeyPair::Curve25519 { .. } => {
                 panic!("Curve25519 does not support verifying_key(), use public_key() instead");
             }
+            KeyPair::Sm2 { .. } => {
+                panic!("SM2 does not support verifying_key(), use public_key() instead");
+            }
         }
     }
 
@@ -79,6 +90,12 @@ impl KeyPair {
             }
             KeyPair::Curve25519 { public_key, .. } => {
                 PublicKey::Curve25519(*public_key)
+            }
+            KeyPair::Sm2 { public_key, .. } => {
+                PublicKey::Sm2 {
+                    public_key: *public_key,
+                    distid: None,
+                }
             }
         }
     }
@@ -97,6 +114,12 @@ impl KeyPair {
             KeyPair::Curve25519 { secret_key, .. } => {
                 SecretKey::Curve25519(*secret_key)
             }
+            KeyPair::Sm2 { secret_key, .. } => {
+                SecretKey::Sm2 {
+                    secret_key: *secret_key,
+                    distid: None,
+                }
+            }
         }
     }
 
@@ -108,6 +131,10 @@ impl KeyPair {
                 let algo = crate::algorithms::Curve25519;
                 algo.sign(&SecretKey::Curve25519(*secret_key), message)
             }
+            KeyPair::Sm2 { secret_key, .. } => {
+                let algo = crate::algorithms::Sm2;
+                algo.sign(&SecretKey::Sm2 { secret_key: *secret_key, distid: None }, message)
+            }
         }
     }
 
@@ -116,6 +143,7 @@ impl KeyPair {
         match self {
             KeyPair::Ed25519(_) => "ed25519",
             KeyPair::Curve25519 { .. } => "curve25519",
+            KeyPair::Sm2 { .. } => "sm2",
         }
     }
 }

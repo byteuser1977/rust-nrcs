@@ -9,8 +9,8 @@ pub struct Sm3;
 
 impl HashAlgorithm for Sm3 {
     fn hash(&self, data: &[u8]) -> Hash256 {
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
+        use sm3::{Digest, Sm3 as Sm3Impl};
+        let mut hasher = Sm3Impl::new();
         hasher.update(data);
         let result = hasher.finalize();
         result.into()
@@ -31,5 +31,14 @@ mod tests {
         let data = b"abc";
         let hash = algo.hash(data);
         assert_eq!(hash.len(), 32);
+    }
+    
+    #[test]
+    fn test_sm3_known_vector() {
+        let algo = Sm3;
+        let data = b"abc";
+        let hash = algo.hash(data);
+        let expected = hex::decode("66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0").unwrap();
+        assert_eq!(hash.as_slice(), expected.as_slice());
     }
 }

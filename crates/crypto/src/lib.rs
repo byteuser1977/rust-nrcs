@@ -55,13 +55,17 @@ pub type Hash256 = [u8; 32];
 pub type Signature = [u8; 64];
 
 /// 公钥类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PublicKey {
     /// Ed25519 公钥（32 字节）
     Ed25519([u8; 32]),
     /// Curve25519 公钥（32 字节）- NRCS 兼容
     Curve25519([u8; 32]),
+    /// SM2 公钥（65 字节，未压缩格式）+ 可选区分标识符
+    Sm2 {
+        public_key: [u8; 65],
+        distid: Option<String>,
+    },
 }
 
 impl PublicKey {
@@ -70,6 +74,7 @@ impl PublicKey {
         match self {
             PublicKey::Ed25519(bytes) => bytes.len(),
             PublicKey::Curve25519(bytes) => bytes.len(),
+            PublicKey::Sm2 { public_key, .. } => public_key.len(),
         }
     }
 
@@ -78,18 +83,23 @@ impl PublicKey {
         match self {
             PublicKey::Ed25519(bytes) => bytes,
             PublicKey::Curve25519(bytes) => bytes,
+            PublicKey::Sm2 { public_key, .. } => public_key,
         }
     }
 }
 
 /// 私钥类型
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKey {
     /// Ed25519 私钥（64 字节）
     Ed25519([u8; 64]),
     /// Curve25519 私钥（32 字节）- NRCS 兼容
     Curve25519([u8; 32]),
+    /// SM2 私钥（32 字节）+ 可选区分标识符
+    Sm2 {
+        secret_key: [u8; 32],
+        distid: Option<String>,
+    },
 }
 
 impl SecretKey {
@@ -98,6 +108,7 @@ impl SecretKey {
         match self {
             SecretKey::Ed25519(bytes) => bytes.len(),
             SecretKey::Curve25519(bytes) => bytes.len(),
+            SecretKey::Sm2 { secret_key, .. } => secret_key.len(),
         }
     }
 
@@ -106,6 +117,7 @@ impl SecretKey {
         match self {
             SecretKey::Ed25519(bytes) => bytes,
             SecretKey::Curve25519(bytes) => bytes,
+            SecretKey::Sm2 { secret_key, .. } => secret_key,
         }
     }
 }
@@ -127,7 +139,7 @@ pub use keypair::KeyPair;
 pub use config::CryptoConfig;
 
 // 重新导出具体算法（供选择和测试）
-pub use algorithms::{Ed25519, Curve25519, Sha256, Sm3, Sm4Gcm};
+pub use algorithms::{Ed25519, Curve25519, Sm2, Sha256, Sm3, Sm4Gcm};
 
 // 错误类型与结果
 use thiserror::Error;

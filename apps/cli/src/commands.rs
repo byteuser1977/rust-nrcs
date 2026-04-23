@@ -74,10 +74,12 @@ pub async fn generate_keypair(args: GenerateKeypairArgs) -> anyhow::Result<()> {
     
     let public_key_hex = match public_key {
         crypto::PublicKey::Ed25519(bytes) => hex::encode(bytes),
+        crypto::PublicKey::Curve25519(bytes) => hex::encode(bytes),
     };
     
     let secret_key_hex = match secret_key {
         crypto::SecretKey::Ed25519(bytes) => hex::encode(bytes),
+        crypto::SecretKey::Curve25519(bytes) => hex::encode(bytes),
     };
     
     match args.format.as_deref() {
@@ -111,6 +113,7 @@ pub async fn generate_passphrase(args: GeneratePassphraseArgs) -> anyhow::Result
     
     let public_key_hex = match public_key {
         crypto::PublicKey::Ed25519(bytes) => hex::encode(bytes),
+        crypto::PublicKey::Curve25519(bytes) => hex::encode(bytes),
     };
     
     println!("Generated Passphrase:");
