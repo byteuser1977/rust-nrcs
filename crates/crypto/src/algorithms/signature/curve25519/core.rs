@@ -749,6 +749,8 @@ fn mula_small(p: &mut [u8; 32], q: &[u8; 32], x: &[u8; 32], z: i32) {
     }
 }
 
+/// 32-byte multiplication (保留用于完整性，移植自 Java 实现)
+#[allow(dead_code)]
 fn mula32(p: &mut [u8; 64], x: &[u8; 32], y: &[u8; 32]) {
     let n = 31;
     let mut w: i64 = 0;

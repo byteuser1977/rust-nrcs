@@ -1,0 +1,54 @@
+{
+  "sample_blocks": [
+    {
+      "version": 1,
+      "timestamp": 1234567890,
+      "height": 1,
+      "previous_block_id": null,
+      "previous_block_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "total_amount_nqt": "0",
+      "total_fee_nqt": "0",
+      "payload_length": 0,
+      "payload_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "generator_public_key": "5aafe59365b988d73aa15424a1b83c24fcada07e7cd73fcfade612c5bf32fc71",
+      "generation_signature": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "block_signature": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "base_target": 153722867,
+      "cumulative_difficulty": "153722867",
+      "transactions": []
+    },
+    {
+      "version": 1,
+      "timestamp": 1234567950,
+      "height": 2,
+      "previous_block_id": 1,
+      "previous_block_hash": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "total_amount_nqt": "100000000",
+      "total_fee_nqt": "10000000",
+      "payload_length": 176,
+      "payload_hash": "f1e2d3c4b5a69788796a5b4c3d2e1f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f",
+      "generator_public_key": "776ee6f3f7814b29b4d89e9db1fd95ec7afc3ea91e511270cbde1a76b8e7f71b",
+      "generation_signature": "b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2",
+      "block_signature": "c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2",
+      "base_target": 152722867,
+      "cumulative_difficulty": "306445734",
+      "transactions": [
+        {
+          "type": 0,
+          "subtype": 0,
+          "timestamp": 1234567945,
+          "deadline": 1440,
+          "sender_public_key": "5aafe59365b988d73aa15424a1b83c24fcada07e7cd73fcfade612c5bf32fc71",
+          "recipient": "NRCS-GK8K-KXAS-UJHW-F8YQE",
+          "amount_nqt": "100000000",
+          "fee_nqt": "10000000",
+          "referenced_transaction_full_hash": null,
+          "signature": "d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5",
+          "attachment": {
+            "version.OrdinaryPayment": 1
+          }
+        }
+      ]
+    }
+  ]
+}

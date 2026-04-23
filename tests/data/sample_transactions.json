@@ -1,0 +1,58 @@
+{
+  "sample_transactions": [
+    {
+      "type": 0,
+      "subtype": 0,
+      "timestamp": 1234567890,
+      "deadline": 1440,
+      "sender_public_key": "5aafe59365b988d73aa15424a1b83c24fcada07e7cd73fcfade612c5bf32fc71",
+      "recipient": "NRCS-GK8K-KXAS-UJHW-F8YQE",
+      "amount_nqt": "1000000000",
+      "fee_nqt": "100000000",
+      "referenced_transaction_full_hash": null,
+      "signature": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "attachment": {
+        "version.OrdinaryPayment": 1
+      },
+      "description": "普通转账交易"
+    },
+    {
+      "type": 0,
+      "subtype": 1,
+      "timestamp": 1234567950,
+      "deadline": 1440,
+      "sender_public_key": "776ee6f3f7814b29b4d89e9db1fd95ec7afc3ea91e511270cbde1a76b8e7f71b",
+      "recipient": "NRCS-P5FE-QYES-PLHK-HWTJM",
+      "amount_nqt": "500000000",
+      "fee_nqt": "100000000",
+      "referenced_transaction_full_hash": null,
+      "signature": "b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2",
+      "attachment": {
+        "version.ArbitraryMessage": 1,
+        "message": "SGVsbG8sIE5SQ1Mh",
+        "messageIsText": true
+      },
+      "description": "带消息的转账交易"
+    },
+    {
+      "type": 2,
+      "subtype": 0,
+      "timestamp": 1234568010,
+      "deadline": 1440,
+      "sender_public_key": "e17d3de4d16fd1a859f45ee1be0f0f742070cc727ffb9e439d9e60382142454c",
+      "recipient": null,
+      "amount_nqt": "0",
+      "fee_nqt": "1000000000",
+      "referenced_transaction_full_hash": null,
+      "signature": "c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2",
+      "attachment": {
+        "version.AssetIssuance": 1,
+        "name": "TestAsset",
+        "description": "A test asset for integration testing",
+        "quantityQNT": "1000000000",
+        "decimals": 8
+      },
+      "description": "资产发行交易"
+    }
+  ]
+}

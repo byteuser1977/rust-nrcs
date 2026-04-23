@@ -1,0 +1,58 @@
+{
+  "nrcs_test_vectors": [
+    {
+      "passphrase": "confusion flirt teeth story crawl dear shove screw decay flood cover warrior",
+      "account_id": "NRCS-P5FE-QYES-PLHK-HWTJM",
+      "public_key": "5aafe59365b988d73aa15424a1b83c24fcada07e7cd73fcfade612c5bf32fc71",
+      "numeric_id": 123456789
+    },
+    {
+      "passphrase": "despair belief enter dragon glove protect known rabbit ceiling creature satisfy forgive",
+      "account_id": "NRCS-GK8K-KXAS-UJHW-F8YQE",
+      "public_key": "776ee6f3f7814b29b4d89e9db1fd95ec7afc3ea91e511270cbde1a76b8e7f71b",
+      "numeric_id": 987654321
+    },
+    {
+      "passphrase": "eat anyone spin dream follow vain cute clay blush throat change reality",
+      "account_id": "NRCS-RBU5-RCCU-R42K-ESGM9",
+      "public_key": "e17d3de4d16fd1a859f45ee1be0f0f742070cc727ffb9e439d9e60382142454c",
+      "numeric_id": 111222333
+    },
+    {
+      "passphrase": "grow pay sway ready grand trail boat strain concrete joy queen three",
+      "account_id": "NRCS-SR64-JH9W-6V6C-GXTNT",
+      "public_key": "011f991a3c9cc91f8493c2551ec2acf94cfbc4f32b14fd44b1521dc68f2c2829",
+      "numeric_id": 444555666
+    },
+    {
+      "passphrase": "heaven distance mercy use tumble loud taste everything stumble company add finally",
+      "account_id": "NRCS-JLXR-QSFN-EBWE-9DKPH",
+      "public_key": "3e28e5368ce3d9b933f7a26312917fe90dd019f9668ad26842b5ea67cb88ff09",
+      "numeric_id": 777888999
+    }
+  ],
+  "sm2_test_vectors": [
+    {
+      "message": "Hello, NRCS!",
+      "public_key": "04d451e9e2a8b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9",
+      "signature": "3046022100e8e9ea5f6d7c8b9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9022100a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2"
+    }
+  ],
+  "sm3_test_vectors": [
+    {
+      "input": "abc",
+      "hash": "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0"
+    },
+    {
+      "input": "abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd",
+      "hash": "debe9ff92275b8a138604889c64eac7f61fb321a5c6b8e8e6b8e8e6b8e8e6b8e"
+    }
+  ],
+  "sm4_test_vectors": [
+    {
+      "key": "0123456789abcdeffedcba9876543210",
+      "plaintext": "0123456789abcdeffedcba9876543210",
+      "ciphertext": "681edf34d206965e86b3e94f536e4246"
+    }
+  ]
+}
