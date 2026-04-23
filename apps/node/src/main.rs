@@ -28,7 +28,7 @@ use sqlx::PgPool;
 
 use http_api::state::ApiState;
 use account::{AccountManager, AccountConfig, DatabaseAccountManager, AccountStore, PgAccountStore};
-use tx_engine::TransactionProcessor;
+use tx_engine::{TransactionProcessor, DatabaseTransactionProcessor};
 use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository, RepositoryResult, BlockModel, TransactionModel, AssetModel, AccountAssetModel};
 
 /// 简单的区块验证器（占位实现）
@@ -41,32 +41,6 @@ impl p2p::handlers::BlockVerifier for SimpleBlockVerifier {
         // TODO: 实现真实的区块验证和处理
         // 当前仅接受所有区块（用于测试）
         Ok(())
-    }
-}
-
-/// 模拟交易处理器
-struct MockTxProcessor;
-
-#[async_trait]
-impl TransactionProcessor for MockTxProcessor {
-    async fn validate(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
-        Ok(())
-    }
-    
-    async fn apply(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
-        Ok(())
-    }
-    
-    async fn execute(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<tx_engine::TxReceiptInfo> {
-        Ok(tx_engine::TxReceiptInfo {
-            transaction_id: 0,
-            status: tx_engine::TxStatus::Success,
-            block_height: None,
-            gas_used: 0,
-            logs: vec![],
-            contract_address: None,
-            executed_at: 0,
-        })
     }
 }
 
@@ -261,20 +235,24 @@ async fn main() -> Result<()> {
     let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::PgPublicKeyRepository::new(pool.clone()));
     
     // 创建账户存储
-    let account_store: Arc<dyn AccountStore> = Arc::new(PgAccountStore::new(account_repo.clone()));
+    let account_store: Arc<dyn AccountStore> = Arc::new(PgAccountStore::new(Arc::clone(&account_repo)));
     
     // 创建账户管理器
     let account_config = AccountConfig::default();
     let account_manager: Arc<dyn AccountManager> = Arc::new(DatabaseAccountManager::new(
         account_store,
-        account_repo,
+        Arc::clone(&account_repo),
         Arc::clone(&account_asset_repo),
-        public_key_repo,
+        Arc::clone(&public_key_repo),
         account_config,
     ));
     
-    // 创建交易处理器（使用模拟实现，待后续集成真实实现）
-    let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(MockTxProcessor);
+    // 创建交易处理器
+    let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
+        Arc::clone(&account_repo),
+        Arc::clone(&account_asset_repo),
+        Arc::clone(&tx_repo),
+    ));
     
     let api_state = ApiState {
         account_manager,
