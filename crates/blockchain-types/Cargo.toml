@@ -34,3 +34,4 @@ proptest = "1.0"
 default = []
 decimal = ["dep:fxd"]
 database = ["dep:sqlx", "dep:tracing", "dep:async-trait"]
+p2p = []

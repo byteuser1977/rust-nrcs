@@ -66,6 +66,9 @@ pub enum BlockchainError {
     #[error("invalid block hash: {0}")]
     InvalidHash(String),
 
+    #[error("invalid block: {0}")]
+    InvalidBlock(String),
+
     #[error("invalid transaction: {0}")]
     InvalidTransaction(String),
 
@@ -80,6 +83,9 @@ pub enum BlockchainError {
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("database error: {0}")]
+    Database(String),
 }
 
 pub type Result<T> = std::result::Result<T, BlockchainError>;
@@ -87,6 +93,12 @@ pub type Result<T> = std::result::Result<T, BlockchainError>;
 /// 固定大小的 SHA-256 哈希（32 字节）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hash256(#[serde(with = "serde_big_array::BigArray")] pub [u8; 32]);
+
+impl std::fmt::Display for Hash256 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.0))
+    }
+}
 
 impl std::hash::Hash for Hash256 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -103,6 +115,12 @@ impl AsRef<[u8]> for Hash256 {
 /// 固定大小的 SHA-512 哈希（64 字节）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hash512(#[serde(with = "serde_big_array::BigArray")] pub [u8; 64]);
+
+impl std::fmt::Display for Hash512 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.0))
+    }
+}
 
 impl std::hash::Hash for Hash512 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {

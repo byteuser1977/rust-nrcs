@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 # 区块链核心模块
-blockchain-types = { path = "../../crates/blockchain-types" }
+blockchain-types = { path = "../../crates/blockchain-types", features = ["database"] }
 orm = { path = "../../crates/orm" }
 tx-engine = { path = "../../crates/tx-engine" }
 account = { path = "../../crates/account" }

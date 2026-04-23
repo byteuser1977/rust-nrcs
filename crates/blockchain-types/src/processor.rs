@@ -1,7 +1,11 @@
 //! Blockchain state processor for blocks and transactions.
 
 #[cfg(feature = "database")]
-use super::*;
+use crate::prelude::*;
+#[cfg(feature = "database")]
+use crate::block::Block;
+#[cfg(feature = "database")]
+use crate::transaction::Transaction;
 #[cfg(feature = "database")]
 use sqlx::PgPool;
 #[cfg(feature = "database")]
@@ -86,26 +90,12 @@ impl BlockchainProcessor {
     }
 
     async fn insert_block(&self, block: &Block) -> Result<()> {
-        let model = BlockModel {
-            db_id: None,
-            id: block.height as i64,
-            version: block.version as i32,
-            timestamp: block.timestamp as i32,
-            previous_block_id: None,
-            total_amount: block.total_amount as i64,
-            total_fee: block.total_fee as i64,
-            payload_length: block.payload_length as i32,
-            previous_block_hash: Some(block.previous_block_hash.0.to_vec()),
-            cumulative_difficulty: block.cumulative_difficulty.clone(),
-            base_target: block.base_target as i64,
-            next_block_id: None,
-            height: block.height as i32,
-            generation_signature: block.generation_signature.0.to_vec(),
-            block_signature: block.block_signature.0.to_vec(),
-            payload_hash: block.payload_hash.0.to_vec(),
-            generator_id: block.generator_id as i64,
-        };
-
+        let previous_block_hash = Some(block.previous_block_hash.0.to_vec());
+        let cumulative_difficulty = block.cumulative_difficulty.clone();
+        let generation_signature = block.generation_signature.0.to_vec();
+        let block_signature = block.block_signature.0.to_vec();
+        let payload_hash = block.payload_hash.0.to_vec();
+        
         sqlx::query!(
             r#"
             INSERT INTO block (
@@ -117,22 +107,22 @@ impl BlockchainProcessor {
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
             )
             "#,
-            model.id,
-            model.version,
-            model.timestamp,
-            model.previous_block_id,
-            model.total_amount,
-            model.total_fee,
-            model.payload_length,
-            model.previous_block_hash.as_deref(),
-            model.cumulative_difficulty.as_slice(),
-            model.base_target,
-            model.next_block_id,
-            model.height,
-            model.generation_signature.as_slice(),
-            model.block_signature.as_slice(),
-            model.payload_hash.as_slice(),
-            model.generator_id,
+            block.height as i64,
+            block.version as i32,
+            block.timestamp as i32,
+            None::<i64>,
+            block.total_amount as i64,
+            block.total_fee as i64,
+            block.payload_length as i32,
+            previous_block_hash.as_deref(),
+            cumulative_difficulty.as_slice(),
+            block.base_target as i64,
+            None::<i64>,
+            block.height as i32,
+            generation_signature.as_slice(),
+            block_signature.as_slice(),
+            payload_hash.as_slice(),
+            block.generator_id as i64,
         )
         .execute(&self.pool)
         .await

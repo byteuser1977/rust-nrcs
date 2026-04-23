@@ -27,87 +27,20 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 
 use http_api::state::ApiState;
-use account::AccountManager;
+use account::{AccountManager, AccountConfig, DatabaseAccountManager, AccountStore, PgAccountStore};
 use tx_engine::TransactionProcessor;
-use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, RepositoryResult, BlockModel, TransactionModel, AssetModel, AccountAssetModel};
+use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository, RepositoryResult, BlockModel, TransactionModel, AssetModel, AccountAssetModel};
 
-/// 简单的 DummyBlockVerifier
-struct DummyBlockVerifier;
+/// 简单的区块验证器（占位实现）
+/// TODO: 集成真实的 BlockchainVerifier（需要重构 processor.rs 的依赖关系）
+struct SimpleBlockVerifier;
 
 #[async_trait]
-impl p2p::handlers::BlockVerifier for DummyBlockVerifier {
+impl p2p::handlers::BlockVerifier for SimpleBlockVerifier {
     async fn verify_and_process(&self, _block: Block) -> Result<()> {
+        // TODO: 实现真实的区块验证和处理
+        // 当前仅接受所有区块（用于测试）
         Ok(())
-    }
-}
-
-/// 模拟账户管理器
-struct MockAccountManager;
-
-#[async_trait]
-impl AccountManager for MockAccountManager {
-    async fn create_account(&self, _initial_balance: Option<Amount>) -> account::AccountResult<(crypto::KeyPair, AccountId, String)> {
-        let kp = crypto::generate_keypair();
-        let account_id = 1;
-        let address = "test_address".to_string();
-        Ok((kp, account_id, address))
-    }
-    
-    async fn register_account(&self, _account_id: AccountId, _public_key: Vec<u8>) -> account::AccountResult<()> {
-        Ok(())
-    }
-    
-    async fn get_balance(&self, _account_id: AccountId) -> account::AccountResult<Amount> {
-        Ok(1000)
-    }
-    
-    async fn get_account_info(&self, account_id: AccountId) -> account::AccountResult<Account> {
-        Ok(Account {
-            id: account_id,
-            address: Some("test_address".to_string()),
-            balance: 1000,
-            unconfirmed_balance: 1000,
-            reserved_balance: 0,
-            guaranteed_balance: 0,
-            assets: Default::default(),
-            properties: Default::default(),
-            lease: None,
-            created_at: 0,
-            last_updated: 0,
-            current_height: 0,
-        })
-    }
-    
-    async fn transfer(&self, _from: AccountId, _to: AccountId, _amount: Amount) -> account::AccountResult<()> {
-        Ok(())
-    }
-    
-    async fn credit(&self, _account_id: AccountId, _amount: Amount) -> account::AccountResult<()> {
-        Ok(())
-    }
-    
-    async fn debit(&self, _account_id: AccountId, _amount: Amount) -> account::AccountResult<()> {
-        Ok(())
-    }
-    
-    async fn get_and_increment_nonce(&self, _sender_id: AccountId) -> account::AccountResult<u64> {
-        Ok(0)
-    }
-    
-    async fn current_nonce(&self, _account_id: AccountId) -> account::AccountResult<u64> {
-        Ok(0)
-    }
-    
-    async fn mint_asset(&self, _asset_id: AssetId, _to: AccountId, _amount: Amount) -> account::AccountResult<()> {
-        Ok(())
-    }
-    
-    async fn burn_asset(&self, _asset_id: AssetId, _from: AccountId, _amount: Amount) -> account::AccountResult<()> {
-        Ok(())
-    }
-    
-    async fn get_public_key(&self, _account_id: AccountId) -> account::AccountResult<Option<blockchain_types::PublicKey>> {
-        Ok(None)
     }
 }
 
@@ -266,7 +199,7 @@ async fn main() -> Result<()> {
 
     // 初始化 P2P 管理器
     let peers = Arc::new(Peers::new(my_peer.clone()));
-    let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(DummyBlockVerifier);
+    let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(SimpleBlockVerifier);
     let handler = Arc::new(Handler::new(Arc::clone(&peers), Arc::clone(&block_verifier)));
 
     // 启动出站连接任务（连接 bootstrap 节点）
@@ -324,9 +257,21 @@ async fn main() -> Result<()> {
     let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::PgTransactionRepository::new(pool.clone()));
     let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::PgAssetRepository::new(pool.clone()));
     let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::PgAccountAssetRepository::new(pool.clone()));
+    let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::PgAccountRepository::new(pool.clone()));
+    let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::PgPublicKeyRepository::new(pool.clone()));
     
-    // 创建账户管理器（使用模拟实现，待后续集成真实实现）
-    let account_manager: Arc<dyn AccountManager> = Arc::new(MockAccountManager);
+    // 创建账户存储
+    let account_store: Arc<dyn AccountStore> = Arc::new(PgAccountStore::new(account_repo.clone()));
+    
+    // 创建账户管理器
+    let account_config = AccountConfig::default();
+    let account_manager: Arc<dyn AccountManager> = Arc::new(DatabaseAccountManager::new(
+        account_store,
+        account_repo,
+        Arc::clone(&account_asset_repo),
+        public_key_repo,
+        account_config,
+    ));
     
     // 创建交易处理器（使用模拟实现，待后续集成真实实现）
     let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(MockTxProcessor);

@@ -18,6 +18,6 @@ pub struct AccountAsset {
     pub unconfirmed_quantity: blockchain_types::Amount,
 }
 
-pub use manager::{AccountManager, AccountConfig, AccountError, AccountResult};
-pub use repository::AccountStore;
+pub use manager::{AccountManager, AccountConfig, AccountError, AccountResult, DatabaseAccountManager};
+pub use repository::{AccountStore, PgAccountStore};
 pub use crypto::{generate_keypair, AddressGenerator};
