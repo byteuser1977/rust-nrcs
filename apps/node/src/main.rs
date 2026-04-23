@@ -137,230 +137,6 @@ impl TransactionProcessor for MockTxProcessor {
     }
 }
 
-/// 模拟区块仓库
-struct MockBlockRepository;
-
-#[async_trait]
-impl orm::Repository<BlockModel> for MockBlockRepository {
-    async fn insert(&self, _item: &BlockModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<BlockModel>> {
-        Ok(None)
-    }
-    
-    async fn update(&self, _item: &BlockModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<BlockModel>> {
-        Ok(vec![])
-    }
-    
-    async fn count(&self) -> RepositoryResult<i64> {
-        Ok(0)
-    }
-}
-
-#[async_trait]
-impl BlockRepository for MockBlockRepository {
-    async fn find_by_height(&self, _height: i32) -> RepositoryResult<Option<BlockModel>> {
-        Ok(None)
-    }
-    
-    async fn find_by_id_column(&self, _id: i64) -> RepositoryResult<Option<BlockModel>> {
-        Ok(None)
-    }
-    
-    async fn find_by_hash(&self, _hash: &[u8]) -> RepositoryResult<Option<BlockModel>> {
-        Ok(None)
-    }
-    
-    async fn find_latest(&self) -> RepositoryResult<Option<BlockModel>> {
-        Ok(None)
-    }
-    
-    async fn find_range(&self, _start_height: i32, _end_height: i32) -> RepositoryResult<Vec<BlockModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_by_generator(&self, _generator_id: i64) -> RepositoryResult<Vec<BlockModel>> {
-        Ok(vec![])
-    }
-}
-
-/// 模拟交易仓库
-struct MockTransactionRepository;
-
-#[async_trait]
-impl orm::Repository<TransactionModel> for MockTransactionRepository {
-    async fn insert(&self, _item: &TransactionModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<TransactionModel>> {
-        Ok(None)
-    }
-    
-    async fn update(&self, _item: &TransactionModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<TransactionModel>> {
-        Ok(vec![])
-    }
-    
-    async fn count(&self) -> RepositoryResult<i64> {
-        Ok(0)
-    }
-}
-
-#[async_trait]
-impl TransactionRepository for MockTransactionRepository {
-    async fn find_by_txid(&self, _id: i64) -> RepositoryResult<Option<TransactionModel>> {
-        Ok(None)
-    }
-    
-    async fn find_by_full_hash(&self, _full_hash: &[u8]) -> RepositoryResult<Option<TransactionModel>> {
-        Ok(None)
-    }
-    
-    async fn find_by_sender(&self, _sender_id: i64, _limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_by_recipient(&self, _recipient_id: i64, _limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_by_block(&self, _block_id: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_by_height(&self, _height: i32) -> RepositoryResult<Vec<TransactionModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_unconfirmed(&self, _limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        Ok(vec![])
-    }
-}
-
-/// 模拟资产仓库
-struct MockAssetRepository;
-
-#[async_trait]
-impl orm::Repository<AssetModel> for MockAssetRepository {
-    async fn insert(&self, _item: &AssetModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<AssetModel>> {
-        Ok(None)
-    }
-    
-    async fn update(&self, _item: &AssetModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<AssetModel>> {
-        Ok(vec![])
-    }
-    
-    async fn count(&self) -> RepositoryResult<i64> {
-        Ok(0)
-    }
-}
-
-#[async_trait]
-impl AssetRepository for MockAssetRepository {
-    async fn find_by_asset_id(&self, _id: i64) -> RepositoryResult<Option<AssetModel>> {
-        Ok(None)
-    }
-    
-    async fn find_by_owner(&self, _owner_id: i64) -> RepositoryResult<Vec<AssetModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_by_height(&self, _height: i32) -> RepositoryResult<Vec<AssetModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_tradable(&self, _limit: i64) -> RepositoryResult<Vec<AssetModel>> {
-        Ok(vec![])
-    }
-}
-
-/// 模拟账户资产仓库
-struct MockAccountAssetRepository;
-
-#[async_trait]
-impl orm::Repository<AccountAssetModel> for MockAccountAssetRepository {
-    async fn insert(&self, _item: &AccountAssetModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
-        Ok(None)
-    }
-    
-    async fn update(&self, _item: &AccountAssetModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<AccountAssetModel>> {
-        Ok(vec![])
-    }
-    
-    async fn count(&self) -> RepositoryResult<i64> {
-        Ok(0)
-    }
-}
-
-#[async_trait]
-impl AccountAssetRepository for MockAccountAssetRepository {
-    async fn find_by_account(&self, _account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_by_asset(&self, _asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_by_account_and_asset(&self, _account_id: i64, _asset_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
-        Ok(None)
-    }
-    
-    async fn update_quantity(&self, _account_id: i64, _asset_id: i64, _quantity: i64, _height: i32) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn increase_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn decrease_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-}
-
 /// 节点配置结构（与 TOML 映射）
 #[derive(Debug, Clone, serde::Deserialize)]
 struct NodeConfig {
@@ -543,13 +319,25 @@ async fn main() -> Result<()> {
     }
 
     // 启动 HTTP API 服务器
+    // 创建真实的数据库仓库
+    let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::PgBlockRepository::new(pool.clone()));
+    let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::PgTransactionRepository::new(pool.clone()));
+    let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::PgAssetRepository::new(pool.clone()));
+    let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::PgAccountAssetRepository::new(pool.clone()));
+    
+    // 创建账户管理器（使用模拟实现，待后续集成真实实现）
+    let account_manager: Arc<dyn AccountManager> = Arc::new(MockAccountManager);
+    
+    // 创建交易处理器（使用模拟实现，待后续集成真实实现）
+    let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(MockTxProcessor);
+    
     let api_state = ApiState {
-        account_manager: Arc::new(MockAccountManager),
-        tx_processor: Arc::new(MockTxProcessor),
-        block_repo: Arc::new(MockBlockRepository),
-        tx_repo: Arc::new(MockTransactionRepository),
-        asset_repo: Arc::new(MockAssetRepository),
-        account_asset_repo: Arc::new(MockAccountAssetRepository),
+        account_manager,
+        tx_processor,
+        block_repo,
+        tx_repo,
+        asset_repo,
+        account_asset_repo,
         p2p_manager: None,
     };
     
