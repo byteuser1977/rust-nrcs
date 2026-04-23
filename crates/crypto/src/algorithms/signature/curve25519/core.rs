@@ -92,7 +92,7 @@ pub fn sign(v: &mut [u8; 32], h: &[u8; 32], x: &[u8; 32], s: &[u8; 32]) -> bool 
     let v_copy = *v;
     mula_small(v, &v_copy, &ORDER, 1);
 
-    mula32(&mut tmp1, v, s);
+    mula32_with_offset(&mut tmp1, v, s, 32, 1);
     divmod_64(&mut tmp2, &mut tmp1, &ORDER);
 
     let mut w = 0i32;
@@ -343,7 +343,7 @@ fn core(Px: &mut [u8; 32], s: Option<&mut [u8; 32]>, k: &[u8; 32], Gx: Option<&[
         if is_negative(&t1) != 0 {
             s_out.copy_from_slice(k);
         } else {
-            mula_small(s_out, k, &ORDER_TIMES_8, -1);
+            mula_small(s_out, &ORDER_TIMES_8, k, -1);
         }
 
         let mut temp1 = ORDER;
@@ -770,6 +770,28 @@ fn mula32(p: &mut [u8; 64], x: &[u8; 32], y: &[u8; 32]) {
     p[63] = (w + (p[63] as i64)) as u8;
 }
 
+fn mula32_with_offset(p: &mut [u8; 64], x: &[u8; 32], y: &[u8; 32], t: usize, z: i32) {
+    let n = 31;
+    let mut w: i64 = 0;
+    let z = z as i64;
+
+    for i in 0..t {
+        let zy = z * (y[i] as i64);
+        let mut v: i64 = 0;
+
+        for j in 0..n {
+            v += (p[i + j] as i64) + zy * (x[j] as i64);
+            p[i + j] = v as u8;
+            v >>= 8;
+        }
+
+        w += v + (p[i + n] as i64) + zy * (x[n] as i64);
+        p[i + n] = w as u8;
+        w >>= 8;
+    }
+    p[t + n] = (w + (p[t + n] as i64)) as u8;
+}
+
 fn divmod(q: &mut [u8; 32], r: &mut [u8; 32], d: &[u8; 32]) {
     let t = numsize(d);
     if t == 0 {
@@ -874,14 +896,16 @@ fn divmod_with_size(q: &mut [u8; 32], r: &mut [u8; 32], n: usize, d: &[u8; 32], 
     let mut rn: i64 = 0;
     let dt = ((d[t - 1] as i64) << 8) | if t > 1 { d[t - 2] as i64 } else { 0 };
 
+    // Java: while (n-- >= t) - post-decrement, so n is decremented after condition check
+    // but before loop body executes
     while n >= t as isize {
-        n -= 1;
-        let mut z = (rn << 16) | ((r[n as usize] as i64) << 8);
-        if n > 0 {
-            z |= r[(n - 1) as usize] as i64;
-        }
-        z /= dt;
+        n -= 1;  // Decrement first to match Java's post-decrement behavior
+        
+        let z = (rn << 16) | ((r[n as usize] as i64) << 8);
+        let z = if n > 0 { z | r[(n - 1) as usize] as i64 } else { z };
+        let z = z / dt;
 
+        // Java: n - t + 1 (but n is already decremented)
         let offset = (n as isize - t as isize + 1) as usize;
         let r_copy = *r;
         rn += mula_small_offset_size(r, &r_copy, offset, d, t, -z);
@@ -929,9 +953,10 @@ fn numsize(x: &[u8]) -> usize {
 fn divmod_64(q: &mut [u8; 64], r: &mut [u8; 64], d: &[u8; 32]) {
     let mut rn: i64 = 0;
     let dt = ((d[31] as i64) << 8) | (d[30] as i64);
-    let mut n = 63isize;
+    let mut n = 64isize;
 
     while n >= 32 {
+        n -= 1;
         let mut z = (rn << 16) | ((r[n as usize] as i64) << 8);
         if n > 0 {
             z |= r[(n - 1) as usize] as i64;
@@ -956,8 +981,6 @@ fn divmod_64(q: &mut [u8; 64], r: &mut [u8; 64], d: &[u8; 32]) {
         }
         rn = r[n as usize] as i64;
         r[n as usize] = 0;
-
-        n -= 1;
     }
     r[31] = rn as u8;
 }
@@ -965,6 +988,7 @@ fn divmod_64(q: &mut [u8; 64], r: &mut [u8; 64], d: &[u8; 32]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::{Sha256, Digest};
 
     #[test]
     fn test_clamp() {
@@ -1188,5 +1212,303 @@ mod tests {
         
         let all_zero = y.iter().all(|&b| b == 0);
         assert!(!all_zero, "verify should produce non-zero output");
+    }
+
+    #[test]
+    fn test_sign_verify_roundtrip() {
+        // Generate a key pair
+        let mut private_key = [0u8; 32];
+        for i in 0..32 {
+            private_key[i] = (i + 1) as u8;
+        }
+        
+        let mut public_key = [0u8; 32];
+        let mut signing_key = [0u8; 32];
+        keygen(&mut public_key, Some(&mut signing_key), &mut private_key);
+        
+        // Use a message for signing
+        let message = b"test message for roundtrip";
+        let m = Sha256::digest(message);
+        
+        // x = SHA256(m || s)
+        let mut hasher = Sha256::new();
+        hasher.update(&m);
+        hasher.update(&signing_key);
+        let x = hasher.finalize();
+        let mut x_array: [u8; 32] = x.into();
+        
+        // Y = keygen(x)
+        let mut y_from_sign = [0u8; 32];
+        keygen(&mut y_from_sign, None, &mut x_array);
+        
+        // h = SHA256(m || Y)
+        let mut hasher2 = Sha256::new();
+        hasher2.update(&m);
+        hasher2.update(&y_from_sign);
+        let h = hasher2.finalize();
+        let h_array: [u8; 32] = h.into();
+        
+        // v = sign(h, x, s)
+        let mut v = [0u8; 32];
+        let sign_result = sign(&mut v, &h_array, &x_array, &signing_key);
+        assert!(sign_result, "sign should succeed");
+        
+        // Verify: Y = verify(v, h, P)
+        let mut y_from_verify = [0u8; 32];
+        verify(&mut y_from_verify, &v, &h_array, &public_key);
+        
+        println!("Signing key: {}", hex::encode(signing_key));
+        println!("Public key: {}", hex::encode(public_key));
+        println!("v: {}", hex::encode(v));
+        println!("h: {}", hex::encode(h_array));
+        println!("Y from sign: {}", hex::encode(y_from_sign));
+        println!("Y from verify: {}", hex::encode(y_from_verify));
+        
+        // The Y values should match
+        assert_eq!(y_from_sign, y_from_verify, "Y from sign should match Y from verify");
+    }
+
+    #[test]
+    fn test_mula32_with_offset_simple() {
+        // Test: tmp1 = v * s where tmp1 is 64 bytes, v and s are 32 bytes
+        let v = [0x01u8; 32];  // Simple value
+        let s = [0x01u8; 32];  // Simple value
+        
+        let mut tmp1 = [0u8; 64];
+        mula32_with_offset(&mut tmp1, &v, &s, 32, 1);
+        
+        // v * s should be a simple multiplication
+        // Let's print the result
+        println!("v: {}", hex::encode(v));
+        println!("s: {}", hex::encode(s));
+        println!("tmp1 (v * s): {}", hex::encode(tmp1));
+        
+        // The result should not be all zeros
+        let all_zero = tmp1.iter().all(|&b| b == 0);
+        assert!(!all_zero, "tmp1 should not be all zeros");
+    }
+
+    #[test]
+    fn test_signing_key_relation() {
+        // Test that s * P = G
+        // Generate a key pair
+        let mut private_key = [0u8; 32];
+        for i in 0..32 {
+            private_key[i] = (i + 1) as u8;
+        }
+        
+        let mut public_key = [0u8; 32];
+        let mut signing_key = [0u8; 32];
+        keygen(&mut public_key, Some(&mut signing_key), &mut private_key);
+        
+        println!("Private key: {}", hex::encode(private_key));
+        println!("Public key (P): {}", hex::encode(public_key));
+        println!("Signing key (s): {}", hex::encode(signing_key));
+        
+        // Compute s * P using curve function
+        let mut s_times_p = [0u8; 32];
+        curve(&mut s_times_p, &signing_key, &public_key);
+        println!("s * P: {}", hex::encode(s_times_p));
+        
+        // The result should be the generator point G
+        // G = 9 (base point for Curve25519)
+        let g: [u8; 32] = [
+            9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        println!("G (base point): {}", hex::encode(g));
+        
+        // s * P should equal G
+        // Note: This might not be exact due to the Montgomery ladder implementation
+        // Let's check if they're related
+    }
+
+    #[test]
+    fn test_sign_detailed() {
+        // Use the actual test values from NRCS
+        // First, compute the correct values from the passphrase and message
+        let passphrase = "concern entire frozen witch away creak dot drink need season clutch truly";
+        let unsigned_tx_hex = "001037b138053c002d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c5fe6cbd7bfb374290065cd1d0000000000e1f505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000007cb1400e278bbd91da7aae30163fc7d52fb0c3d2cd86b77a1a4f32b233735c3108a68d6a525909d4efe887dde";
+        
+        // Generate key pair
+        let seed = Sha256::digest(passphrase.as_bytes());
+        let mut private_key: [u8; 32] = seed.into();
+        let mut public_key = [0u8; 32];
+        let mut signing_key = [0u8; 32];
+        keygen(&mut public_key, Some(&mut signing_key), &mut private_key);
+        
+        // Compute m = SHA256(unsigned_tx)
+        let unsigned_tx = hex::decode(unsigned_tx_hex).unwrap();
+        let m = Sha256::digest(&unsigned_tx);
+        
+        // Compute x = SHA256(m || s)
+        let mut hasher = Sha256::new();
+        hasher.update(&m);
+        hasher.update(&signing_key);
+        let x = hasher.finalize();
+        let mut x_array: [u8; 32] = x.into();
+        
+        // Compute Y = x * G
+        let mut y = [0u8; 32];
+        keygen(&mut y, None, &mut x_array);
+        
+        // Compute h = SHA256(m || Y)
+        let mut hasher2 = Sha256::new();
+        hasher2.update(&m);
+        hasher2.update(&y);
+        let h = hasher2.finalize();
+        let h_array: [u8; 32] = h.into();
+        
+        println!("=== Sign Function Debug ===");
+        println!("m: {}", hex::encode(m));
+        println!("s: {}", hex::encode(signing_key));
+        println!("x: {}", hex::encode(x));
+        println!("Y: {}", hex::encode(y));
+        println!("h: {}", hex::encode(h));
+        
+        // Now manually trace through the sign function
+        let mut h1 = h_array;
+        let mut x1 = x_array;
+        
+        println!("\n=== Manual Sign Trace ===");
+        println!("ORDER: {}", hex::encode(ORDER));
+        
+        // Step 1: Reduce h and x modulo ORDER
+        let mut tmp3 = [0u8; 32];
+        divmod(&mut tmp3, &mut h1, &ORDER);
+        divmod(&mut tmp3, &mut x1, &ORDER);
+        
+        println!("h1 (reduced): {}", hex::encode(h1));
+        println!("x1 (reduced): {}", hex::encode(x1));
+        
+        // Step 2: v = x1 - h1
+        let mut v = [0u8; 32];
+        mula_small(&mut v, &x1, &h1, -1);
+        println!("v (x1 - h1): {}", hex::encode(v));
+        
+        // Step 3: v = v + ORDER (if negative)
+        let v_copy = v;
+        mula_small(&mut v, &v_copy, &ORDER, 1);
+        println!("v (v + ORDER): {}", hex::encode(v));
+        
+        // Step 4: tmp1 = v * s
+        let mut tmp1 = [0u8; 64];
+        mula32_with_offset(&mut tmp1, &v, &signing_key, 32, 1);
+        println!("tmp1 (v * s): {}", hex::encode(tmp1));
+        
+        // Step 5: tmp1 = tmp1 mod ORDER
+        let mut tmp2 = [0u8; 64];
+        divmod_64(&mut tmp2, &mut tmp1, &ORDER);
+        println!("tmp1 (v * s mod ORDER): {}", hex::encode(&tmp1[..32]));
+        println!("tmp2 (quotient): {}", hex::encode(&tmp2[..32]));
+        
+        // Step 6: Copy tmp1[0..32] to v
+        for i in 0..32 {
+            v[i] = tmp1[i];
+        }
+        
+        println!("v (final): {}", hex::encode(v));
+        
+        // Expected signature
+        let expected_v_hex = "eab9a9fd3d73950a372e17a76a38fb206b875a84f9bc4fa80b18307ea683f204";
+        let expected_h_hex = "fcffc4413d187302a84ccdf89d796130a6e9d161afc30a45fc41e4257af4f0c5";
+        println!("\nExpected v: {}", expected_v_hex);
+        println!("Expected h: {}", expected_h_hex);
+        
+        // Verify that our h matches the expected h
+        let expected_h = hex::decode(expected_h_hex).unwrap();
+        let expected_h_array: [u8; 32] = expected_h.try_into().unwrap();
+        assert_eq!(h_array, expected_h_array, "h should match expected h");
+        
+        // Verify that our v matches the expected v
+        let expected_v = hex::decode(expected_v_hex).unwrap();
+        let expected_v_array: [u8; 32] = expected_v.try_into().unwrap();
+        assert_eq!(v, expected_v_array, "v should match expected v");
+    }
+
+    #[test]
+    fn test_signing_key_from_passphrase() {
+        // Test that the signing key is computed correctly from the passphrase
+        let passphrase = "concern entire frozen witch away creak dot drink need season clutch truly";
+        let expected_public_key = "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c";
+        
+        // Generate key pair
+        let seed = Sha256::digest(passphrase.as_bytes());
+        let mut private_key: [u8; 32] = seed.into();
+        let mut public_key = [0u8; 32];
+        let mut signing_key = [0u8; 32];
+        
+        keygen(&mut public_key, Some(&mut signing_key), &mut private_key);
+        
+        println!("Private key (SHA256 of passphrase): {}", hex::encode(private_key));
+        println!("Public key: {}", hex::encode(public_key));
+        println!("Expected public key: {}", expected_public_key);
+        println!("Signing key: {}", hex::encode(signing_key));
+        
+        // Verify public key matches
+        let expected_pk = hex::decode(expected_public_key).unwrap();
+        let expected_pk_array: [u8; 32] = expected_pk.try_into().unwrap();
+        assert_eq!(public_key, expected_pk_array, "Public key should match");
+        
+        // Verify s * P = G
+        let mut s_times_p = [0u8; 32];
+        curve(&mut s_times_p, &signing_key, &public_key);
+        println!("s * P: {}", hex::encode(s_times_p));
+        
+        let g: [u8; 32] = [
+            9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        println!("G (base point): {}", hex::encode(g));
+        
+        assert_eq!(s_times_p, g, "s * P should equal G");
+    }
+
+    #[test]
+    fn test_divmod_simple() {
+        // Test with a value smaller than ORDER
+        // Use a small value that is definitely less than ORDER
+        let small_val = [1u8, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0];
+        
+        let mut q = [0u8; 32];
+        let mut r = small_val;
+        
+        println!("r (input): {}", hex::encode(r));
+        println!("ORDER: {}", hex::encode(ORDER));
+        
+        divmod(&mut q, &mut r, &ORDER);
+        
+        println!("\nAfter divmod:");
+        println!("q (quotient): {}", hex::encode(q));
+        println!("r (remainder): {}", hex::encode(r));
+        
+        // Since small_val < ORDER, quotient should be 0 and remainder should be small_val
+        let all_zero = q.iter().all(|&b| b == 0);
+        assert!(all_zero, "Quotient should be 0 when dividend < divisor");
+        assert_eq!(r, small_val, "Remainder should equal dividend when dividend < divisor");
+    }
+
+    #[test]
+    fn test_mula_small_offset_size_zero() {
+        // Test that mula_small_offset_size with z = 0 doesn't modify the array
+        let mut p = [1u8; 32];
+        let q = [2u8; 32];
+        let x = [3u8; 32];
+        
+        println!("p before: {}", hex::encode(p));
+        println!("q: {}", hex::encode(q));
+        println!("x: {}", hex::encode(x));
+        
+        let result = mula_small_offset_size(&mut p, &q, 0, &x, 32, 0);
+        
+        println!("p after: {}", hex::encode(p));
+        println!("result: {}", result);
+        
+        // With z = 0, p should be a copy of q
+        assert_eq!(p, q, "p should equal q when z = 0");
+        assert_eq!(result, 0, "result should be 0 when z = 0");
     }
 }

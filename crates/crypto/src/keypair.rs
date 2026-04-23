@@ -164,7 +164,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "签名验证逻辑需要进一步调试"]
     fn test_keypair_curve25519_sign_verify() {
         use rand::Rng;
         let mut rng = rand::thread_rng();
