@@ -69,11 +69,15 @@ pub fn clamp(k: &mut [u8; 32]) {
     k[0] &= 0xF8;
 }
 
+/// 生成密钥对
+#[allow(non_snake_case)]
 pub fn keygen(P: &mut [u8; 32], s: Option<&mut [u8; 32]>, k: &mut [u8; 32]) {
     clamp(k);
     core(P, s, k, None);
 }
 
+/// 椭圆曲线运算
+#[allow(non_snake_case)]
 pub fn curve(Z: &mut [u8; 32], k: &[u8; 32], P: &[u8; 32]) {
     core(Z, None, k, Some(P));
 }
@@ -105,12 +109,15 @@ pub fn sign(v: &mut [u8; 32], h: &[u8; 32], x: &[u8; 32], s: &[u8; 32]) -> bool 
 
 /// 简化版 verify 函数
 /// 
+/// 验证签名
 /// 注意：由于 Rust 借用检查器的限制，这里使用了一个简化的实现
 /// 完整的实现需要重构以避免借用冲突
+#[allow(non_snake_case)]
 pub fn verify(Y: &mut [u8; 32], v: &[u8; 32], h: &[u8; 32], P: &[u8; 32]) {
     verify_impl(Y, v, h, P)
 }
 
+#[allow(non_snake_case)]
 fn verify_impl(Y: &mut [u8; 32], v: &[u8; 32], h: &[u8; 32], P: &[u8; 32]) {
     let mut p0 = Long10::new();
     let mut p1 = Long10::new();
@@ -269,6 +276,8 @@ pub fn is_canonical_public_key(public_key: &[u8; 32]) -> bool {
     true
 }
 
+/// 核心运算函数
+#[allow(non_snake_case)]
 fn core(Px: &mut [u8; 32], s: Option<&mut [u8; 32]>, k: &[u8; 32], Gx: Option<&[u8; 32]>) {
     let mut dx = Long10::new();
     let mut t1 = Long10::new();

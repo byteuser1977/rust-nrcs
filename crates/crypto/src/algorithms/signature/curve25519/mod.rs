@@ -123,12 +123,12 @@ impl SignatureAlgorithm for Curve25519 {
                 let m = Sha256::digest(message);
                 let m_array: [u8; 32] = m.into();
 
-                let mut Y = [0u8; 32];
-                core::verify(&mut Y, &v_array, &h_array, &pk_array);
+                let mut y = [0u8; 32];
+                core::verify(&mut y, &v_array, &h_array, &pk_array);
 
                 let mut hasher = Sha256::new();
                 hasher.update(&m_array);
-                hasher.update(&Y);
+                hasher.update(&y);
                 let expected_h = hasher.finalize();
 
                 if h_array == expected_h.as_slice() {
