@@ -1,9 +1,8 @@
-//! API 处理器模块
+//! HTTP API Handlers
+//!
+//! 所有 API 处理器的集合
 
 pub mod account;
-pub mod block;
-pub mod contract;
-pub mod node;
 pub mod transaction;
-pub mod system;
-pub mod v1;
+pub mod block;
+pub mod network;
