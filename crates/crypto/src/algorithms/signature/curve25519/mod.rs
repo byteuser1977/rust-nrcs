@@ -4,6 +4,8 @@
 //! 使用 NRCS 特有的 EC-KCDSA 变体进行签名/验证
 
 pub mod core;
+#[cfg(test)]
+mod test_vectors;
 
 use crate::algorithms::SignatureAlgorithm;
 use crate::{CryptoError, CryptoResult, KeyPair, PublicKey, SecretKey, Signature};

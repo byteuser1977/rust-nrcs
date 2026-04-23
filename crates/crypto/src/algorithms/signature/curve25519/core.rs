@@ -961,3 +961,232 @@ fn divmod_64(q: &mut [u8; 64], r: &mut [u8; 64], d: &[u8; 32]) {
     }
     r[31] = rn as u8;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clamp() {
+        let mut k = [0u8; 32];
+        for i in 0..32 {
+            k[i] = 0xFF;
+        }
+        clamp(&mut k);
+        
+        assert_eq!(k[0] & 0x07, 0, "k[0] should have lowest 3 bits cleared");
+        assert_eq!(k[31] & 0x80, 0, "k[31] should have highest bit cleared");
+        assert_eq!(k[31] & 0x40, 0x40, "k[31] should have second-highest bit set");
+    }
+
+    #[test]
+    fn test_clamp_specific() {
+        let mut k = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                     0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
+                     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+                     0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0xFF];
+        
+        let original_k0 = k[0];
+        let original_k31 = k[31];
+        
+        clamp(&mut k);
+        
+        assert_eq!(k[0], original_k0 & 0xF8, "k[0] should be ANDed with 0xF8");
+        assert_eq!(k[31], (original_k31 & 0x7F) | 0x40, "k[31] should be clamped correctly");
+    }
+
+    #[test]
+    fn test_numsize() {
+        assert_eq!(numsize(&[0u8; 32]), 0);
+        assert_eq!(numsize(&[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 1);
+        assert_eq!(numsize(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]), 32);
+    }
+
+    #[test]
+    fn test_long10_operations() {
+        let mut a = Long10::new();
+        a._0 = 1;
+        a._1 = 2;
+        
+        let mut b = Long10::new();
+        b._0 = 3;
+        b._1 = 4;
+        
+        let mut result = Long10::new();
+        add(&mut result, &a, &b);
+        assert_eq!(result._0, 4);
+        assert_eq!(result._1, 6);
+        
+        sub(&mut result, &a, &b);
+        assert_eq!(result._0, -2);
+        assert_eq!(result._1, -2);
+    }
+
+    #[test]
+    fn test_pack_unpack_roundtrip() {
+        let original = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+                        0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
+                        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+                        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20];
+        
+        let mut unpacked = Long10::new();
+        unpack(&mut unpacked, &original);
+        
+        let mut repacked = [0u8; 32];
+        pack(&unpacked, &mut repacked);
+        
+        assert_eq!(original, repacked, "pack/unpack should be a roundtrip");
+    }
+
+    #[test]
+    fn test_keygen_produces_valid_public_key() {
+        let mut public_key = [0u8; 32];
+        let mut private_key = [0u8; 32];
+        
+        for i in 0..32 {
+            private_key[i] = (i + 1) as u8;
+        }
+        
+        keygen(&mut public_key, None, &mut private_key);
+        
+        let all_zero = public_key.iter().all(|&b| b == 0);
+        assert!(!all_zero, "Public key should not be all zeros");
+    }
+
+    #[test]
+    fn test_keygen_with_signing_key() {
+        let mut public_key = [0u8; 32];
+        let mut signing_key = [0u8; 32];
+        let mut private_key = [0u8; 32];
+        
+        for i in 0..32 {
+            private_key[i] = (i + 1) as u8;
+        }
+        
+        keygen(&mut public_key, Some(&mut signing_key), &mut private_key);
+        
+        let all_zero = signing_key.iter().all(|&b| b == 0);
+        assert!(!all_zero, "Signing key should not be all zeros");
+    }
+
+    #[test]
+    fn test_keygen_deterministic() {
+        let mut pk1 = [0u8; 32];
+        let mut pk2 = [0u8; 32];
+        let mut sk1 = [0u8; 32];
+        let mut sk2 = [0u8; 32];
+        
+        for i in 0..32 {
+            sk1[i] = (i * 7 + 13) as u8;
+            sk2[i] = (i * 7 + 13) as u8;
+        }
+        
+        keygen(&mut pk1, None, &mut sk1);
+        keygen(&mut pk2, None, &mut sk2);
+        
+        assert_eq!(pk1, pk2, "Same seed should produce same public key");
+    }
+
+    #[test]
+    fn test_is_canonical_signature() {
+        let mut valid_sig = [0u8; 32];
+        valid_sig[0] = 1;
+        
+        assert!(is_canonical_signature(&valid_sig));
+        
+        let invalid_sig = ORDER;
+        assert!(!is_canonical_signature(&invalid_sig));
+    }
+
+    #[test]
+    fn test_is_canonical_public_key() {
+        let mut valid_pk = [0u8; 32];
+        valid_pk[0] = 9;
+        
+        assert!(is_canonical_public_key(&valid_pk));
+        
+        let invalid_pk = [0xFFu8; 32];
+        assert!(!is_canonical_public_key(&invalid_pk));
+    }
+
+    #[test]
+    fn test_mul_small() {
+        let mut x = Long10::new();
+        x._0 = 5;
+        
+        let mut result = Long10::new();
+        mul_small(&mut result, &x, 3);
+        
+        assert_eq!(result._0, 15);
+    }
+
+    #[test]
+    fn test_sqr() {
+        let mut x = Long10::new();
+        x._0 = 2;
+        
+        let mut result = Long10::new();
+        sqr(&mut result, &x);
+        
+        assert_eq!(result._0, 4);
+    }
+
+    #[test]
+    fn test_mul() {
+        let mut a = Long10::new();
+        a._0 = 3;
+        
+        let mut b = Long10::new();
+        b._0 = 4;
+        
+        let mut result = Long10::new();
+        mul(&mut result, &a, &b);
+        
+        assert_eq!(result._0, 12);
+    }
+
+    #[test]
+    fn test_sign_returns_nonzero() {
+        let h = [1u8; 32];
+        let x = [2u8; 32];
+        let s = [3u8; 32];
+        let mut v = [0u8; 32];
+        
+        let result = sign(&mut v, &h, &x, &s);
+        
+        assert!(result, "sign should return true on success");
+        
+        let all_zero = v.iter().all(|&b| b == 0);
+        assert!(!all_zero, "Signature v should not be all zeros");
+    }
+
+    #[test]
+    fn test_sign_deterministic() {
+        let h = [1u8; 32];
+        let x = [2u8; 32];
+        let s = [3u8; 32];
+        let mut v1 = [0u8; 32];
+        let mut v2 = [0u8; 32];
+        
+        sign(&mut v1, &h, &x, &s);
+        sign(&mut v2, &h, &x, &s);
+        
+        assert_eq!(v1, v2, "sign should be deterministic");
+    }
+
+    #[test]
+    fn test_verify_produces_output() {
+        let v = [1u8; 32];
+        let h = [2u8; 32];
+        let p = [9u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let mut y = [0u8; 32];
+        
+        verify(&mut y, &v, &h, &p);
+        
+        let all_zero = y.iter().all(|&b| b == 0);
+        assert!(!all_zero, "verify should produce non-zero output");
+    }
+}
