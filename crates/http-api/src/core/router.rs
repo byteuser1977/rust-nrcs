@@ -3,7 +3,7 @@
 //! 路由配置（新架构，暂时未启用）
 
 use axum::{
-    routing::{get, post},
+    routing::get,
     Router,
 };
 
@@ -13,9 +13,16 @@ pub fn create_router() -> Router {
     Router::new()
         .route("/health", get(health_check))
         // TODO: 启用新的路由结构
-        // .nest("/nrcs", api_routes())
+        // 需要调整处理器以使用 ApiState，而不是独立的状态
 }
 
+/// 健康检查
+async fn health_check() -> &'static str {
+    "OK"
+}
+
+// TODO: 以下路由函数暂时注释，待处理器调整后启用
+/*
 /// API 路由
 fn _api_routes() -> Router {
     Router::new()
@@ -55,8 +62,4 @@ fn _network_routes() -> Router {
         .route("/getPeers", post(crate::handlers::network::get_peers))
         .route("/getPeer", post(crate::handlers::network::get_peer))
 }
-
-/// 健康检查
-async fn health_check() -> &'static str {
-    "OK"
-}
+*/

@@ -140,6 +140,38 @@ let response = handler.forward_request(
 ).await?;
 ```
 
+### 5. HTTP API 架构
+
+HTTP API 模块采用分层解耦架构：
+
+```
+http-api/
+├── core/                    # 核心层
+│   ├── error.rs            # 统一错误处理
+│   └── router.rs           # 路由配置
+├── handlers/               # 处理器层
+│   ├── account/           # 账户 API
+│   │   ├── handler.rs     # 处理器实现
+│   │   ├── state.rs       # 状态管理
+│   │   └── dto.rs         # 数据传输对象
+│   ├── transaction/       # 交易 API
+│   ├── block/             # 区块 API
+│   ├── network/           # 网络 API
+│   ├── restful.rs         # RESTful API 端点
+│   └── system.rs          # 系统 API
+├── state.rs               # 全局状态
+└── routes.rs              # 路由定义
+```
+
+**RESTful API 端点**:
+- `GET /api/v1/accounts/:id` - 获取账户信息
+- `GET /api/v1/accounts/:id/balance` - 获取账户余额
+- `GET /api/v1/blocks/latest` - 获取最新区块
+- `GET /api/v1/blocks/:height` - 按高度获取区块
+
+**传统 NRCS API**:
+- `GET/POST /nrcs?requestType=xxx` - 兼容 Java NRCS API
+
 ## 配置文件
 
 `config/nrcs.toml`:
@@ -189,18 +221,22 @@ cipher = "sm4-gcm"
 | APIProxyServlet | ✅ 完成 | 100% |
 | CLI 工具 | ✅ 完成 | 90% |
 | 加密算法 | ✅ 完成 | 100% |
+| HTTP API 模块解耦 | ✅ 完成 | 100% |
+| RESTful API 端点 | ✅ 完成 | 100% |
 | P2P 网络 | 🔄 进行中 | 60% |
 | 智能合约 | 📋 计划中 | 0% |
 
 ## 测试结果
 
-### 最新测试报告 (2026-04-23)
+### 最新测试报告 (2026-04-24)
 
 | 测试类别 | 测试用例数 | 通过数 | 通过率 |
 |---------|-----------|--------|--------|
 | 加密算法兼容性 | 5 | 5 | 100% ✅ |
 | 核心模块单元测试 | 96 | 96 | 100% ✅ |
-| **总计** | **101** | **101** | **100%** ✅ |
+| HTTP API 单元测试 | 16 | 16 | 100% ✅ |
+| HTTP API 集成测试 | 23 | 23 | 100% ✅ |
+| **总计** | **140** | **140** | **100%** ✅ |
 
 **详细报告**: [测试报告](tests/reports/test_report_20260423.md)
 

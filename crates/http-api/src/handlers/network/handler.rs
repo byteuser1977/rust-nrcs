@@ -16,7 +16,7 @@ pub async fn get_peers(
 ) -> Result<Json<GetPeersResponse>, ApiError> {
     let start_time = Instant::now();
     
-    let peers = if let Some(p2p_manager) = &state.p2p_manager {
+    let peers = if let Some(_p2p_manager) = &state.p2p_manager {
         // TODO: 从 P2P 管理器获取节点列表
         vec![]
     } else {
@@ -38,7 +38,7 @@ pub async fn get_peer(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let start_time = Instant::now();
     
-    if let Some(p2p_manager) = &state.p2p_manager {
+    if let Some(_p2p_manager) = &state.p2p_manager {
         // TODO: 从 P2P 管理器获取节点信息
         let processing_time = start_time.elapsed().as_millis() as u32;
         

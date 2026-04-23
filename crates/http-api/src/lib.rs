@@ -46,7 +46,7 @@ pub async fn run_server(state: ApiState, addr: SocketAddr) -> anyhow::Result<()>
     Ok(())
 }
 
-pub async fn run_from_config(config: ApiConfig) -> anyhow::Result<()> {
+pub async fn run_from_config(_config: ApiConfig) -> anyhow::Result<()> {
     panic!("run_from_config not implemented yet; use apps/node");
 }
 
