@@ -1,17 +1,91 @@
-//! SM4 对称加密实现（CBC 和 GCM 模式）
+//! SM4 分组密码算法（国密标准 GM/T 0002-2012）
 //!
-//! 本模块提供：
-//! - CBC 模式（带 PKCS#7 填充）
-//! - GCM 模式（认证加密）
+//! SM4 是一个 128 位分组、128 位密钥的对称密码算法。
+//! 算法特点：
+//! - 分组长度：128 位（16 字节）
+//! - 密钥长度：128 位（16 字节）
+//! - 轮数：32 轮
+//! - 结构：Feistel 网络
 //!
-//! 接口设计参考 Java 的 AES-CBC/GCM 实现：
-//! - 加密返回 `iv || ciphertext`
-//! - 解密接受 `iv || ciphertext` 格式
+//! ## 使用示例
+//! ```
+//! use crypto::algorithms::cipher::sm4::{encrypt_cbc, decrypt_cbc, Sm4Key};
+//!
+//! let key = Sm4Key::random();
+//! let iv = [0u8; 16];
+//! let plaintext = b"Hello, SM4!";
+//!
+//! // CBC 加密
+//! let ciphertext = encrypt_cbc(plaintext, &key, &iv);
+//!
+//! // CBC 解密
+//! let decrypted = decrypt_cbc(&ciphertext, &key).unwrap();
+//! assert_eq!(plaintext, decrypted.as_slice());
+//! ```
 
 use crate::CryptoError;
-use block_cipher_trait::BlockCipher;
+use rand::RngCore;
+use sm4::cipher::{BlockCipherDecBackend, BlockCipherEncBackend, KeyInit};
 use sm4::Sm4;
 use zeroize::Zeroize;
+
+/// SM4 密钥（16 字节）
+#[derive(Debug, Clone)]
+pub struct Sm4Key([u8; 16]);
+
+impl Zeroize for Sm4Key {
+    fn zeroize(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl Drop for Sm4Key {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl Sm4Key {
+    /// 生成随机密钥
+    pub fn random() -> Self {
+        let mut key = [0u8; 16];
+        rand::thread_rng().fill_bytes(&mut key);
+        Self(key)
+    }
+
+    /// 从字节切片创建密钥
+    pub fn from_bytes(bytes: &[u8; 16]) -> Self {
+        Self(*bytes)
+    }
+
+    /// 从密码派生密钥（使用 SM3 哈希）
+    pub fn derive_from(input: &[u8]) -> Self {
+        use sm3::{Digest, Sm3};
+        let mut hasher = Sm3::new();
+        hasher.update(input);
+        let result = hasher.finalize();
+        let mut key = [0u8; 16];
+        key.copy_from_slice(&result[..16]);
+        Self(key)
+    }
+
+    /// 获取密钥字节
+    pub fn as_bytes(&self) -> &[u8; 16] {
+        &self.0
+    }
+}
+
+impl AsRef<[u8]> for Sm4Key {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<[u8; 16]> for Sm4Key {
+    fn from(bytes: [u8; 16]) -> Self {
+        Self(bytes)
+    }
+}
 
 /// PKCS#7 填充
 fn pkcs7_pad(data: &[u8]) -> Vec<u8> {
@@ -29,25 +103,27 @@ fn pkcs7_unpad(data: &[u8]) -> Result<Vec<u8>, CryptoError> {
     }
     let pad_len = *data.last().unwrap() as usize;
     if pad_len == 0 || pad_len > 16 {
-        return Err(CryptoError::Sm4Error(
-            "invalid padding length".into(),
-        ));
+        return Err(CryptoError::Sm4Error("invalid padding length".into()));
     }
     if data.len() < pad_len {
-        return Err(CryptoError::Sm4Error(
-            "data too short for padding".into(),
-        ));
+        return Err(CryptoError::Sm4Error("data too short for padding".into()));
+    }
+    // 验证填充字节
+    for i in 0..pad_len {
+        if data[data.len() - 1 - i] != pad_len as u8 {
+            return Err(CryptoError::Sm4Error("invalid padding bytes".into()));
+        }
     }
     let mut result = data.to_vec();
     result.truncate(data.len() - pad_len);
     Ok(result)
 }
 
-/// CBC 加密
+/// CBC 模式加密
 ///
 /// 返回 `iv || ciphertext`
-pub fn encrypt_cbc(plaintext: &[u8], key: &[u8; 16], iv: &[u8; 16]) -> Vec<u8> {
-    let mut cipher = Sm4::new_from_slice(key).expect("valid key length");
+pub fn encrypt_cbc(plaintext: &[u8], key: &Sm4Key, iv: &[u8; 16]) -> Vec<u8> {
+    let cipher = Sm4::new_from_slice(key.as_bytes()).expect("valid key length");
     let mut result = Vec::with_capacity(iv.len() + plaintext.len() + 16);
     result.extend_from_slice(iv);
 
@@ -55,12 +131,15 @@ pub fn encrypt_cbc(plaintext: &[u8], key: &[u8; 16], iv: &[u8; 16]) -> Vec<u8> {
     let padded = pkcs7_pad(plaintext);
 
     for chunk in padded.chunks(16) {
-        // XOR with previous ciphertext block (or IV for first block)
         let mut block = [0u8; 16];
-        for (b, &p) in block.iter_mut().zip(chunk) {
-            *b = p ^ prev_block[b as usize];
+        block[..chunk.len()].copy_from_slice(chunk);
+        
+        // XOR with previous ciphertext block (or IV for first block)
+        for (b, p) in block.iter_mut().zip(prev_block.iter()) {
+            *b ^= p;
         }
-        cipher.encrypt_block(&mut block);
+        
+        cipher.encrypt_block_inplace((&mut block).into());
         result.extend_from_slice(&block);
         prev_block = block;
     }
@@ -68,127 +147,75 @@ pub fn encrypt_cbc(plaintext: &[u8], key: &[u8; 16], iv: &[u8; 16]) -> Vec<u8> {
     result
 }
 
-/// CBC 解密
+/// CBC 模式解密
 ///
 /// 输入格式：`iv || ciphertext`
-pub fn decrypt_cbc(ciphertext_with_iv: &[u8], key: &[u8; 16]) -> Result<Vec<u8>, CryptoError> {
-    if ciphertext_with_iv.len() < 16 {
-        return Err(CryptoError::Sm4Error(
-            "ciphertext too short".into(),
-        ));
+pub fn decrypt_cbc(ciphertext_with_iv: &[u8], key: &Sm4Key) -> Result<Vec<u8>, CryptoError> {
+    if ciphertext_with_iv.len() < 32 {
+        return Err(CryptoError::Sm4Error("ciphertext too short".into()));
     }
     if (ciphertext_with_iv.len() - 16) % 16 != 0 {
-        return Err(CryptoError::Sm4Error(
-            "ciphertext length not multiple of block size".into(),
-        ));
+        return Err(CryptoError::Sm4Error("ciphertext length not multiple of block size".into()));
     }
 
     let iv = &ciphertext_with_iv[..16];
-    let ciphertext = &ciphertext_with_iv[16:];
+    let ciphertext = &ciphertext_with_iv[16..];
 
-    let mut cipher = Sm4::new_from_slice(key).expect("valid key length");
+    let cipher = Sm4::new_from_slice(key.as_bytes()).expect("valid key length");
     let mut prev_block = [0u8; 16];
     prev_block.copy_from_slice(iv);
 
     let mut plaintext = Vec::with_capacity(ciphertext.len());
 
     for chunk in ciphertext.chunks_exact(16) {
-        let mut block = chunk.try_into().unwrap();
-        cipher.decrypt_block(&mut block);
+        let mut block: [u8; 16] = chunk.try_into().unwrap();
+        cipher.decrypt_block_inplace((&mut block).into());
+        
         // P_i = D(C_i) XOR C_{i-1}
-        for (p, (dec, prev)) in plaintext
-            .iter_mut()
-            .zip(block.iter().zip(prev_block.iter()))
-        {
-            *p = dec ^ prev;
+        for (dec, prev) in block.iter().zip(prev_block.iter()) {
+            plaintext.push(dec ^ prev);
         }
-        prev_block = [0u8; 16];
+        
         prev_block.copy_from_slice(chunk);
     }
 
     pkcs7_unpad(&plaintext)
 }
 
-/// GCM 模式加密
-///
-/// # 参数
-/// - `plaintext`: 明文
-/// - `key`: 16 字节密钥
-/// - `nonce`: 96 位 nonce（12 字节）
-/// - `aad`: 附加认证数据（如头部信息）
-///
-/// # 返回
-/// `(ciphertext, tag)`，tag 长度为 16 字节（128 位认证标签）
-pub fn encrypt_gcm(
-    plaintext: &[u8],
-    key: &[u8; 16],
-    nonce: &[u8; 12],
-    aad: &[u8],
-) -> Result<(Vec<u8>, [u8; 16]), CryptoError> {
-    use sm4_gcm::{
-        aead::{Aead, NewAead},
-        Sm4Gcm,
-        generic_array::GenericArray,
-    };
-
-    let key_arr = GenericArray::from_slice(key);
-    let cipher = Sm4Gcm::new(key_arr);
-
-    let nonce_arr = GenericArray::from_slice(nonce);
-    let aad_arr = GenericArray::from_slice(aad);
-
-    // 加密：返回 ciphertext || tag 组合
-    let combined = cipher
-        .encrypt(nonce_arr, aad_arr, plaintext)
-        .map_err(|_| CryptoError::Sm4Error("GCM encryption failed".into()))?;
-
-    // 分离 tag（最后 16 字节）
-    let tag_len = 16;
-    if combined.len() < tag_len {
-        return Err(CryptoError::Sm4Error(
-            "GCM output too short".into(),
-        ));
+/// ECB 模式加密（无填充，输入必须是 16 字节的倍数）
+pub fn encrypt_ecb(plaintext: &[u8], key: &Sm4Key) -> Result<Vec<u8>, CryptoError> {
+    if plaintext.len() % 16 != 0 {
+        return Err(CryptoError::Sm4Error("plaintext length must be multiple of 16".into()));
     }
-    let (ct_bytes, tag_bytes) = combined.split_at(combined.len() - tag_len);
-    let mut tag = [0u8; 16];
-    tag.copy_from_slice(tag_bytes);
-
-    Ok((ct_bytes.to_vec(), tag))
+    
+    let cipher = Sm4::new_from_slice(key.as_bytes()).expect("valid key length");
+    let mut result = Vec::with_capacity(plaintext.len());
+    
+    for chunk in plaintext.chunks(16) {
+        let mut block: [u8; 16] = chunk.try_into().unwrap();
+        cipher.encrypt_block_inplace((&mut block).into());
+        result.extend_from_slice(&block);
+    }
+    
+    Ok(result)
 }
 
-/// GCM 模式解密
-///
-/// 输入 `ciphertext`（不含 tag）
-/// 返回解密后的明文，并通过 tag 验证完整性
-pub fn decrypt_gcm(
-    ciphertext: &[u8],
-    key: &[u8; 16],
-    nonce: &[u8; 12],
-    tag: &[u8; 16],
-    aad: &[u8],
-) -> Result<Vec<u8>, CryptoError> {
-    use sm4_gcm::{
-        aead::{Aead, NewAead},
-        Sm4Gcm,
-        generic_array::GenericArray,
-    };
-
-    let key_arr = GenericArray::from_slice(key);
-    let cipher = Sm4Gcm::new(key_arr);
-
-    let nonce_arr = GenericArray::from_slice(nonce);
-    let aad_arr = GenericArray::from_slice(aad);
-    let tag_arr = GenericArray::from_slice(tag);
-
-    // 合并 ciphertext 和 tag 用于解密验证
-    let mut buffer = ciphertext.to_vec();
-    buffer.extend_from_slice(tag);
-
-    cipher
-        .decrypt(nonce_arr, aad_arr, &buffer)
-        .map_err(|_| CryptoError::Sm4Error(
-            "GCM authentication failed or decryption error".into(),
-        ))
+/// ECB 模式解密（无填充，输入必须是 16 字节的倍数）
+pub fn decrypt_ecb(ciphertext: &[u8], key: &Sm4Key) -> Result<Vec<u8>, CryptoError> {
+    if ciphertext.len() % 16 != 0 {
+        return Err(CryptoError::Sm4Error("ciphertext length must be multiple of 16".into()));
+    }
+    
+    let cipher = Sm4::new_from_slice(key.as_bytes()).expect("valid key length");
+    let mut result = Vec::with_capacity(ciphertext.len());
+    
+    for chunk in ciphertext.chunks(16) {
+        let mut block: [u8; 16] = chunk.try_into().unwrap();
+        cipher.decrypt_block_inplace((&mut block).into());
+        result.extend_from_slice(&block);
+    }
+    
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -233,51 +260,22 @@ mod tests {
     }
 
     #[test]
-    fn test_sm4_gcm_roundtrip() {
+    fn test_sm4_ecb_roundtrip() {
         let key = Sm4Key::random();
-        let mut nonce = [0u8; 12];
-        rand::thread_rng().fill_bytes(&mut nonce);
-        let aad = b"header data";
-
-        let plaintext = b"SM4-GCM authenticated encryption";
-        let (ciphertext, tag) = encrypt_gcm(plaintext, &key, &nonce, aad)
-            .expect("encryption success");
-        let decrypted = decrypt_gcm(&ciphertext, &key, &nonce, &tag, aad)
-            .expect("decryption success");
-
-        assert_eq!(plaintext, decrypted.as_slice());
+        let plaintext = [0x42u8; 32]; // 32 字节 'B'
+        
+        let ciphertext = encrypt_ecb(&plaintext, &key).unwrap();
+        let decrypted = decrypt_ecb(&ciphertext, &key).unwrap();
+        
+        assert_eq!(plaintext.as_slice(), decrypted.as_slice());
     }
 
     #[test]
-    fn test_sm4_gcm_wrong_tag() {
+    fn test_sm4_ecb_wrong_length() {
         let key = Sm4Key::random();
-        let mut nonce = [0u8; 12];
-        rand::thread_rng().fill_bytes(&mut nonce);
-
-        let plaintext = b"test message";
-        let (ciphertext, tag) = encrypt_gcm(plaintext, &key, &nonce, b"").unwrap();
-
-        // 修改 tag
-        let mut bad_tag = tag;
-        bad_tag[0] = bad_tag[0].wrapping_add(1);
-        let result = decrypt_gcm(&ciphertext, &key, &nonce, &bad_tag, b"");
-
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_sm4_gcm_wrong_key() {
-        let key1 = Sm4Key::random();
-        let key2 = Sm4Key::random();
-        let mut nonce = [0u8; 12];
-        rand::thread_rng().fill_bytes(&mut nonce);
-
-        let plaintext = b"test";
-        let (ciphertext, tag) = encrypt_gcm(plaintext, &key1, &nonce, b"").unwrap();
-
-        // Wrong key should fail
-        let result = decrypt_gcm(&ciphertext, &key2, &nonce, &tag, b"");
-        assert!(result.is_err());
+        let plaintext = [0u8; 15]; // 15 字节，不是 16 的倍数
+        
+        assert!(encrypt_ecb(&plaintext, &key).is_err());
     }
 
     #[test]

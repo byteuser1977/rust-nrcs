@@ -8,14 +8,16 @@
 //! - 结构：Feistel 网络
 //!
 //! ## 使用示例
+//!
+//! ### CBC 模式
 //! ```
-//! use crypto::sm4::{self, Sm4Key, encrypt_cbc, decrypt_cbc};
+//! use crypto::algorithms::cipher::sm4::{encrypt_cbc, decrypt_cbc, Sm4Key};
 //!
 //! let key = Sm4Key::random();
 //! let iv = [0u8; 16];
 //! let plaintext = b"Hello, SM4!";
 //!
-//! // CBC 加密
+//! // CBC 加密（返回 iv || ciphertext）
 //! let ciphertext = encrypt_cbc(plaintext, &key, &iv);
 //!
 //! // CBC 解密
@@ -23,22 +25,18 @@
 //! assert_eq!(plaintext, decrypted.as_slice());
 //! ```
 //!
-//! ## GCM 模式（推荐）
+//! ### ECB 模式
 //! ```
-//! use crypto::sm4::{encrypt_gcm, decrypt_gcm, Sm4Key};
+//! use crypto::algorithms::cipher::sm4::{encrypt_ecb, decrypt_ecb, Sm4Key};
 //!
 //! let key = Sm4Key::random();
-//! let nonce = [0u8; 12]; // GCM nonce 96 位
-//! let plaintext = b"Secret data";
-//! let aad = b"additional data";
+//! let plaintext = [0x42u8; 32]; // 必须是 16 字节的倍数
 //!
-//! // GCM 加密（返回密文 + 认证标签）
-//! let (ciphertext, tag) = encrypt_gcm(plaintext, &key, &nonce, aad);
-//!
-//! // GCM 解密（同时验证标签）
-//! let decrypted = decrypt_gcm(&ciphertext, &key, &nonce, &tag, aad).unwrap();
-//! assert_eq!(plaintext, decrypted.as_slice());
+//! let ciphertext = encrypt_ecb(&plaintext, &key).unwrap();
+//! let decrypted = decrypt_ecb(&ciphertext, &key).unwrap();
+//! assert_eq!(plaintext.as_slice(), decrypted.as_slice());
 //! ```
 
 mod cipher;
+
 pub use cipher::*;
