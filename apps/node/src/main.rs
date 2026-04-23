@@ -26,6 +26,11 @@ use config::{Config, File, Environment};
 use async_trait::async_trait;
 use sqlx::PgPool;
 
+use http_api::state::ApiState;
+use account::AccountManager;
+use tx_engine::TransactionProcessor;
+use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, RepositoryResult, BlockModel, TransactionModel, AssetModel, AccountAssetModel};
+
 /// 简单的 DummyBlockVerifier
 struct DummyBlockVerifier;
 
@@ -36,12 +41,333 @@ impl p2p::handlers::BlockVerifier for DummyBlockVerifier {
     }
 }
 
+/// 模拟账户管理器
+struct MockAccountManager;
+
+#[async_trait]
+impl AccountManager for MockAccountManager {
+    async fn create_account(&self, _initial_balance: Option<Amount>) -> account::AccountResult<(crypto::KeyPair, AccountId, String)> {
+        let kp = crypto::generate_keypair();
+        let account_id = 1;
+        let address = "test_address".to_string();
+        Ok((kp, account_id, address))
+    }
+    
+    async fn register_account(&self, _account_id: AccountId, _public_key: Vec<u8>) -> account::AccountResult<()> {
+        Ok(())
+    }
+    
+    async fn get_balance(&self, _account_id: AccountId) -> account::AccountResult<Amount> {
+        Ok(1000)
+    }
+    
+    async fn get_account_info(&self, account_id: AccountId) -> account::AccountResult<Account> {
+        Ok(Account {
+            id: account_id,
+            address: Some("test_address".to_string()),
+            balance: 1000,
+            unconfirmed_balance: 1000,
+            reserved_balance: 0,
+            guaranteed_balance: 0,
+            assets: Default::default(),
+            properties: Default::default(),
+            lease: None,
+            created_at: 0,
+            last_updated: 0,
+            current_height: 0,
+        })
+    }
+    
+    async fn transfer(&self, _from: AccountId, _to: AccountId, _amount: Amount) -> account::AccountResult<()> {
+        Ok(())
+    }
+    
+    async fn credit(&self, _account_id: AccountId, _amount: Amount) -> account::AccountResult<()> {
+        Ok(())
+    }
+    
+    async fn debit(&self, _account_id: AccountId, _amount: Amount) -> account::AccountResult<()> {
+        Ok(())
+    }
+    
+    async fn get_and_increment_nonce(&self, _sender_id: AccountId) -> account::AccountResult<u64> {
+        Ok(0)
+    }
+    
+    async fn current_nonce(&self, _account_id: AccountId) -> account::AccountResult<u64> {
+        Ok(0)
+    }
+    
+    async fn mint_asset(&self, _asset_id: AssetId, _to: AccountId, _amount: Amount) -> account::AccountResult<()> {
+        Ok(())
+    }
+    
+    async fn burn_asset(&self, _asset_id: AssetId, _from: AccountId, _amount: Amount) -> account::AccountResult<()> {
+        Ok(())
+    }
+    
+    async fn get_public_key(&self, _account_id: AccountId) -> account::AccountResult<Option<blockchain_types::PublicKey>> {
+        Ok(None)
+    }
+}
+
+/// 模拟交易处理器
+struct MockTxProcessor;
+
+#[async_trait]
+impl TransactionProcessor for MockTxProcessor {
+    async fn validate(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
+        Ok(())
+    }
+    
+    async fn apply(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
+        Ok(())
+    }
+    
+    async fn execute(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<tx_engine::TxReceiptInfo> {
+        Ok(tx_engine::TxReceiptInfo {
+            transaction_id: 0,
+            status: tx_engine::TxStatus::Success,
+            block_height: None,
+            gas_used: 0,
+            logs: vec![],
+            contract_address: None,
+            executed_at: 0,
+        })
+    }
+}
+
+/// 模拟区块仓库
+struct MockBlockRepository;
+
+#[async_trait]
+impl orm::Repository<BlockModel> for MockBlockRepository {
+    async fn insert(&self, _item: &BlockModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<BlockModel>> {
+        Ok(None)
+    }
+    
+    async fn update(&self, _item: &BlockModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<BlockModel>> {
+        Ok(vec![])
+    }
+    
+    async fn count(&self) -> RepositoryResult<i64> {
+        Ok(0)
+    }
+}
+
+#[async_trait]
+impl BlockRepository for MockBlockRepository {
+    async fn find_by_height(&self, _height: i32) -> RepositoryResult<Option<BlockModel>> {
+        Ok(None)
+    }
+    
+    async fn find_by_id_column(&self, _id: i64) -> RepositoryResult<Option<BlockModel>> {
+        Ok(None)
+    }
+    
+    async fn find_by_hash(&self, _hash: &[u8]) -> RepositoryResult<Option<BlockModel>> {
+        Ok(None)
+    }
+    
+    async fn find_latest(&self) -> RepositoryResult<Option<BlockModel>> {
+        Ok(None)
+    }
+    
+    async fn find_range(&self, _start_height: i32, _end_height: i32) -> RepositoryResult<Vec<BlockModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_by_generator(&self, _generator_id: i64) -> RepositoryResult<Vec<BlockModel>> {
+        Ok(vec![])
+    }
+}
+
+/// 模拟交易仓库
+struct MockTransactionRepository;
+
+#[async_trait]
+impl orm::Repository<TransactionModel> for MockTransactionRepository {
+    async fn insert(&self, _item: &TransactionModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<TransactionModel>> {
+        Ok(None)
+    }
+    
+    async fn update(&self, _item: &TransactionModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<TransactionModel>> {
+        Ok(vec![])
+    }
+    
+    async fn count(&self) -> RepositoryResult<i64> {
+        Ok(0)
+    }
+}
+
+#[async_trait]
+impl TransactionRepository for MockTransactionRepository {
+    async fn find_by_txid(&self, _id: i64) -> RepositoryResult<Option<TransactionModel>> {
+        Ok(None)
+    }
+    
+    async fn find_by_full_hash(&self, _full_hash: &[u8]) -> RepositoryResult<Option<TransactionModel>> {
+        Ok(None)
+    }
+    
+    async fn find_by_sender(&self, _sender_id: i64, _limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_by_recipient(&self, _recipient_id: i64, _limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_by_block(&self, _block_id: i64) -> RepositoryResult<Vec<TransactionModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_by_height(&self, _height: i32) -> RepositoryResult<Vec<TransactionModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_unconfirmed(&self, _limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
+        Ok(vec![])
+    }
+}
+
+/// 模拟资产仓库
+struct MockAssetRepository;
+
+#[async_trait]
+impl orm::Repository<AssetModel> for MockAssetRepository {
+    async fn insert(&self, _item: &AssetModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<AssetModel>> {
+        Ok(None)
+    }
+    
+    async fn update(&self, _item: &AssetModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<AssetModel>> {
+        Ok(vec![])
+    }
+    
+    async fn count(&self) -> RepositoryResult<i64> {
+        Ok(0)
+    }
+}
+
+#[async_trait]
+impl AssetRepository for MockAssetRepository {
+    async fn find_by_asset_id(&self, _id: i64) -> RepositoryResult<Option<AssetModel>> {
+        Ok(None)
+    }
+    
+    async fn find_by_owner(&self, _owner_id: i64) -> RepositoryResult<Vec<AssetModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_by_height(&self, _height: i32) -> RepositoryResult<Vec<AssetModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_tradable(&self, _limit: i64) -> RepositoryResult<Vec<AssetModel>> {
+        Ok(vec![])
+    }
+}
+
+/// 模拟账户资产仓库
+struct MockAccountAssetRepository;
+
+#[async_trait]
+impl orm::Repository<AccountAssetModel> for MockAccountAssetRepository {
+    async fn insert(&self, _item: &AccountAssetModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
+        Ok(None)
+    }
+    
+    async fn update(&self, _item: &AccountAssetModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<AccountAssetModel>> {
+        Ok(vec![])
+    }
+    
+    async fn count(&self) -> RepositoryResult<i64> {
+        Ok(0)
+    }
+}
+
+#[async_trait]
+impl AccountAssetRepository for MockAccountAssetRepository {
+    async fn find_by_account(&self, _account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_by_asset(&self, _asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_by_account_and_asset(&self, _account_id: i64, _asset_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
+        Ok(None)
+    }
+    
+    async fn update_quantity(&self, _account_id: i64, _asset_id: i64, _quantity: i64, _height: i32) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn increase_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+    
+    async fn decrease_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+}
+
 /// 节点配置结构（与 TOML 映射）
 #[derive(Debug, Clone, serde::Deserialize)]
 struct NodeConfig {
     p2p: P2PConfig,
     api: APIConfig,
-    websocket: WsAppConfig, // 区分名称
+    websocket: WsAppConfig,
+    database: DatabaseConfig,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -67,6 +393,12 @@ struct APIConfig {
 struct WsAppConfig {
     enabled: bool,
     port: u16,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct DatabaseConfig {
+    url: String,
+    max_connections: u32,
 }
 
 /// 解析 multiaddr 或 `host:port` 为 SocketAddr
@@ -131,8 +463,10 @@ async fn main() -> Result<()> {
 
     // 初始化数据库
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgres://nrcs:password@localhost:5432/nrcs_db".to_string());
-    let _pool = PgPool::connect(&database_url)
+        .unwrap_or_else(|_| cfg.database.url.clone());
+    info!("Connecting to database: {}", database_url.split('@').last().unwrap_or("hidden"));
+    
+    let pool = PgPool::connect(&database_url)
         .await
         .context("Failed to connect to database")?;
     
@@ -208,8 +542,31 @@ async fn main() -> Result<()> {
         info!("P2P WebSocket server started on {}", listen_addr);
     }
 
-    // TODO: 启动 HTTP API 服务器 (axum)
-    // TODO: 连接到 bootstrap 节点
+    // 启动 HTTP API 服务器
+    let api_state = ApiState {
+        account_manager: Arc::new(MockAccountManager),
+        tx_processor: Arc::new(MockTxProcessor),
+        block_repo: Arc::new(MockBlockRepository),
+        tx_repo: Arc::new(MockTransactionRepository),
+        asset_repo: Arc::new(MockAssetRepository),
+        account_asset_repo: Arc::new(MockAccountAssetRepository),
+        p2p_manager: None,
+    };
+    
+    let api_addr: SocketAddr = format!("{}:{}", cfg.api.host, cfg.api.port)
+        .parse()
+        .context("Invalid API server address")?;
+    
+    let api_router = http_api::routes::create_router(api_state);
+    
+    tokio::spawn(async move {
+        let listener = tokio::net::TcpListener::bind(api_addr).await.unwrap();
+        info!("HTTP API server starting on {}", api_addr);
+        if let Err(e) = axum::serve(listener, api_router).await {
+            error!("HTTP API server error: {}", e);
+        }
+    });
+    info!("HTTP API server configured on {}:{}", cfg.api.host, cfg.api.port);
 
     info!("Node running successfully!");
 
