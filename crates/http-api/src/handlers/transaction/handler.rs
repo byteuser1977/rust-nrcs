@@ -7,7 +7,7 @@ use axum::{
     Json,
 };
 use std::time::Instant;
-use blockchain_types::{AccountId, Amount, transaction::Transaction};
+use blockchain_types::{AccountId, Amount};
 use crate::handlers::transaction::{state::TransactionApiState, dto::*};
 use crate::core::ApiError;
 
@@ -27,7 +27,7 @@ fn parse_amount_nqt(amount_str: &str) -> Result<Amount, ApiError> {
 
 /// 发送转账
 pub async fn send_money(
-    State(state): State<TransactionApiState>,
+    State(_state): State<TransactionApiState>,
     Json(req): Json<SendMoneyRequest>,
 ) -> Result<Json<SendMoneyResponse>, ApiError> {
     let start_time = Instant::now();
@@ -65,7 +65,7 @@ pub async fn get_transaction(
     // TODO: 从 repository 查询交易
     // let tx = state.tx_repo.find_by_hash(&hash_bytes).await?;
     
-    let processing_time = start_time.elapsed().as_millis() as u32;
+    let _processing_time = start_time.elapsed().as_millis() as u32;
     
     // 暂时返回错误
     Err(ApiError::NotFound(format!("Transaction {} not found", req.transaction)))

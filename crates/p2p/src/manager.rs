@@ -11,7 +11,7 @@ use crate::config::P2PConfig;
 use crate::daemon::{ConnectionDaemon, DiscoveryDaemon, TransactionDaemon, UnblacklistDaemon};
 use crate::error::{P2PError, P2PResult};
 use crate::peer::{Peer, PeerState, Peers};
-use crate::protocol::{PeerRequest, PeerResponse, RequestType};
+use crate::protocol::PeerRequest;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};

@@ -5,7 +5,6 @@
 use crate::api_tag::ApiTag;
 use crate::request_handler::{HandlerPtr, RequestHandler};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 use parking_lot::RwLock;
 
 pub struct ApiRegistry {

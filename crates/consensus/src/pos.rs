@@ -5,9 +5,8 @@
 use super::*;
 use blockchain_types::*;
 use num_bigint::BigUint;
-use num_traits::{Zero, One, ToPrimitive};
-use rand::Rng;
-use sha2::{Sha256, Digest};
+use num_traits::Zero;
+use sha2::Digest;
 
 /// PoS 共识引擎
 pub struct PosEngine {
@@ -66,7 +65,7 @@ impl PosEngine {
 
         // 简化：使用 SHA-256 生成随机数
         let rand_hash = sha2::Sha256::digest(&rand_input);
-        let mut rng_num = BigUint::from_bytes_be(&rand_hash);
+        let rng_num = BigUint::from_bytes_be(&rand_hash);
         let remainder = rng_num % &total_effective;
 
         // 3. 扫描候选者
@@ -87,7 +86,7 @@ impl PosEngine {
 }
 
 impl ConsensusEngine for PosEngine {
-    fn verify_difficulty(&self, block: &Block) -> ConsensusResult<()> {
+    fn verify_difficulty(&self, _block: &Block) -> ConsensusResult<()> {
         // PoS 不验证传统难度，改为验证出块时间在 deadline 内
         // 具体逻辑在 PoS 中放在 select_forger 和 deadline 验证
         Ok(())
@@ -148,14 +147,14 @@ impl crate::PoSEngine for PosEngine {
         self.select_forger_internal(blockchain, timestamp)
     }
 
-    fn calculate_deadline(&self, account_id: AccountId, at_height: Height) -> ConsensusResult<u64> {
+    fn calculate_deadline(&self, _account_id: AccountId, at_height: Height) -> ConsensusResult<u64> {
         // 简化计算：deadline = (height % 1440) * target_spacing
         // 原始算法更复杂，涉及生成签名
         let base = ((at_height % 1440) as u64).saturating_mul(self.target_spacing as u64);
         Ok(base)
     }
 
-    fn generate_signature(&self, account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512 {
+    fn generate_signature(&self, _account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512 {
         // 生成签名使用私有密钥（应调用者提供）
         // 这里仅返回占位符
         let mut gen_sig = prev_gen_sig.0;
@@ -166,7 +165,7 @@ impl crate::PoSEngine for PosEngine {
 }
 
 impl PosEngine {
-    pub(crate) fn generate_signature(&self, account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512 {
+    pub(crate) fn generate_signature(&self, _account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512 {
         // 生成签名使用私有密钥（应调用者提供）
         // 这里仅返回占位符
         let mut gen_sig = prev_gen_sig.0;

@@ -442,7 +442,7 @@ impl AccountRepository for PgAccountRepository {
         self.find_by_account_id(id).await
     }
 
-    async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<AccountModel>> {
+    async fn find_by_address(&self, _address: &str) -> RepositoryResult<Option<AccountModel>> {
         let record = sqlx::query_as!(
             AccountModel,
             "SELECT * FROM account WHERE latest = TRUE ORDER BY height DESC LIMIT 1"

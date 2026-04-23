@@ -35,7 +35,7 @@ impl GetNextBlocksHandler {
             debug!("Requested {} specific blocks", ids.len());
             // TODO: 从数据库查询这些区块
             let mut blocks = Vec::new();
-            for id in ids {
+            for _id in ids {
                 // TODO: 获取区块 { "block": ... }
                 let block_placeholder = serde_json::json!({
                     "block": {

@@ -8,7 +8,7 @@
 //! - 重置旧版本标记
 
 use crate::config::P2PConfig;
-use crate::peer::{PeerState, Peers};
+use crate::peer::Peers;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;

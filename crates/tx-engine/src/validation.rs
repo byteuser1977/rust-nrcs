@@ -11,7 +11,6 @@
 
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
-use blockchain_types::constants::*;
 use sha2::{Sha256, Digest};
 use thiserror::Error;
 
@@ -336,7 +335,7 @@ impl ContractValidator {
         Ok(())
     }
     
-    pub fn validate_invocation(&self, tx: &Transaction) -> TxValidationResult<()> {
+    pub fn validate_invocation(&self, _tx: &Transaction) -> TxValidationResult<()> {
         Ok(())
     }
 }

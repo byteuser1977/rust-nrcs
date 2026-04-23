@@ -34,7 +34,7 @@ impl PgAccountStore {
 impl AccountStore for PgAccountStore {
     async fn get_or_create_account(&self, account_id: AccountId, public_key: Vec<u8>) -> RepositoryResult<AccountModel> {
         // 尝试查询
-        if let Some(mut account) = self.account_repo.find_by_account_id(account_id as i64).await? {
+        if let Some(account) = self.account_repo.find_by_account_id(account_id as i64).await? {
             // 如果已有公钥，直接返回
             // 注意：AccountModel 中没有 public_key 字段，这里暂时跳过更新
             if !public_key.is_empty() {
@@ -44,7 +44,7 @@ impl AccountStore for PgAccountStore {
         }
 
         // 创建新账户
-        let mut account = Account::new(account_id, 0);
+        let account = Account::new(account_id, 0);
         // 注意：AccountModel 中没有 public_key 字段，这里暂时跳过设置
         // 直接创建 AccountModel 实例
         let model = AccountModel {

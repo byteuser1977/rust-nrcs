@@ -211,8 +211,8 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
 
             TransactionType::AssetTransfer => {
                 // 资产转移
-                let sender_id = tx.sender_id;
-                let recipient_id = tx.recipient_id.ok_or_else(|| ProcessorError::Validation("asset transfer requires recipient".to_string()))?;
+                let _sender_id = tx.sender_id;
+                let _recipient_id = tx.recipient_id.ok_or_else(|| ProcessorError::Validation("asset transfer requires recipient".to_string()))?;
 
                 // 解析 attachment 获取 asset_id 和 quantity（简化）
                 // TODO: 实现 asset transfer 的完整逻辑
@@ -234,7 +234,7 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
             TransactionType::ContractDeployment => {
                 // 合约部署：扣除 fee，创建新合约记录
                 let sender_id = tx.sender_id;
-                let account = self.get_account(sender_id).await?;
+                let _account = self.get_account(sender_id).await?;
                 // TODO: 部署合约
             }
 
@@ -250,7 +250,7 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         use chrono::Utc;
 
         // 1. 记录执行开始时间
-        let start_time = Utc::now().timestamp() as u64;
+        let _start_time = Utc::now().timestamp() as u64;
 
         // 2. 执行交易
         self.apply(tx).await?;

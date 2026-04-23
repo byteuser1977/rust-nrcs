@@ -9,7 +9,6 @@
 
 use blockchain_types::*;
 use blockchain_types::prelude::Block;
-use blockchain_types::constants::*;
 
 use crate::target::{calculate_hit, calculate_deadline, verify_hit};
 
@@ -146,7 +145,7 @@ impl ForgerSelector {
     pub fn verify_forger(
         &self,
         block: &Block,
-        forger_id: AccountId,
+        _forger_id: AccountId,
         public_key: &[u8],
         effective_balance: u64,
         timestamp: u32,

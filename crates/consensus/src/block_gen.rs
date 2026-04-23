@@ -8,7 +8,6 @@
 //! - 区块验证
 
 use blockchain_types::*;
-use blockchain_types::constants::*;
 use blockchain_types::prelude::{Block, Transaction};
 use sha2::{Sha256, Digest};
 

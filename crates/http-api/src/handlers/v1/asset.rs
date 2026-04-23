@@ -42,7 +42,7 @@ impl RequestHandler for GetAssetHandler {
             None => return Err(ApiError::NotFound("Asset not found".to_string())),
         };
         
-        let asset_domain = asset.to_domain().map_err(|e| ApiError::Internal(e.to_string()))?;
+        let _asset_domain = asset.to_domain().map_err(|e| ApiError::Internal(e.to_string()))?;
         
         let mut builder = RsRespBuilder::new();
         

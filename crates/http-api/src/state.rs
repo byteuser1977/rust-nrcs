@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use blockchain_types::*;
 use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository};
 use tx_engine::TransactionProcessor;
 use ::account::AccountManager;

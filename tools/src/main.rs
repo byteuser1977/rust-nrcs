@@ -184,7 +184,7 @@ fn parse_sql(sql: &str) -> SchemaAnalysis {
 fn process_table(schema: &mut SchemaAnalysis, table_name: &str, column_defs: Vec<(String, String, String)>) {
     let mut columns = Vec::new();
     let mut primary_key_cols = Vec::new();
-    let mut unique_groups = Vec::new();
+    let unique_groups = Vec::new();
 
     let mut pk_cols_from_inline: Vec<String> = Vec::new();
 

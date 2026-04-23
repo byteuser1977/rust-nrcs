@@ -1,6 +1,5 @@
 //! Common types for transaction processing
 
-use std::sync::Arc;
 
 use blockchain_types::*;
 // use serde::{Deserialize, Serialize}; // 暂时注释，等待 Cargo.toml 添加依赖

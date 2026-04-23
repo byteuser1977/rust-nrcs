@@ -7,7 +7,7 @@
 //! - 广播交易到其他节点
 
 use crate::config::P2PConfig;
-use crate::peer::{PeerState, Peers};
+use crate::peer::Peers;
 use crate::protocol::{PeerRequest, RequestType};
 use std::sync::Arc;
 use std::time::Duration;
@@ -95,7 +95,7 @@ impl TransactionDaemon {
     async fn broadcast_transactions(
         peers: &Arc<Peers>,
         config: &P2PConfig,
-        batch_size: usize,
+        _batch_size: usize,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // 获取连接的节点
         let active_peers = peers.get_active_peers().await;
@@ -105,7 +105,7 @@ impl TransactionDaemon {
         }
 
         // 构建 processTransactions 请求
-        let request = PeerRequest::new(RequestType::ProcessTransactions, 1);
+        let _request = PeerRequest::new(RequestType::ProcessTransactions, 1);
 
         // 发送到部分节点
         let send_limit = config.send_to_peers_limit.min(active_peers.len());

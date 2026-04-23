@@ -4,7 +4,6 @@
 //! Uses async/await with SQLx and connection pooling.
 
 use async_trait::async_trait;
-use sqlx::{PgPool, Postgres};
 use thiserror::Error;
 
 use crate::models::*;

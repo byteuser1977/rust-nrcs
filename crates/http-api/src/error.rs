@@ -8,7 +8,6 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use std::fmt;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {

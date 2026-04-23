@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tracing::{debug, info, warn};
 use super::BlockVerifier;
 use blockchain_types::prelude::*;
-use anyhow::anyhow; // for error handling
+ // for error handling
 
 /// ProcessBlock 处理器
 /// 请求：完整的区块 JSON（同 Block.getJSONObject() 结构）
@@ -20,7 +20,7 @@ impl ProcessBlockHandler {
         Self { peers, verifier }
     }
 
-    pub async fn handle(&self, request: PeerRequest, peers: Arc<Peers>) -> serde_json::Value {
+    pub async fn handle(&self, request: PeerRequest, _peers: Arc<Peers>) -> serde_json::Value {
         debug!("Handling ProcessBlock request");
 
         let block_json = match request.get::<serde_json::Value>("block") {

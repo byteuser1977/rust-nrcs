@@ -3,6 +3,7 @@
 use clap::Args;
 use std::io::{self, BufRead, Write};
 
+#[allow(dead_code)]
 pub struct KeyPair {
     pub public_key: Vec<u8>,
     pub secret_key: Vec<u8>,

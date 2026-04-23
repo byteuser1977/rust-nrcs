@@ -9,7 +9,7 @@
 
 use crate::config::P2PConfig;
 use crate::peer::{Peer, PeerState, Peers};
-use crate::protocol::{PeerRequest, PeerResponse, RequestType};
+use crate::protocol::{PeerRequest, RequestType};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -98,12 +98,12 @@ impl DiscoveryDaemon {
     /// 
     /// 对应 NRCS Java: getMorePeersThread 中的 getPeers 请求
     async fn request_peers_from_peer(
-        peers: &Arc<Peers>,
+        _peers: &Arc<Peers>,
         peer: &Peer,
-        config: &P2PConfig,
+        _config: &P2PConfig,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // 构建 getPeers 请求
-        let request = PeerRequest::new(RequestType::GetPeers, 1);
+        let _request = PeerRequest::new(RequestType::GetPeers, 1);
 
         // TODO: 发送请求并处理响应
         debug!("Requesting peers from: {}", peer.address);
@@ -116,7 +116,7 @@ impl DiscoveryDaemon {
     /// 对应 NRCS Java: getMorePeersThread 中的 addPeers 请求
     async fn share_my_peers(
         peers: &Arc<Peers>,
-        config: &P2PConfig,
+        _config: &P2PConfig,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let all_peers = peers.get_known_peers().await;
         
@@ -143,7 +143,7 @@ impl DiscoveryDaemon {
         }
 
         // 构建 addPeers 请求
-        let request = PeerRequest::new(RequestType::AddPeers, 1);
+        let _request = PeerRequest::new(RequestType::AddPeers, 1);
 
         // TODO: 发送请求
         debug!("Sharing {} peers with other peers", shareable_peers.len());
@@ -154,7 +154,7 @@ impl DiscoveryDaemon {
     /// Update saved peers to database
     /// 
     /// 对应 NRCS Java: updateSavedPeers()
-    async fn update_saved_peers(peers: &Arc<Peers>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn update_saved_peers(_peers: &Arc<Peers>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // TODO: 实现节点持久化
         Ok(())
     }

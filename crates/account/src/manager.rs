@@ -13,7 +13,6 @@ use thiserror::Error;
 
 use blockchain_types::*;
 use blockchain_types::prelude::Account;
-use blockchain_types::account_ext::AccountPublicKey;
 use orm::{AccountRepository, AccountAssetRepository, PublicKeyRepository, RepositoryError};
 use crypto::KeyPair;
 use crate::AccountAsset;

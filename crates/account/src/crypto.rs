@@ -4,7 +4,7 @@
 //! - Account ID derivation (delegates to crypto crate)
 //! - Address encoding (Base58 with checksum)
 
-use crypto::{KeyPair, PublicKey, sha256};
+use crypto::{KeyPair, PublicKey};
 use base58;
 
 

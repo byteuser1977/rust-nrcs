@@ -1,4 +1,3 @@
-use crate::protocol::PeerRequest;
 use serde_json;
 use tracing::warn;
 

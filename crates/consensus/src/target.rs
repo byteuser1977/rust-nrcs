@@ -9,7 +9,6 @@
 
 use blockchain_types::*;
 use blockchain_types::prelude::Block;
-use blockchain_types::constants::*;
 use num_bigint::BigUint;
 use num_traits::{ToPrimitive, One, Zero};
 

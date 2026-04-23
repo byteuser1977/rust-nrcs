@@ -6,13 +6,11 @@
 //! 内存限制+驱逐策略（可选）
 //! - 持久化（可选的 Redis 或数据库）
 
-use std::collections::{HashSet, VecDeque};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
@@ -205,7 +203,7 @@ impl Mempool {
     fn evict_one(&self) -> std::result::Result<(), MempoolError> {
         // 收集所有交易并按优先级排序
         let mut entries: Vec<_> = self.pool.iter().map(|entry| {
-            let (tx, priority, _time) = entry.value();
+            let (_tx, priority, _time) = entry.value();
             (priority.clone(), entry.key().clone())
         }).collect();
         
@@ -217,7 +215,7 @@ impl Mempool {
         entries.sort_by_key(|(p, _)| *p);
         
         let (_priority, hash) = entries.first().unwrap();
-        if let Some(tx) = self.remove(hash) {
+        if let Some(_tx) = self.remove(hash) {
             debug!("evicted tx from mempool: hash={:?}", hash);
         }
         

@@ -9,7 +9,6 @@
 
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
-use blockchain_types::constants::*;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

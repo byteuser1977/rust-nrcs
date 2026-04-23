@@ -1,7 +1,7 @@
 use crate::{peer::Peers, protocol::PeerRequest};
 use serde_json;
 use std::sync::Arc;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// GetInfo 处理器
 /// 响应包含本节点的 PeerInfo，字段需与 Java 的 Peers.getMyPeerInfoResponse() 完全匹配

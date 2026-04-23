@@ -6,7 +6,6 @@
 
 use blockchain_types::*;
 use blockchain_types::prelude::Block;
-use blockchain_types::constants::*;
 use num_bigint::BigUint;
 use num_traits::{Zero, ToPrimitive};
 use sha2::{Sha256, Digest};

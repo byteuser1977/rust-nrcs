@@ -45,6 +45,7 @@ struct NodeConfig {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
+#[allow(dead_code)]
 struct P2PConfig {
     listen_addr: String,
     external_addr: Option<String>,
@@ -62,6 +63,7 @@ struct APIConfig {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
+#[allow(dead_code)]
 struct WsAppConfig {
     enabled: bool,
     port: u16,
@@ -218,6 +220,7 @@ async fn main() -> Result<()> {
 }
 
 /// 获取当前时间戳（秒）
+#[allow(dead_code)]
 fn current_timestamp() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

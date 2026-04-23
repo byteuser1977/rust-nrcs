@@ -9,9 +9,7 @@
 
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
-use blockchain_types::constants::*;
 use std::collections::HashSet;
-use std::sync::Arc;
 use parking_lot::RwLock;
 use thiserror::Error;
 
@@ -63,7 +61,7 @@ pub struct BroadcastedTx {
 }
 
 impl BroadcastedTx {
-    pub fn new(tx: &Transaction, current_time: u32) -> Self {
+    pub fn new(tx: &Transaction, _current_time: u32) -> Self {
         Self {
             tx_hash: tx.full_hash,
             timestamp: tx.timestamp,

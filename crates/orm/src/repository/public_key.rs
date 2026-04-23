@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
 
-use crate::{RepositoryError, RepositoryResult};
+use crate::RepositoryResult;
 use blockchain_types::account_ext::AccountPublicKey;
 use blockchain_types::prelude::*;
 

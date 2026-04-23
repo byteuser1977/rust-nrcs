@@ -68,8 +68,8 @@ fn test_block_model_conversion() {
         version: BLOCK_VERSION,
         timestamp: 1_700_000_000,
         height: 100,
-        previous_block_hash: [0x11; 32],
-        payload_hash: [0x22; 32],
+        previous_block_hash: Hash256([0x11; 32]),
+        payload_hash: Hash256([0x22; 32]),
         generator_id: 12345,
         nonce: 0,
         base_target: 1_000_000,
@@ -77,8 +77,8 @@ fn test_block_model_conversion() {
         total_amount: 10_000,
         total_fee: 100,
         payload_length: 0,
-        generation_signature: [0x33; 64],
-        block_signature: [0x44; 64],
+        generation_signature: Hash512([0x33; 64]),
+        block_signature: Hash512([0x44; 64]),
         transactions: vec![],
     };
 

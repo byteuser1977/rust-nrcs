@@ -109,7 +109,7 @@ impl ConnectionDaemon {
     /// Connect to new peers
     /// 
     /// 对应 NRCS Java: peerConnectingThread 中的连接逻辑
-    async fn connect_to_new_peers(peers: &Arc<Peers>, config: &P2PConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn connect_to_new_peers(peers: &Arc<Peers>, _config: &P2PConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let now = current_timestamp();
 
         // 获取可连接的节点列表
@@ -199,7 +199,7 @@ impl ConnectionDaemon {
     /// Reconnect stale peers
     /// 
     /// 对应 NRCS Java: 重连 lastUpdated > 3600 的节点
-    async fn reconnect_stale_peers(peers: &Arc<Peers>, config: &P2PConfig, now: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn reconnect_stale_peers(peers: &Arc<Peers>, _config: &P2PConfig, now: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let all_peers = peers.get_known_peers().await;
         
         for peer in all_peers {
@@ -221,7 +221,7 @@ impl ConnectionDaemon {
     /// Cleanup inbound connections
     /// 
     /// 对应 NRCS Java: 清理 lastInboundRequest 过期的连接
-    async fn cleanup_inbound_connections(peers: &Arc<Peers>, config: &P2PConfig, now: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn cleanup_inbound_connections(_peers: &Arc<Peers>, _config: &P2PConfig, _now: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // TODO: 实现入站连接清理
         Ok(())
     }

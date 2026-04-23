@@ -6,7 +6,7 @@ use axum::{
     body::Bytes,
     extract::{Query, State},
     http::{header, Method, StatusCode},
-    response::{IntoResponse, Response},
+    response::Response,
 };
 use std::collections::HashMap;
 use std::time::Instant;

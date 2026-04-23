@@ -10,7 +10,6 @@
 
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
-use blockchain_types::constants::*;
 use serde::{Serialize, Deserialize};
 use thiserror::Error;
 

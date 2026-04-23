@@ -2,7 +2,6 @@
 //!
 //! API 上下文管理
 
-use std::sync::Arc;
 use crate::handlers::{
     account::AccountApiState,
     transaction::TransactionApiState,

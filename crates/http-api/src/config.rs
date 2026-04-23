@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use figment::{Figment, providers::{Env, Format, Toml, Json}};
+use figment::providers::Format;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {

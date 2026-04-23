@@ -6,10 +6,9 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::state::ApiState;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Instant;
-use std::sync::Arc;
 use async_trait::async_trait;
 
 pub struct ApiRequest {

@@ -24,7 +24,6 @@ pub mod services;
 pub mod state;
 pub mod test_page;
 
-use axum::Router;
 use config::ApiConfig;
 use routes::create_router;
 use state::ApiState;
