@@ -8,6 +8,7 @@ authors = ["ByteChain <dev@bytechain.cn>"]
 
 [dependencies]
 ed25519-dalek = { version = "2.0", features = ["rand_core"] }
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
 rand = "0.8"
 rand_core = "0.6"
 sha2 = "0.10"

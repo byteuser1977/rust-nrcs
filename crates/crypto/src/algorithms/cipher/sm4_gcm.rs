@@ -1,12 +1,7 @@
-//! 对称加密算法实现
-//!
-//! 当前提供 SM4-GCM 的实现（GcmAlgorithm），使用 `sm4-gcm` crate（函数式 API）。
-//! 备注：其他模式暂未启用。
+//! SM4-GCM 加密算法实现
 
 use crate::algorithms::GcmAlgorithm;
 use crate::{CryptoError, CryptoResult};
-
-use rand::rngs::OsRng;
 use sm4_gcm::{sm4_gcm_aad_decrypt, sm4_gcm_aad_encrypt, Sm4Key};
 
 /// SM4-GCM 模式（使用 `sm4-gcm` crate）
@@ -91,7 +86,8 @@ impl GcmAlgorithm for Sm4Gcm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{rngs::OsRng, RngCore};
+    use rand::rngs::OsRng;
+    use rand::RngCore;
 
     #[test]
     fn test_sm4_gcm_roundtrip() {

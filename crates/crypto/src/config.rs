@@ -10,7 +10,7 @@ pub struct CryptoConfig {
     /// 哈希算法: "sha256" (默认) 或 "sm3"
     pub hash: String,
 
-    /// 签名算法: "ed25519" (默认) 或 "sm2"
+    /// 签名算法: "ed25519" (默认), "curve25519" (NRCS 兼容), 或 "sm2"
     pub signature: String,
 
     /// 加密算法: "sm4-gcm" (默认)，未来支持 "aes-gcm"

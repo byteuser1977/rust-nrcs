@@ -10,12 +10,12 @@
 mod words;
 
 use num_bigint::BigInt;
-use num_traits::{One, Zero};
+use num_traits::Zero;
 use rand::RngCore;
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::{keypair_from_seed, sha256, CryptoResult, KeyPair};
+use crate::{sha256, CryptoResult, KeyPair};
 
 pub use words::{NRCS_WORDS, WORD_COUNT};
 
@@ -58,12 +58,17 @@ pub fn generate_passphrase() -> PassPhraseResult<String> {
     number_to_secret(&big_random, true)
 }
 
-/// 从助记词派生密钥对
+/// 从助记词派生密钥对（使用 Curve25519，NRCS 兼容）
 ///
 /// 对应 Java: 从 secretPhrase 生成密钥对
 pub fn passphrase_to_keypair(passphrase: &str) -> CryptoResult<KeyPair> {
     let seed = sha256(passphrase.as_bytes());
-    Ok(keypair_from_seed(&seed))
+    let public_key = crate::algorithms::Curve25519::derive_public_key(&seed);
+    
+    Ok(KeyPair::Curve25519 {
+        public_key,
+        secret_key: seed,
+    })
 }
 
 /// 将 128 位数字转换为助记词
@@ -251,9 +256,10 @@ mod tests {
         let public_key = keypair.public_key();
         
         match public_key {
-            crate::PublicKey::Ed25519(bytes) => {
+            crate::PublicKey::Curve25519(bytes) => {
                 assert_eq!(bytes.len(), 32);
             }
+            _ => panic!("Expected Curve25519 public key"),
         }
     }
     
@@ -262,6 +268,17 @@ mod tests {
         let passphrase = "like just love know never want time out there make look eye";
         let result = validate_passphrase(passphrase);
         assert!(result.is_ok());
+        
+        let number = secret_to_number(passphrase).unwrap();
+        let recovered = number_to_secret(&number, true).unwrap();
+        assert_eq!(passphrase, recovered);
+    }
+    
+    #[test]
+    fn test_nrcs_compatibility() {
+        let passphrase = "confusion flirt teeth story crawl dear shove screw decay flood cover warrior";
+        
+        assert!(validate_passphrase(passphrase).is_ok());
         
         let number = secret_to_number(passphrase).unwrap();
         let recovered = number_to_secret(&number, true).unwrap();

@@ -1,12 +1,11 @@
-//! 加密算法抽象层
+//! 算法实现模块
 //!
-//! 定义统一的算法 trait，允许在运行时根据配置动态选择具体实现。
-//! 设计目标：
-//! - 可插拔：各算法实现独立，互不依赖
-//! - 向后兼容：保持原有 API 不变
-//! - 配置驱动：通过配置文件选择算法
+//! 提供多种加密算法的实现，包括：
+//! - 哈希算法：SHA-256, SM3
+//! - 签名算法：Ed25519, Curve25519, SM2
+//! - 加密算法：SM4, SM4-GCM
 
-use crate::{CryptoError, CryptoResult, Hash256, PublicKey, SecretKey, Signature, keypair::KeyPair};
+use crate::{CryptoResult, Hash256, PublicKey, SecretKey, Signature, keypair::KeyPair};
 
 /// 哈希算法 trait
 ///
@@ -98,3 +97,16 @@ pub trait GcmAlgorithm: Send + Sync + std::fmt::Debug + 'static {
     /// 认证标签长度（字节）
     fn tag_len(&self) -> usize;
 }
+
+pub mod hash;
+pub mod signature;
+pub mod cipher;
+
+// 重新导出哈希算法
+pub use hash::{Sha256, Sm3};
+
+// 重新导出签名算法
+pub use signature::{Ed25519, Curve25519};
+
+// 重新导出加密算法
+pub use cipher::Sm4Gcm;
