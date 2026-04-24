@@ -12,6 +12,7 @@ pub mod daemon;
 pub mod manager;
 pub mod blacklist;
 pub mod verifier;
+pub mod noop_verifier;
 
 #[cfg(test)]
 mod protocol_test;
@@ -28,3 +29,4 @@ pub use daemon::{ConnectionDaemon, DiscoveryDaemon, UnblacklistDaemon, Transacti
 pub use manager::P2PManager;
 pub use blacklist::BlacklistManager;
 pub use verifier::BlockchainVerifier;
+pub use noop_verifier::NoOpBlockVerifier;

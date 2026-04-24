@@ -24,14 +24,30 @@ use blockchain_types::prelude::*;
 
 use config::{Config, File, Environment};
 use async_trait::async_trait;
-use sqlx::PgPool;
+use sqlx::{PgPool, SqlitePool};
 
 use http_api::state::ApiState;
 use account::{AccountManager, AccountConfig, DatabaseAccountManager, AccountStore, PgAccountStore};
 use tx_engine::{TransactionProcessor, DatabaseTransactionProcessor};
-use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository, RepositoryResult};
+use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository};
 
 use p2p::BlockchainVerifier;
+use p2p::NoOpBlockVerifier;
+
+enum DatabaseType {
+    PostgreSQL,
+    SQLite,
+}
+
+impl DatabaseType {
+    fn from_url(url: &str) -> Self {
+        if url.starts_with("sqlite://") {
+            DatabaseType::SQLite
+        } else {
+            DatabaseType::PostgreSQL
+        }
+    }
+}
 
 /// 节点配置结构（与 TOML 映射）
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -136,24 +152,59 @@ async fn main() -> Result<()> {
     // 初始化数据库
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| cfg.database.url.clone());
-    info!("Connecting to database: {}", database_url.split('@').last().unwrap_or("hidden"));
+    let db_type = DatabaseType::from_url(&database_url);
+    info!("Connecting to database: {}", database_url.split('@').last().unwrap_or(&database_url));
     
-    let pool = PgPool::connect(&database_url)
-        .await
-        .context("Failed to connect to database")?;
-    
-    // 暂不创建创世区块，等待从 Java-NRCS 同步
-    // orm::ensure_genesis(&pool).await.context("Failed to create genesis block")?;
-    info!("Database connected, genesis creation skipped - awaiting sync from Java-NRCS");
+    match db_type {
+        DatabaseType::PostgreSQL => {
+            let pool = PgPool::connect(&database_url)
+                .await
+                .context("Failed to connect to PostgreSQL database")?;
+            
+            info!("PostgreSQL database connected, genesis creation skipped - awaiting sync from Java-NRCS");
+            
+            // 创建数据库仓库
+            let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::PgBlockRepository::new(pool.clone()));
+            let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::PgTransactionRepository::new(pool.clone()));
+            let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::PgAssetRepository::new(pool.clone()));
+            let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::PgAccountAssetRepository::new(pool.clone()));
+            let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::PgAccountRepository::new(pool.clone()));
+            let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::PgPublicKeyRepository::new(pool.clone()));
+            let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(BlockchainVerifier::new(pool.clone()));
+            
+            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, account_repo, public_key_repo, block_verifier).await
+        }
+        DatabaseType::SQLite => {
+            let pool = SqlitePool::connect(&database_url)
+                .await
+                .context("Failed to connect to SQLite database")?;
+            
+            info!("SQLite database connected, genesis creation skipped - awaiting sync from Java-NRCS");
+            
+            // 创建数据库仓库
+            let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::SqliteBlockRepository::new(pool.clone()));
+            let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::SqliteTransactionRepository::new(pool.clone()));
+            let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::SqliteAccountRepository::new(pool.clone()));
+            let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::SqliteAssetRepository::new(pool.clone()));
+            let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::SqliteAccountAssetRepository::new(pool.clone()));
+            let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::SqlitePublicKeyRepository::new(pool.clone()));
+            let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(NoOpBlockVerifier::new());
+            
+            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, account_repo, public_key_repo, block_verifier).await
+        }
+    }
+}
 
-    // 创建数据库仓库（提前创建，供 P2P 和 HTTP API 共用）
-    let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::PgBlockRepository::new(pool.clone()));
-    let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::PgTransactionRepository::new(pool.clone()));
-    let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::PgAssetRepository::new(pool.clone()));
-    let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::PgAccountAssetRepository::new(pool.clone()));
-    let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::PgAccountRepository::new(pool.clone()));
-    let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::PgPublicKeyRepository::new(pool.clone()));
-    
+async fn start_node(
+    cfg: NodeConfig,
+    block_repo: Arc<dyn BlockRepository>,
+    tx_repo: Arc<dyn TransactionRepository>,
+    asset_repo: Arc<dyn AssetRepository>,
+    account_asset_repo: Arc<dyn AccountAssetRepository>,
+    account_repo: Arc<dyn AccountRepository>,
+    public_key_repo: Arc<dyn PublicKeyRepository>,
+    block_verifier: Arc<dyn p2p::handlers::BlockVerifier>,
+) -> Result<()> {
     // 创建交易处理器
     let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
         Arc::clone(&account_repo),
@@ -178,7 +229,6 @@ async fn main() -> Result<()> {
 
     // 初始化 P2P 管理器（使用完整仓库支持）
     let peers = Arc::new(Peers::new(my_peer.clone()));
-    let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(BlockchainVerifier::new(pool.clone()));
     let handler = Arc::new(Handler::with_repositories(
         Arc::clone(&peers),
         Arc::clone(&block_verifier),

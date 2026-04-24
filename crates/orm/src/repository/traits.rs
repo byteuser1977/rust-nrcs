@@ -50,3 +50,41 @@ pub trait BlockRepository: Repository<BlockModel> {
     async fn get_ids_after(&self, block_id: i64, limit: i32) -> RepositoryResult<Vec<i64>>;
 }
 
+#[async_trait]
+pub trait TransactionRepository: Repository<TransactionModel> {
+    async fn find_by_txid(&self, id: i64) -> RepositoryResult<Option<TransactionModel>>;
+    async fn find_by_full_hash(&self, full_hash: &[u8]) -> RepositoryResult<Option<TransactionModel>>;
+    async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
+    async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
+    async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<TransactionModel>>;
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<TransactionModel>>;
+    async fn find_unconfirmed(&self, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
+}
+
+#[async_trait]
+pub trait AccountRepository: Repository<AccountModel> {
+    async fn find_by_account_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>>;
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AccountModel>>;
+    async fn find_latest_by_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>>;
+    async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<AccountModel>>;
+    async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait AccountAssetRepository: Repository<AccountAssetModel> {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>>;
+    async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>>;
+    async fn find_by_account_and_asset(&self, account_id: i64, asset_id: i64) -> RepositoryResult<Option<AccountAssetModel>>;
+    async fn update_quantity(&self, account_id: i64, asset_id: i64, quantity: i64, height: i32) -> RepositoryResult<()>;
+    async fn increase_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
+    async fn decrease_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait AssetRepository: Repository<AssetModel> {
+    async fn find_by_asset_id(&self, id: i64) -> RepositoryResult<Option<AssetModel>>;
+    async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>>;
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AssetModel>>;
+    async fn find_tradable(&self, limit: i64) -> RepositoryResult<Vec<AssetModel>>;
+}
+
