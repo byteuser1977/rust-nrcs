@@ -13,6 +13,9 @@ pub mod manager;
 pub mod blacklist;
 pub mod verifier;
 
+#[cfg(test)]
+mod protocol_test;
+
 pub use config::P2PConfig;
 pub use error::{ErrorCode, P2PError, P2PResult};
 pub use protocol::*;
