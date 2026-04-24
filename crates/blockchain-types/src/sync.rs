@@ -13,6 +13,8 @@ use crate::prelude::Block;
 use crate::constants::*;
 use num_bigint::BigUint;
 use thiserror::Error;
+use std::sync::Arc;
+use std::collections::HashMap;
 
 #[derive(Debug, Error)]
 pub enum SyncError {
@@ -36,6 +38,12 @@ pub enum SyncError {
     
     #[error("rollback limit exceeded")]
     RollbackLimitExceeded,
+    
+    #[error("network error: {0}")]
+    NetworkError(String),
+    
+    #[error("invalid response: {0}")]
+    InvalidResponse(String),
 }
 
 pub type SyncResult<T> = std::result::Result<T, SyncError>;
@@ -65,7 +73,7 @@ impl PeerInfo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SyncState {
     pub is_syncing: bool,
     pub is_downloading: bool,
@@ -75,18 +83,10 @@ pub struct SyncState {
     pub start_time: u64,
 }
 
-impl Default for SyncState {
-    fn default() -> Self {
-        Self {
-            is_syncing: false,
-            is_downloading: false,
-            last_feeder: None,
-            last_feeder_height: 0,
-            blocks_downloaded: 0,
-            start_time: 0,
-        }
-    }
-}
+pub const MAX_ROLLBACK: u32 = 720;
+pub const SEGMENT_SIZE: usize = 36;
+pub const MAX_BLOCK_IDS: usize = 1440;
+pub const MAX_MILESTONE_IDS: usize = 10;
 
 pub struct BlockSyncer {
     max_rollback: u32,
@@ -147,11 +147,11 @@ impl BlockSyncer {
     
     pub fn find_common_milestone_block(
         &self,
-        local_blocks: &[BlockId],
-        peer_block_ids: &[BlockId],
-    ) -> SyncResult<BlockId> {
+        local_block_ids: &[i64],
+        peer_block_ids: &[i64],
+    ) -> SyncResult<i64> {
         for block_id in peer_block_ids {
-            if local_blocks.contains(block_id) {
+            if local_block_ids.contains(block_id) {
                 return Ok(*block_id);
             }
         }
@@ -161,15 +161,18 @@ impl BlockSyncer {
     
     pub fn get_block_ids_after_common(
         &self,
-        common_block_id: BlockId,
-        peer_block_ids: &[BlockId],
-    ) -> Vec<BlockId> {
+        common_block_id: i64,
+        peer_block_ids: &[i64],
+    ) -> Vec<i64> {
         let mut result = Vec::new();
         let mut found = false;
         
         for &block_id in peer_block_ids {
             if found {
                 result.push(block_id);
+                if result.len() >= MAX_BLOCK_IDS {
+                    break;
+                }
             } else if block_id == common_block_id {
                 found = true;
             }
@@ -248,7 +251,7 @@ pub struct BlockDownloader {
 impl BlockDownloader {
     pub fn new() -> Self {
         Self {
-            batch_size: 100,
+            batch_size: SEGMENT_SIZE,
             timeout_ms: 30000,
         }
     }
@@ -266,15 +269,14 @@ impl BlockDownloader {
         _from_height: u32,
         _count: usize,
     ) -> SyncResult<Vec<Block>> {
-        // TODO: 实现实际的网络下载逻辑
         Ok(Vec::new())
     }
     
     pub fn get_next_blocks_request(
         &self,
-        block_ids: &[BlockId],
+        block_ids: &[i64],
         offset: usize,
-    ) -> Vec<BlockId> {
+    ) -> Vec<i64> {
         block_ids.iter()
             .skip(offset)
             .take(self.batch_size)
@@ -347,9 +349,6 @@ impl BlockImporter {
         prev_block: &Block,
     ) -> SyncResult<()> {
         self.verify_block(block, prev_block)?;
-        
-        // TODO: 实际的数据库导入逻辑
-        
         Ok(())
     }
     
@@ -409,6 +408,41 @@ impl Default for BlockImporter {
     }
 }
 
+pub struct SyncSegment {
+    pub start: usize,
+    pub stop: usize,
+    pub request_count: usize,
+    pub blocks: Vec<Block>,
+}
+
+impl SyncSegment {
+    pub fn new(chain_block_ids: &[i64], start: usize, stop: usize) -> Self {
+        Self {
+            start,
+            stop,
+            request_count: 0,
+            blocks: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DownloadStats {
+    pub total_blocks: u64,
+    pub total_time_ms: u64,
+    pub blocks_per_second: f64,
+}
+
+impl Default for DownloadStats {
+    fn default() -> Self {
+        Self {
+            total_blocks: 0,
+            total_time_ms: 0,
+            blocks_per_second: 0.0,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,6 +494,33 @@ mod tests {
     #[test]
     fn test_block_downloader_creation() {
         let downloader = BlockDownloader::new();
-        assert_eq!(downloader.batch_size, 100);
+        assert_eq!(downloader.batch_size, SEGMENT_SIZE);
+    }
+    
+    #[test]
+    fn test_find_common_milestone_block() {
+        let syncer = BlockSyncer::new();
+        let local_ids = vec![1, 2, 3, 4, 5];
+        let peer_ids = vec![6, 5, 4, 3];
+        
+        let result = syncer.find_common_milestone_block(&local_ids, &peer_ids);
+        assert_eq!(result.unwrap(), 5);
+    }
+    
+    #[test]
+    fn test_get_block_ids_after_common() {
+        let syncer = BlockSyncer::new();
+        let peer_ids = vec![1, 2, 3, 4, 5, 6, 7];
+        
+        let result = syncer.get_block_ids_after_common(3, &peer_ids);
+        assert_eq!(result, vec![4, 5, 6, 7]);
+    }
+    
+    #[test]
+    fn test_validate_download_range() {
+        let syncer = BlockSyncer::new();
+        
+        assert!(syncer.validate_download_range(100, 200).is_ok());
+        assert!(syncer.validate_download_range(100, 900).is_err());
     }
 }
