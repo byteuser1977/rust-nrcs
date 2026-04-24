@@ -44,5 +44,9 @@ pub trait BlockRepository: Repository<BlockModel> {
     async fn find_latest(&self) -> RepositoryResult<Option<BlockModel>>;
     async fn find_range(&self, start_height: i32, end_height: i32) -> RepositoryResult<Vec<BlockModel>>;
     async fn find_by_generator(&self, generator_id: i64) -> RepositoryResult<Vec<BlockModel>>;
+    async fn get_height(&self) -> RepositoryResult<i32>;
+    async fn get_block_id_at_height(&self, height: i32) -> RepositoryResult<Option<i64>>;
+    async fn has_block(&self, id: i64) -> RepositoryResult<bool>;
+    async fn get_ids_after(&self, block_id: i64, limit: i32) -> RepositoryResult<Vec<i64>>;
 }
 

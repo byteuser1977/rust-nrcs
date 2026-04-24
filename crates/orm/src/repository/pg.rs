@@ -87,6 +87,60 @@ impl BlockRepository for PgBlockRepository {
         .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
+
+    async fn get_height(&self) -> RepositoryResult<i32> {
+        let record = sqlx::query_as!(
+            BlockModel,
+            "SELECT * FROM block ORDER BY height DESC LIMIT 1"
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record.map(|b| b.height).unwrap_or(0))
+    }
+
+    async fn get_block_id_at_height(&self, height: i32) -> RepositoryResult<Option<i64>> {
+        let record = sqlx::query_as!(
+            BlockModel,
+            "SELECT * FROM block WHERE height = $1",
+            height
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record.map(|b| b.id))
+    }
+
+    async fn has_block(&self, id: i64) -> RepositoryResult<bool> {
+        let count: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM block WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(count.0 > 0)
+    }
+
+    async fn get_ids_after(&self, block_id: i64, limit: i32) -> RepositoryResult<Vec<i64>> {
+        let block = self.find_by_id_column(block_id).await?;
+        if block.is_none() {
+            return Ok(Vec::new());
+        }
+        let height = block.unwrap().height;
+        
+        let records = sqlx::query_as!(
+            BlockModel,
+            "SELECT * FROM block WHERE height > $1 ORDER BY height ASC LIMIT $2",
+            height,
+            limit as i64
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        
+        Ok(records.into_iter().map(|b| b.id).collect())
+    }
 }
 
 #[async_trait]
