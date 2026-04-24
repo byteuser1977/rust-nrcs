@@ -6,7 +6,7 @@ max_connections = 10
 
 [p2p]
 listen_addr = "0.0.0.0:17974"
-external_addr = "192.168.2.164:17974"
+external_addr = "192.168.2.101:17974"
 bootstrap_nodes = ["192.168.2.164:17974"]
 max_connections = 100
 connection_ttl_secs = 600
