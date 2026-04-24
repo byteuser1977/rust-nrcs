@@ -30,14 +30,14 @@ use tracing::warn;
 use anyhow::Result;
 use async_trait::async_trait;
 use blockchain_types::prelude::*;
+use orm::{BlockRepository, TransactionRepository};
+use tx_engine::TransactionProcessor;
 
-/// Trait for verifying and processing blocks from peers.
 #[async_trait]
 pub trait BlockVerifier: Send + Sync {
     async fn verify_and_process(&self, block: Block) -> Result<()>;
 }
 
-/// 请求处理器聚合（类似 Java 的 peerRequestHandlers map）
 pub struct Handler {
     pub get_info: Arc<GetInfoHandler>,
     pub get_peers: Arc<GetPeersHandler>,
@@ -47,7 +47,7 @@ pub struct Handler {
     pub get_next_block_ids: Arc<GetNextBlockIdsHandler>,
     pub get_next_blocks: Arc<GetNextBlocksHandler>,
     pub get_transactions: Arc<GetTransactionsHandler>,
-    pub get_unconfirmed_transactions: Arc<GetTransactionsHandler>, // 复用
+    pub get_unconfirmed_transactions: Arc<GetTransactionsHandler>,
     pub process_block: Arc<ProcessBlockHandler>,
     pub process_transactions: Arc<ProcessTransactionsHandler>,
     pub bundler_rate: Arc<BundlerRateHandler>,
@@ -63,15 +63,37 @@ impl Handler {
             get_milestone_block_ids: Arc::new(GetMilestoneBlockIdsHandler {}),
             get_next_block_ids: Arc::new(GetNextBlockIdsHandler {}),
             get_next_blocks: Arc::new(GetNextBlocksHandler::new(Arc::clone(&peers))),
-            get_transactions: Arc::new(GetTransactionsHandler {}),
-            get_unconfirmed_transactions: Arc::new(GetTransactionsHandler {}),
+            get_transactions: Arc::new(GetTransactionsHandler::new()),
+            get_unconfirmed_transactions: Arc::new(GetTransactionsHandler::new()),
             process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier)),
             process_transactions: Arc::new(ProcessTransactionsHandler::new(Arc::clone(&peers))),
             bundler_rate: Arc::new(BundlerRateHandler {}),
         }
     }
 
-    /// 路由并处理请求（对应 Java 的 PeerWebSocket.handleMessage）
+    pub fn with_repositories(
+        peers: Arc<Peers>,
+        block_verifier: Arc<dyn BlockVerifier>,
+        block_repo: Arc<dyn BlockRepository>,
+        tx_repo: Arc<dyn TransactionRepository>,
+        tx_processor: Arc<dyn TransactionProcessor>,
+    ) -> Self {
+        Self {
+            get_info: Arc::new(GetInfoHandler::new(Arc::clone(&peers))),
+            get_peers: Arc::new(GetPeersHandler::new(Arc::clone(&peers))),
+            add_peers: Arc::new(AddPeersHandler::new(Arc::clone(&peers))),
+            get_cumulative_difficulty: Arc::new(GetCumulativeDifficultyHandler {}),
+            get_milestone_block_ids: Arc::new(GetMilestoneBlockIdsHandler {}),
+            get_next_block_ids: Arc::new(GetNextBlockIdsHandler {}),
+            get_next_blocks: Arc::new(GetNextBlocksHandler::with_block_repo(Arc::clone(&peers), block_repo)),
+            get_transactions: Arc::new(GetTransactionsHandler::with_tx_repo(tx_repo)),
+            get_unconfirmed_transactions: Arc::new(GetTransactionsHandler::new()),
+            process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier)),
+            process_transactions: Arc::new(ProcessTransactionsHandler::with_tx_processor(Arc::clone(&peers), tx_processor)),
+            bundler_rate: Arc::new(BundlerRateHandler {}),
+        }
+    }
+
     pub async fn handle(&self, request: PeerRequest, peers: Arc<Peers>) -> serde_json::Value {
         match request.request_type {
             crate::protocol::RequestType::GetInfo => {

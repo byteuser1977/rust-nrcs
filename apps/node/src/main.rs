@@ -29,20 +29,9 @@ use sqlx::PgPool;
 use http_api::state::ApiState;
 use account::{AccountManager, AccountConfig, DatabaseAccountManager, AccountStore, PgAccountStore};
 use tx_engine::{TransactionProcessor, DatabaseTransactionProcessor};
-use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository, RepositoryResult, BlockModel, TransactionModel, AssetModel, AccountAssetModel};
+use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository, RepositoryResult};
 
-/// 简单的区块验证器（占位实现）
-/// TODO: 集成真实的 BlockchainVerifier（需要重构 processor.rs 的依赖关系）
-struct SimpleBlockVerifier;
-
-#[async_trait]
-impl p2p::handlers::BlockVerifier for SimpleBlockVerifier {
-    async fn verify_and_process(&self, _block: Block) -> Result<()> {
-        // TODO: 实现真实的区块验证和处理
-        // 当前仅接受所有区块（用于测试）
-        Ok(())
-    }
-}
+use p2p::BlockchainVerifier;
 
 /// 节点配置结构（与 TOML 映射）
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -157,6 +146,22 @@ async fn main() -> Result<()> {
     // orm::ensure_genesis(&pool).await.context("Failed to create genesis block")?;
     info!("Database connected, genesis creation skipped - awaiting sync from Java-NRCS");
 
+    // 创建数据库仓库（提前创建，供 P2P 和 HTTP API 共用）
+    let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::PgBlockRepository::new(pool.clone()));
+    let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::PgTransactionRepository::new(pool.clone()));
+    let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::PgAssetRepository::new(pool.clone()));
+    let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::PgAccountAssetRepository::new(pool.clone()));
+    let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::PgAccountRepository::new(pool.clone()));
+    let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::PgPublicKeyRepository::new(pool.clone()));
+    
+    // 创建交易处理器
+    let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
+        Arc::clone(&account_repo),
+        Arc::clone(&account_asset_repo),
+        Arc::clone(&tx_repo),
+        Arc::clone(&public_key_repo),
+    ));
+
     // 解析本机 P2P 地址
     let listen_addr: SocketAddr = cfg.p2p_listen_addr()?;
     let external_addr = cfg.p2p_external_addr()?;
@@ -171,10 +176,16 @@ async fn main() -> Result<()> {
     my_peer.api_port = Some(cfg.api.port);
     my_peer.state = PeerState::Disconnected;
 
-    // 初始化 P2P 管理器
+    // 初始化 P2P 管理器（使用完整仓库支持）
     let peers = Arc::new(Peers::new(my_peer.clone()));
-    let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(SimpleBlockVerifier);
-    let handler = Arc::new(Handler::new(Arc::clone(&peers), Arc::clone(&block_verifier)));
+    let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(BlockchainVerifier::new(pool.clone()));
+    let handler = Arc::new(Handler::with_repositories(
+        Arc::clone(&peers),
+        Arc::clone(&block_verifier),
+        Arc::clone(&block_repo),
+        Arc::clone(&tx_repo),
+        Arc::clone(&tx_processor),
+    ));
 
     // 启动出站连接任务（连接 bootstrap 节点）
     if !cfg.p2p.bootstrap_nodes.is_empty() {
@@ -226,14 +237,6 @@ async fn main() -> Result<()> {
     }
 
     // 启动 HTTP API 服务器
-    // 创建真实的数据库仓库
-    let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::PgBlockRepository::new(pool.clone()));
-    let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::PgTransactionRepository::new(pool.clone()));
-    let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::PgAssetRepository::new(pool.clone()));
-    let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::PgAccountAssetRepository::new(pool.clone()));
-    let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::PgAccountRepository::new(pool.clone()));
-    let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::PgPublicKeyRepository::new(pool.clone()));
-    
     // 创建账户存储
     let account_store: Arc<dyn AccountStore> = Arc::new(PgAccountStore::new(Arc::clone(&account_repo)));
     
@@ -245,13 +248,6 @@ async fn main() -> Result<()> {
         Arc::clone(&account_asset_repo),
         Arc::clone(&public_key_repo),
         account_config,
-    ));
-    
-    // 创建交易处理器
-    let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
-        Arc::clone(&account_repo),
-        Arc::clone(&account_asset_repo),
-        Arc::clone(&tx_repo),
     ));
     
     let api_state = ApiState {

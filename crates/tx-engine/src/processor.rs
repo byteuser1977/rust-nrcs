@@ -11,7 +11,7 @@ use std::sync::Arc;
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
 use blockchain_types::prelude::Account;
-use orm::{AccountRepository, AccountAssetRepository, TransactionRepository, RepositoryError, TransactionModel};
+use orm::{AccountRepository, AccountAssetRepository, TransactionRepository, PublicKeyRepository, RepositoryError, TransactionModel};
 use thiserror::Error;
 
 use crate::types::{TxReceiptInfo, TxStatus};
@@ -80,7 +80,7 @@ pub struct DatabaseTransactionProcessor {
     account_repo: Arc<dyn AccountRepository>,
     account_asset_repo: Arc<dyn AccountAssetRepository>,
     tx_repo: Arc<dyn TransactionRepository>,
-    // receipt_repo: Arc<dyn TransactionReceiptRepository>, // 暂时注释，等待 orm 模块实现
+    public_key_repo: Arc<dyn PublicKeyRepository>,
 }
 
 impl DatabaseTransactionProcessor {
@@ -88,13 +88,13 @@ impl DatabaseTransactionProcessor {
         account_repo: Arc<dyn AccountRepository>,
         account_asset_repo: Arc<dyn AccountAssetRepository>,
         tx_repo: Arc<dyn TransactionRepository>,
-        // receipt_repo: Arc<dyn TransactionReceiptRepository>, // 暂时注释，等待 orm 模块实现
+        public_key_repo: Arc<dyn PublicKeyRepository>,
     ) -> Self {
         Self {
             account_repo,
             account_asset_repo,
             tx_repo,
-            // receipt_repo, // 暂时注释，等待 orm 模块实现
+            public_key_repo,
         }
     }
 
@@ -138,13 +138,18 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         tx.validate_basic()?;
 
         // 2. 验证签名（需要发送者公钥）
-        // TODO: 从 account_repo 获取发送者公钥
-        // let account = self.get_account(tx.sender_id).await?;
-        // if let Some(pub_key) = account.public_key {
-        //     tx.verify_signature(&pub_key)?;
-        // } else {
-        //     return Err(ProcessorError::Validation("sender has no public key".to_string()));
-        // }
+        let pk_model = self.public_key_repo
+            .find_latest_by_account_id(tx.sender_id as i64)
+            .await?;
+        
+        if let Some(pk_model) = pk_model {
+            let public_key = PublicKey::Ed25519(pk_model.public_key);
+            tx.verify_signature(&public_key)?;
+        } else {
+            return Err(ProcessorError::Validation(
+                format!("sender {} has no public key", tx.sender_id)
+            ));
+        }
 
         // 3. 检查发送者余额
         match tx.type_id {

@@ -9,9 +9,7 @@ use crate::transaction::Transaction;
 #[cfg(feature = "database")]
 use sqlx::PgPool;
 #[cfg(feature = "database")]
-use tracing::{debug, error, info, warn};
-#[cfg(feature = "database")]
-use async_trait::async_trait;
+use tracing::{info};
 
 #[cfg(feature = "database")]
 pub struct BlockchainProcessor {
@@ -128,29 +126,6 @@ impl BlockchainProcessor {
         .await
         .map_err(|e| BlockchainError::Database(e.to_string()))?;
 
-        Ok(())
-    }
-}
-
-#[cfg(feature = "database")]
-pub struct BlockchainVerifier {
-    processor: BlockchainProcessor,
-}
-
-#[cfg(feature = "database")]
-impl BlockchainVerifier {
-    pub fn new(pool: PgPool) -> Self {
-        Self {
-            processor: BlockchainProcessor::new(pool),
-        }
-    }
-}
-
-#[cfg(all(feature = "database", feature = "p2p"))]
-#[async_trait]
-impl p2p::handlers::BlockVerifier for BlockchainVerifier {
-    async fn verify_and_process(&self, block: Block) -> Result<()> {
-        self.processor.process_block(&block).await?;
         Ok(())
     }
 }

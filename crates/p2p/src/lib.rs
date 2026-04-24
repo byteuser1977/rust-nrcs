@@ -11,6 +11,7 @@ pub mod handlers;
 pub mod daemon;
 pub mod manager;
 pub mod blacklist;
+pub mod verifier;
 
 pub use config::P2PConfig;
 pub use error::{ErrorCode, P2PError, P2PResult};
@@ -20,3 +21,4 @@ pub use handlers::Handler;
 pub use daemon::{ConnectionDaemon, DiscoveryDaemon, UnblacklistDaemon, TransactionDaemon};
 pub use manager::P2PManager;
 pub use blacklist::BlacklistManager;
+pub use verifier::BlockchainVerifier;

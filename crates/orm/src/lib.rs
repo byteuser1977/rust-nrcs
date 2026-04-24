@@ -5,8 +5,10 @@
 
 pub mod models;
 pub mod repository;
-pub mod genesis; // genesis block creation
+pub mod genesis;
+pub mod transaction;
 
 pub use models::*;
 pub use repository::*;
 pub use genesis::*;
+pub use transaction::*;

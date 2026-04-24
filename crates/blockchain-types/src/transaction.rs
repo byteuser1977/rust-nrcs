@@ -257,7 +257,7 @@ impl Transaction {
     }
 
     /// 序列化用于签名的数据（不包含 signature 和 full_hash）
-    fn serialize_for_signing(&self) -> Vec<u8> {
+    pub fn serialize_for_signing(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend_from_slice(&self.version.to_be_bytes());
         buf.extend_from_slice(&(u8::from(self.type_id)).to_be_bytes());
