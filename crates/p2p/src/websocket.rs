@@ -304,6 +304,53 @@ impl WebsocketClient {
         Ok(())
     }
 
+    pub async fn send_request(
+        addr: SocketAddr,
+        request: PeerRequest,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        info!("[CLIENT] Sending {:?} request to {} via HTTP", request.request_type, addr);
+
+        let client = Client::new();
+        let url = format!("http://{}/nrcs", addr);
+
+        match tokio::time::timeout(
+            tokio::time::Duration::from_secs(30),
+            async {
+                let resp = client.post(&url).json(&request).send().await?;
+                if !resp.status().is_success() {
+                    return Ok(None);
+                }
+                let body = resp.bytes().await?;
+                Ok::<_, reqwest::Error>(Some(body))
+            },
+        ).await {
+            Ok(Ok(Some(body))) => {
+                match serde_json::from_slice::<serde_json::Value>(&body) {
+                    Ok(resp) => {
+                        debug!("[CLIENT] Received response from {}", addr);
+                        Ok(resp)
+                    }
+                    Err(e) => {
+                        error!("[CLIENT] Failed to parse response from {}: {}", addr, e);
+                        Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                    }
+                }
+            }
+            Ok(Ok(None)) => {
+                warn!("[CLIENT] HTTP non-success status from {}", addr);
+                Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "HTTP request failed")) as Box<dyn std::error::Error + Send + Sync>)
+            }
+            Ok(Err(e)) => {
+                error!("[CLIENT] HTTP request error to {}: {}", addr, e);
+                Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+            }
+            Err(_) => {
+                warn!("[CLIENT] HTTP request timeout to {}", addr);
+                Err(Box::new(std::io::Error::new(std::io::ErrorKind::TimedOut, "Request timeout")) as Box<dyn std::error::Error + Send + Sync>)
+            }
+        }
+    }
+
     async fn http_fallback_handshake(
         addr: SocketAddr,
         peers: &Arc<Peers>,

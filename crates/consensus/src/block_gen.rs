@@ -23,7 +23,7 @@ pub struct BlockTemplate {
     pub generator_id: AccountId,
     pub base_target: u64,
     pub cumulative_difficulty: Vec<u8>,
-    pub generation_signature: Hash512,
+    pub generation_signature: Hash256,
     pub transactions: Vec<Transaction>,
 }
 
@@ -41,7 +41,7 @@ impl BlockTemplate {
             generator_id,
             base_target: INITIAL_BASE_TARGET,
             cumulative_difficulty: vec![],
-            generation_signature: Hash512([0u8; 64]),
+            generation_signature: Hash256([0u8; 32]),
             transactions: Vec::new(),
         }
     }

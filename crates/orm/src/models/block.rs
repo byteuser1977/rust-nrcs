@@ -53,8 +53,8 @@ impl BlockModel {
                 .generation_signature
                 .as_slice()
                 .try_into()
-                .map(Hash512)
-                .unwrap_or(Hash512([0u8; 64])),
+                .map(Hash256)
+                .unwrap_or(Hash256([0u8; 32])),
             block_signature: self
                 .block_signature
                 .as_slice()

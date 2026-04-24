@@ -5,13 +5,16 @@
 //! - getMorePeersThread -> DiscoveryDaemon
 //! - peerUnBlacklistingThread -> UnblacklistDaemon
 //! - sendTransactionsThread -> TransactionDaemon
+//! - DownloadThread -> BlockchainSyncDaemon
 
 pub mod connection;
 pub mod discovery;
 pub mod unblacklist;
 pub mod transaction;
+pub mod blockchain_sync;
 
 pub use connection::ConnectionDaemon;
 pub use discovery::DiscoveryDaemon;
 pub use unblacklist::UnblacklistDaemon;
 pub use transaction::TransactionDaemon;
+pub use blockchain_sync::BlockchainSyncDaemon;

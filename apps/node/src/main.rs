@@ -18,6 +18,8 @@ use p2p::{
     peer::{Peer, PeerState, Peers},
     websocket::{self, WebsocketServer, WebsocketConfig as WsServerConfig},
     Handler,
+    daemon::BlockchainSyncDaemon,
+    config::P2PConfig as GlobalP2PConfig,
 };
 
 use blockchain_types::prelude::*;
@@ -285,6 +287,12 @@ async fn start_node(
         });
         info!("P2P WebSocket server started on {}", listen_addr);
     }
+
+    // 启动区块链同步守护进程
+    let sync_config = GlobalP2PConfig::default();
+    let sync_daemon = BlockchainSyncDaemon::new(sync_config);
+    sync_daemon.start(Arc::clone(&peers), Arc::clone(&block_verifier)).await;
+    info!("Blockchain sync daemon started");
 
     // 启动 HTTP API 服务器
     // 创建账户存储

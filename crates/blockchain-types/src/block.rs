@@ -49,7 +49,7 @@ pub struct Block {
     pub payload_length: u32,
     /// 生成签名
     /// PoS 中出块者使用私钥生成，用于下一个出块者选择
-    pub generation_signature: Hash512,
+    pub generation_signature: Hash256,
     /// 区块签名（出块者对区块头签名）
     pub block_signature: Hash512,
     /// 交易列表
@@ -76,7 +76,7 @@ impl Block {
             total_amount: 0,
             total_fee: 0,
             payload_length: 0,
-            generation_signature: Hash512([0u8; 64]),
+            generation_signature: Hash256([0u8; 32]),
             block_signature: Hash512([0u8; 64]),
             transactions: vec![],
         }

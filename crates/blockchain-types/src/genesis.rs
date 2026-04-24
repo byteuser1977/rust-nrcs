@@ -39,7 +39,7 @@ pub fn create_genesis(config: GenesisConfig) -> (Block, Vec<Account>) {
     let payload_hash = Hash256([0u8; 32]); // No transactions yet
 
     // Create dummy generation signature and block signature (in production, sign with private key)
-    let generation_signature = Hash512([0u8; 64]);
+    let generation_signature = Hash256([0u8; 32]);
     let block_signature = Hash512([0u8; 64]);
 
     // Build Block

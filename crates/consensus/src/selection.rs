@@ -37,7 +37,7 @@ pub struct ForgerSelection {
     pub hit_time: u64,
     pub deadline: u64,
     pub effective_balance: u64,
-    pub generation_signature: Hash512,
+    pub generation_signature: Hash256,
 }
 
 impl ForgerSelection {
@@ -46,7 +46,7 @@ impl ForgerSelection {
         hit_time: u64,
         deadline: u64,
         effective_balance: u64,
-        generation_signature: Hash512,
+        generation_signature: Hash256,
     ) -> Self {
         Self {
             forger_id,
