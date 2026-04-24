@@ -6,8 +6,8 @@ max_connections = 10
 
 [p2p]
 listen_addr = "0.0.0.0:17984"
-external_addr = "127.0.0.1:17984"
-bootstrap_nodes = []
+external_addr = "192.168.2.164:17984"
+bootstrap_nodes = ["192.168.2.164:17974"]
 max_connections = 100
 connection_ttl_secs = 600
 protocol_id = "NRCS"
@@ -17,5 +17,5 @@ host = "127.0.0.1"
 port = 17986
 
 [websocket]
-enabled = false
+enabled = true
 port = 17985
