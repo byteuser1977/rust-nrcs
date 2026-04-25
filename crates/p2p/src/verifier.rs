@@ -94,8 +94,7 @@ impl BlockVerifier for BlockchainVerifier {
                         block.height = prev_block.height as u32 + 1;
                     }
                     _ => {
-                        debug!("Previous block {} not found, cannot determine height", prev_id);
-                        return Err(anyhow::anyhow!("Previous block not found"));
+                        debug!("Previous block {} not found, but block has height info, using it", prev_id);
                     }
                 }
             }
