@@ -4,6 +4,7 @@ use sqlx::PgPool;
 use serde_json::Value;
 use std::fs;
 use chrono::{NaiveDate, FixedOffset, TimeZone};
+use blockchain_types::constants::GENESIS_BLOCK_ID;
 
 /// Load genesis configuration from config/genesis.json.
 /// Returns (timestamp, Vec<(account_id, balance)>)
@@ -148,7 +149,7 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
     let (timestamp, accounts) = load_genesis_config()?;
     let total_amount: i64 = accounts.iter().map(|(_, amt)| *amt).sum();
     let height = 1i32;
-    let block_id = 1i64;
+    let block_id = GENESIS_BLOCK_ID as i64;
 
     // Insert genesis block
     sqlx::query(
@@ -159,12 +160,15 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
             base_target, next_block_id, height, generation_signature,
             block_signature, payload_hash, generator_id
         ) VALUES (
-            1, 1, $1, NULL, $2, 0, 0, NULL, '{}', 1000000, NULL, 1, NULL, NULL, NULL, 1
+            $3, 1, $1, NULL, $2, 0, 0, NULL, '{}', 1000000, NULL, $4, NULL, NULL, NULL, $5
         )
         "#
     )
     .bind(timestamp as i32)
     .bind(total_amount)
+    .bind(block_id)
+    .bind(height)
+    .bind(1) // generator_id
     .execute(pool)
     .await?;
 
@@ -189,7 +193,7 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
             INSERT INTO account_ledger (
                 account_id, event_type, event_id, holding_type, holding_id,
                 "CHANGE", balance, block_id, height, timestamp
-            ) VALUES ($1, 0, 1, 0, NULL, $2, $2, $3, $4, $5)
+            ) VALUES ($1, 0, $3, 0, NULL, $2, $2, $3, $4, $5)
             "#
         )
         .bind(account_id)

@@ -20,7 +20,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use std::cmp::min;
 
-const SEGMENT_SIZE: usize = 36;
+const SEGMENT_SIZE: usize = 10;
 const MAX_BLOCKS_BATCH: usize = 720;
 
 pub struct BlockchainSyncDaemon {
@@ -364,16 +364,17 @@ impl BlockchainSyncDaemon {
             match WebsocketClient::send_request(peer_addr, request).await {
                 Ok(response) => {
                     if let Some(next_blocks) = response.get("nextBlocks").and_then(|v| v.as_array()) {
-                        if next_blocks.len() > 36 {
-                            warn!("Peer {} sends too many nextBlocks, blacklisting", peer_addr);
-                            break;
+                        if next_blocks.len() > SEGMENT_SIZE {
+                            warn!("Peer {} sends {} nextBlocks (expected <= {}), but continuing...", 
+                                  peer_addr, next_blocks.len(), SEGMENT_SIZE);
                         }
 
                         processed += next_blocks.len();
                         info!("Received {} blocks from peer, processing...", next_blocks.len());
 
+                        let base_height = start_idx as u32 + 1;
                         for (block_idx, block_data) in next_blocks.iter().enumerate() {
-                            if let Err(e) = Self::process_downloaded_block(&block_data, block_idx, block_verifier).await {
+                            if let Err(e) = Self::process_downloaded_block(&block_data, base_height + block_idx as u32, block_verifier).await {
                                 warn!("Failed to process downloaded block: {}", e);
                             }
                         }
@@ -394,7 +395,7 @@ impl BlockchainSyncDaemon {
 
     async fn process_downloaded_block(
         block_data: &serde_json::Value,
-        _block_index: usize,
+        block_height: u32,
         block_verifier: &Arc<dyn BlockVerifier>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let block_json = match block_data.get("block") {
@@ -410,7 +411,7 @@ impl BlockchainSyncDaemon {
 
         if let Some(obj) = normalized_json.as_object_mut() {
             if !obj.contains_key("height") {
-                obj.insert("height".to_string(), serde_json::Value::Number(0.into()));
+                obj.insert("height".to_string(), serde_json::Value::Number(block_height.into()));
             }
             if !obj.contains_key("nonce") {
                 obj.insert("nonce".to_string(), serde_json::Value::Number(0.into()));
