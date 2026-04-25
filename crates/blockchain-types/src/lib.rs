@@ -292,57 +292,7 @@ pub type AliasId = u64;
 /// 别名报价 ID
 pub type AliasOfferId = u64;
 
-/// 交易类型枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum TransactionType {
-    /// 常规支付（0）
-    Payment = 0,
-    /// 资产转移（1）
-    AssetTransfer = 1,
-    /// 资产发行（2）
-    AssetIssuance = 2,
-    /// 智能合约调用（3）
-    ContractInvocation = 3,
-    /// 合约部署（4）
-    ContractDeployment = 4,
-    /// 租赁出块权（5）
-    Lease = 5,
-    /// 设置账户属性（6）
-    SetProperty = 6,
-    /// 其他类型
-    Custom(u8),
-}
-
-impl From<u8> for TransactionType {
-    fn from(value: u8) -> Self {
-        match value {
-            0 => TransactionType::Payment,
-            1 => TransactionType::AssetTransfer,
-            2 => TransactionType::AssetIssuance,
-            3 => TransactionType::ContractInvocation,
-            4 => TransactionType::ContractDeployment,
-            5 => TransactionType::Lease,
-            6 => TransactionType::SetProperty,
-            _ => TransactionType::Custom(value),
-        }
-    }
-}
-
-impl From<TransactionType> for u8 {
-    fn from(ty: TransactionType) -> Self {
-        match ty {
-            TransactionType::Payment => 0,
-            TransactionType::AssetTransfer => 1,
-            TransactionType::AssetIssuance => 2,
-            TransactionType::ContractInvocation => 3,
-            TransactionType::ContractDeployment => 4,
-            TransactionType::Lease => 5,
-            TransactionType::SetProperty => 6,
-            TransactionType::Custom(v) => v,
-        }
-    }
-}
+pub use crate::transaction::TransactionType;
 
 /// 交易收据（Transaction Receipt）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -375,7 +325,7 @@ mod tests {
     #[test]
     fn test_constants_from_module() {
         use crate::constants::{BLOCK_VERSION, TRANSACTION_VERSION};
-        assert_eq!(BLOCK_VERSION, 1);
+        assert_eq!(BLOCK_VERSION, 3);
         assert_eq!(TRANSACTION_VERSION, 1);
     }
 }

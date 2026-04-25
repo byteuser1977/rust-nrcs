@@ -34,7 +34,6 @@ use tx_engine::{TransactionProcessor, DatabaseTransactionProcessor};
 use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository};
 
 use p2p::BlockchainVerifier;
-use p2p::NoOpBlockVerifier;
 
 enum DatabaseType {
     PostgreSQL,
@@ -172,7 +171,9 @@ async fn main() -> Result<()> {
             let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::PgAccountAssetRepository::new(pool.clone()));
             let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::PgAccountRepository::new(pool.clone()));
             let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::PgPublicKeyRepository::new(pool.clone()));
-            let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(BlockchainVerifier::new(pool.clone()));
+            let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(
+                BlockchainVerifier::new(Arc::clone(&block_repo), Arc::clone(&tx_repo))
+            );
             
             start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, account_repo, public_key_repo, block_verifier).await
         }
@@ -181,7 +182,20 @@ async fn main() -> Result<()> {
                 .await
                 .context("Failed to connect to SQLite database")?;
             
-            info!("SQLite database connected, genesis creation skipped - awaiting sync from Java-NRCS");
+            info!("SQLite database connected, running migrations...");
+            
+            let migration_sql = include_str!("../../../migrations/sqlite/0.sql");
+            for statement in migration_sql.split(';') {
+                let statement = statement.trim();
+                if !statement.is_empty() && !statement.starts_with("/*") {
+                    if let Err(e) = sqlx::query(statement).execute(&pool).await {
+                        if !e.to_string().contains("already exists") {
+                            warn!("Migration warning: {}", e);
+                        }
+                    }
+                }
+            }
+            info!("SQLite migrations completed");
             
             // 创建数据库仓库
             let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::SqliteBlockRepository::new(pool.clone()));
@@ -190,7 +204,9 @@ async fn main() -> Result<()> {
             let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::SqliteAssetRepository::new(pool.clone()));
             let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::SqliteAccountAssetRepository::new(pool.clone()));
             let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::SqlitePublicKeyRepository::new(pool.clone()));
-            let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(NoOpBlockVerifier::new());
+            let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(
+                BlockchainVerifier::new(Arc::clone(&block_repo), Arc::clone(&tx_repo))
+            );
             
             start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, account_repo, public_key_repo, block_verifier).await
         }

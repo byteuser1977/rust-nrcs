@@ -139,23 +139,23 @@ impl TxTypeHandler for PaymentHandler {
     }
 }
 
-pub struct AssetTransferHandler;
+pub struct ColoredCoinsHandler;
 
-impl AssetTransferHandler {
+impl ColoredCoinsHandler {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for AssetTransferHandler {
+impl Default for ColoredCoinsHandler {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TxTypeHandler for AssetTransferHandler {
+impl TxTypeHandler for ColoredCoinsHandler {
     fn tx_type(&self) -> TransactionType {
-        TransactionType::AssetTransfer
+        TransactionType::ColoredCoins
     }
     
     fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
@@ -165,7 +165,7 @@ impl TxTypeHandler for AssetTransferHandler {
         
         if tx.attachment_bytes.is_empty() {
             return Err(TxTypeError::InvalidAttachment(
-                "asset transfer requires asset info".to_string()
+                "colored coins transfer requires asset info".to_string()
             ));
         }
         
@@ -188,56 +188,11 @@ impl TxTypeHandler for AssetTransferHandler {
     }
 }
 
-pub struct AssetIssuanceHandler;
-
-impl AssetIssuanceHandler {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for AssetIssuanceHandler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TxTypeHandler for AssetIssuanceHandler {
-    fn tx_type(&self) -> TransactionType {
-        TransactionType::AssetIssuance
-    }
-    
-    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
-        if tx.attachment_bytes.is_empty() {
-            return Err(TxTypeError::InvalidAttachment(
-                "asset issuance requires asset info".to_string()
-            ));
-        }
-        
-        Ok(())
-    }
-    
-    fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
-        if state.sender_balance < tx.fee {
-            return Err(TxTypeError::InvalidAmount(state.sender_balance));
-        }
-        
-        state.sender_balance -= tx.fee;
-        
-        Ok(())
-    }
-    
-    fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
-        state.sender_balance += tx.fee;
-        Ok(())
-    }
-}
-
-pub struct ContractDeploymentHandler {
+pub struct LightContractHandler {
     max_code_size: usize,
 }
 
-impl ContractDeploymentHandler {
+impl LightContractHandler {
     pub fn new() -> Self {
         Self {
             max_code_size: MAX_PRUNABLE_MESSAGE_LENGTH,
@@ -245,24 +200,18 @@ impl ContractDeploymentHandler {
     }
 }
 
-impl Default for ContractDeploymentHandler {
+impl Default for LightContractHandler {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TxTypeHandler for ContractDeploymentHandler {
+impl TxTypeHandler for LightContractHandler {
     fn tx_type(&self) -> TransactionType {
-        TransactionType::ContractDeployment
+        TransactionType::LightContract
     }
     
     fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
-        if tx.attachment_bytes.is_empty() {
-            return Err(TxTypeError::InvalidAttachment(
-                "contract deployment requires code".to_string()
-            ));
-        }
-        
         if tx.attachment_bytes.len() > self.max_code_size {
             return Err(TxTypeError::InvalidAttachment(
                 format!("code size {} exceeds maximum {}", 
@@ -289,23 +238,23 @@ impl TxTypeHandler for ContractDeploymentHandler {
     }
 }
 
-pub struct ContractInvocationHandler;
+pub struct MessagingHandler;
 
-impl ContractInvocationHandler {
+impl MessagingHandler {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for ContractInvocationHandler {
+impl Default for MessagingHandler {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TxTypeHandler for ContractInvocationHandler {
+impl TxTypeHandler for MessagingHandler {
     fn tx_type(&self) -> TransactionType {
-        TransactionType::ContractInvocation
+        TransactionType::Messaging
     }
     
     fn validate(&self, _tx: &Transaction) -> TxTypeResult<()> {
@@ -328,75 +277,26 @@ impl TxTypeHandler for ContractInvocationHandler {
     }
 }
 
-pub struct LeaseHandler;
+pub struct DataHandler;
 
-impl LeaseHandler {
+impl DataHandler {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for LeaseHandler {
+impl Default for DataHandler {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TxTypeHandler for LeaseHandler {
+impl TxTypeHandler for DataHandler {
     fn tx_type(&self) -> TransactionType {
-        TransactionType::Lease
+        TransactionType::Data
     }
     
-    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
-        if tx.recipient_id.is_none() {
-            return Err(TxTypeError::MissingRecipient);
-        }
-        
-        Ok(())
-    }
-    
-    fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
-        if state.sender_balance < tx.fee {
-            return Err(TxTypeError::InvalidAmount(state.sender_balance));
-        }
-        
-        state.sender_balance -= tx.fee;
-        
-        Ok(())
-    }
-    
-    fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
-        state.sender_balance += tx.fee;
-        Ok(())
-    }
-}
-
-pub struct SetPropertyHandler;
-
-impl SetPropertyHandler {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for SetPropertyHandler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TxTypeHandler for SetPropertyHandler {
-    fn tx_type(&self) -> TransactionType {
-        TransactionType::SetProperty
-    }
-    
-    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
-        if tx.attachment_bytes.is_empty() {
-            return Err(TxTypeError::InvalidAttachment(
-                "set property requires property info".to_string()
-            ));
-        }
-        
+    fn validate(&self, _tx: &Transaction) -> TxTypeResult<()> {
         Ok(())
     }
     
@@ -426,12 +326,10 @@ impl TxTypeRegistry {
             std::collections::HashMap::new();
         
         handlers.insert(TransactionType::Payment, Box::new(PaymentHandler::new()));
-        handlers.insert(TransactionType::AssetTransfer, Box::new(AssetTransferHandler::new()));
-        handlers.insert(TransactionType::AssetIssuance, Box::new(AssetIssuanceHandler::new()));
-        handlers.insert(TransactionType::ContractDeployment, Box::new(ContractDeploymentHandler::new()));
-        handlers.insert(TransactionType::ContractInvocation, Box::new(ContractInvocationHandler::new()));
-        handlers.insert(TransactionType::Lease, Box::new(LeaseHandler::new()));
-        handlers.insert(TransactionType::SetProperty, Box::new(SetPropertyHandler::new()));
+        handlers.insert(TransactionType::ColoredCoins, Box::new(ColoredCoinsHandler::new()));
+        handlers.insert(TransactionType::LightContract, Box::new(LightContractHandler::new()));
+        handlers.insert(TransactionType::Messaging, Box::new(MessagingHandler::new()));
+        handlers.insert(TransactionType::Data, Box::new(DataHandler::new()));
         
         Self { handlers }
     }
@@ -474,19 +372,24 @@ mod tests {
 
     fn create_test_transaction(tx_type: TransactionType) -> Transaction {
         Transaction {
+            id: 0,
             version: TRANSACTION_VERSION,
             type_id: tx_type,
             subtype: 0,
             timestamp: 1000,
             deadline: 2000,
+            sender_public_key: Hash256([0u8; 32]),
             sender_id: 123,
             recipient_id: Some(456),
             amount: 1000,
             fee: 10,
             height: 0,
             block_id: 0,
+            block_timestamp: 0,
+            transaction_index: 0,
             signature: Signature([0u8; 64]),
             full_hash: Hash256([0u8; 32]),
+            referenced_transaction_full_hash: None,
             attachment_bytes: vec![1, 2, 3],
             phased: false,
             has_message: false,
@@ -522,20 +425,20 @@ mod tests {
     }
 
     #[test]
-    fn test_asset_transfer_handler() {
-        let handler = AssetTransferHandler::new();
-        let tx = create_test_transaction(TransactionType::AssetTransfer);
+    fn test_colored_coins_handler() {
+        let handler = ColoredCoinsHandler::new();
+        let tx = create_test_transaction(TransactionType::ColoredCoins);
         
-        assert_eq!(handler.tx_type(), TransactionType::AssetTransfer);
+        assert_eq!(handler.tx_type(), TransactionType::ColoredCoins);
         assert!(handler.validate(&tx).is_ok());
     }
 
     #[test]
-    fn test_contract_deployment_handler() {
-        let handler = ContractDeploymentHandler::new();
-        let tx = create_test_transaction(TransactionType::ContractDeployment);
+    fn test_light_contract_handler() {
+        let handler = LightContractHandler::new();
+        let tx = create_test_transaction(TransactionType::LightContract);
         
-        assert_eq!(handler.tx_type(), TransactionType::ContractDeployment);
+        assert_eq!(handler.tx_type(), TransactionType::LightContract);
         assert!(handler.validate(&tx).is_ok());
     }
 

@@ -11,7 +11,7 @@ pub const CHAIN: &str = "NRCS";
 
 // ============ 区块链核心常量 ============
 
-pub const BLOCK_VERSION: u32 = 1;
+pub const BLOCK_VERSION: u32 = 3;
 pub const TRANSACTION_VERSION: u8 = 1;
 
 pub const BLOCK_TIME: u32 = 60;

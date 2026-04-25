@@ -272,11 +272,10 @@ impl PgTransactionRepository {
 #[async_trait]
 impl TransactionRepository for PgTransactionRepository {
     async fn find_by_txid(&self, id: i64) -> RepositoryResult<Option<TransactionModel>> {
-        let record = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transaction WHERE id = $1",
-            id
+        let record = sqlx::query_as::<_, TransactionModel>(
+            "SELECT * FROM transaction WHERE id = $1"
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -284,11 +283,10 @@ impl TransactionRepository for PgTransactionRepository {
     }
 
     async fn find_by_full_hash(&self, full_hash: &[u8]) -> RepositoryResult<Option<TransactionModel>> {
-        let record = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transaction WHERE full_hash = $1",
-            full_hash
+        let record = sqlx::query_as::<_, TransactionModel>(
+            "SELECT * FROM transaction WHERE full_hash = $1"
         )
+        .bind(full_hash)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -296,12 +294,11 @@ impl TransactionRepository for PgTransactionRepository {
     }
 
     async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        let records = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transaction WHERE sender_id = $1 ORDER BY timestamp DESC LIMIT $2",
-            sender_id,
-            limit
+        let records = sqlx::query_as::<_, TransactionModel>(
+            "SELECT * FROM transaction WHERE sender_id = $1 ORDER BY timestamp DESC LIMIT $2"
         )
+        .bind(sender_id)
+        .bind(limit)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -309,12 +306,11 @@ impl TransactionRepository for PgTransactionRepository {
     }
 
     async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        let records = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transaction WHERE recipient_id = $1 ORDER BY timestamp DESC LIMIT $2",
-            recipient_id,
-            limit
+        let records = sqlx::query_as::<_, TransactionModel>(
+            "SELECT * FROM transaction WHERE recipient_id = $1 ORDER BY timestamp DESC LIMIT $2"
         )
+        .bind(recipient_id)
+        .bind(limit)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -322,11 +318,10 @@ impl TransactionRepository for PgTransactionRepository {
     }
 
     async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<TransactionModel>> {
-        let records = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transaction WHERE block_id = $1 ORDER BY transaction_index ASC",
-            block_id
+        let records = sqlx::query_as::<_, TransactionModel>(
+            "SELECT * FROM transaction WHERE block_id = $1 ORDER BY transaction_index ASC"
         )
+        .bind(block_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -334,11 +329,10 @@ impl TransactionRepository for PgTransactionRepository {
     }
 
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<TransactionModel>> {
-        let records = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transaction WHERE height = $1 ORDER BY transaction_index ASC",
-            height
+        let records = sqlx::query_as::<_, TransactionModel>(
+            "SELECT * FROM transaction WHERE height = $1 ORDER BY transaction_index ASC"
         )
+        .bind(height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -353,50 +347,51 @@ impl TransactionRepository for PgTransactionRepository {
 #[async_trait]
 impl Repository<TransactionModel> for PgTransactionRepository {
     async fn insert(&self, tx: &TransactionModel) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO transaction (
-                id, deadline, recipient_id, amount, fee, full_hash,
-                height, block_id, signature, timestamp, type, subtype,
-                sender_id, block_timestamp, referenced_transaction_full_hash,
-                transaction_index, phased, attachment_bytes, version,
+                id, deadline, sender_public_key, recipient_id, amount, fee, full_hash,
+                height, block_id, block_timestamp, transaction_index, signature, timestamp, type, subtype,
+                sender_id, referenced_transaction_full_hash,
+                attachment_bytes, version, phased,
                 has_message, has_encrypted_message, has_public_key_announcement,
                 has_prunable_message, has_prunable_attachment, ec_block_height,
                 ec_block_id, has_encrypttoself_message, has_prunable_encrypted_message
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+                $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
             )
-            "#,
-            tx.id,
-            tx.deadline,
-            tx.recipient_id,
-            tx.amount,
-            tx.fee,
-            tx.full_hash.as_slice(),
-            tx.height,
-            tx.block_id,
-            tx.signature.as_slice(),
-            tx.timestamp,
-            tx.r#type,
-            tx.subtype,
-            tx.sender_id,
-            tx.block_timestamp,
-            tx.referenced_transaction_full_hash.as_deref(),
-            tx.transaction_index,
-            tx.phased,
-            tx.attachment_bytes.as_deref(),
-            tx.version,
-            tx.has_message,
-            tx.has_encrypted_message,
-            tx.has_public_key_announcement,
-            tx.has_prunable_message,
-            tx.has_prunable_attachment,
-            tx.ec_block_height,
-            tx.ec_block_id,
-            tx.has_encrypttoself_message,
-            tx.has_prunable_encrypted_message
+            "#
         )
+        .bind(tx.id)
+        .bind(tx.deadline)
+        .bind(&tx.sender_public_key)
+        .bind(tx.recipient_id)
+        .bind(tx.amount)
+        .bind(tx.fee)
+        .bind(&tx.full_hash)
+        .bind(tx.height)
+        .bind(tx.block_id)
+        .bind(tx.block_timestamp)
+        .bind(tx.transaction_index)
+        .bind(&tx.signature)
+        .bind(tx.timestamp)
+        .bind(tx.r#type)
+        .bind(tx.subtype)
+        .bind(tx.sender_id)
+        .bind(&tx.referenced_transaction_full_hash)
+        .bind(&tx.attachment_bytes)
+        .bind(tx.version)
+        .bind(tx.phased)
+        .bind(tx.has_message)
+        .bind(tx.has_encrypted_message)
+        .bind(tx.has_public_key_announcement)
+        .bind(tx.has_prunable_message)
+        .bind(tx.has_prunable_attachment)
+        .bind(tx.ec_block_height)
+        .bind(tx.ec_block_id)
+        .bind(tx.has_encrypttoself_message)
+        .bind(tx.has_prunable_encrypted_message)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -404,11 +399,10 @@ impl Repository<TransactionModel> for PgTransactionRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TransactionModel>> {
-        let record = sqlx::query_as!(
-            TransactionModel,
-            "SELECT * FROM transaction WHERE db_id = $1",
-            db_id
+        let record = sqlx::query_as::<_, TransactionModel>(
+            "SELECT * FROM transaction WHERE db_id = $1"
         )
+        .bind(db_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;

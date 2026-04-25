@@ -166,8 +166,7 @@ impl TransactionValidator {
     pub fn validate_recipient(&self, tx: &Transaction) -> TxValidationResult<()> {
         match tx.type_id {
             TransactionType::Payment |
-            TransactionType::AssetTransfer |
-            TransactionType::Lease => {
+            TransactionType::ColoredCoins => {
                 if tx.recipient_id.is_none() {
                     return Err(TxValidationError::MissingRecipient);
                 }
@@ -352,19 +351,24 @@ mod tests {
 
     fn create_test_transaction() -> Transaction {
         Transaction {
+            id: 0,
             version: TRANSACTION_VERSION,
             type_id: TransactionType::Payment,
             subtype: 0,
             timestamp: 1000,
             deadline: 2000,
+            sender_public_key: Hash256([0u8; 32]),
             sender_id: 123,
             recipient_id: Some(456),
             amount: 1000,
             fee: 10,
             height: 0,
             block_id: 0,
+            block_timestamp: 0,
+            transaction_index: 0,
             signature: Signature([0u8; 64]),
             full_hash: Hash256([0u8; 32]),
+            referenced_transaction_full_hash: None,
             attachment_bytes: vec![],
             phased: false,
             has_message: false,

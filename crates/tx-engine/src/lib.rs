@@ -26,9 +26,8 @@ pub use attachment::{
 pub use tx_types::{
     TxTypeHandler, TxTypeRegistry, TxTypeError, TxTypeResult,
     TxExecutionContext,
-    PaymentHandler, AssetTransferHandler, AssetIssuanceHandler,
-    ContractDeploymentHandler, ContractInvocationHandler,
-    LeaseHandler, SetPropertyHandler,
+    PaymentHandler, ColoredCoinsHandler, LightContractHandler,
+    MessagingHandler, DataHandler,
 };
 pub use validation::{
     TransactionValidator, TxValidationError, TxValidationResult,

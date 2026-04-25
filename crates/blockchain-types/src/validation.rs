@@ -218,9 +218,7 @@ impl BlockValidator {
         let mut hasher = Sha256::new();
         
         for tx in transactions {
-            if let Ok(tx_hash) = tx.compute_hash() {
-                hasher.update(&tx_hash.0);
-            }
+            hasher.update(&tx.full_hash.0);
         }
         
         let hash = hasher.finalize();

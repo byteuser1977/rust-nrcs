@@ -470,6 +470,55 @@ impl BlockchainSyncDaemon {
 
         let account_id_fields = ["generator_id", "generator_public_key"];
 
+        fn convert_transaction(tx_json: serde_json::Value) -> serde_json::Value {
+            match tx_json {
+                serde_json::Value::Object(mut map) => {
+                    let converted: serde_json::Map<String, serde_json::Value> = map
+                        .into_iter()
+                        .map(|(k, v)| {
+                            let new_key = BlockchainSyncDaemon::camel_to_snake(&k);
+                            let converted_v = match new_key.as_str() {
+                                "sender_public_key" | "full_hash" | "referenced_transaction_full_hash" => {
+                                    match &v {
+                                        serde_json::Value::String(s) => {
+                                            match hex::decode(s) {
+                                                Ok(bytes) => {
+                                                    serde_json::Value::Array(
+                                                        bytes.iter().map(|b| serde_json::Number::from(*b)).map(serde_json::Value::Number).collect()
+                                                    )
+                                                }
+                                                Err(_) => v,
+                                            }
+                                        }
+                                        _ => v,
+                                    }
+                                }
+                                "signature" => {
+                                    match &v {
+                                        serde_json::Value::String(s) => {
+                                            match hex::decode(s) {
+                                                Ok(bytes) => {
+                                                    serde_json::Value::Array(
+                                                        bytes.iter().map(|b| serde_json::Number::from(*b)).map(serde_json::Value::Number).collect()
+                                                    )
+                                                }
+                                                Err(_) => v,
+                                            }
+                                        }
+                                        _ => v,
+                                    }
+                                }
+                                _ => v
+                            };
+                            (new_key, converted_v)
+                        })
+                        .collect();
+                    serde_json::Value::Object(converted)
+                }
+                other => other
+            }
+        }
+
         fn convert_value(value: serde_json::Value, hex_fields: &[&str], account_id_fields: &[&str]) -> serde_json::Value {
             match value {
                 serde_json::Value::Object(map) => {
@@ -480,7 +529,16 @@ impl BlockchainSyncDaemon {
                             if new_key == "generator_public_key" {
                                 new_key = "generator_id".to_string();
                             }
-                            let converted_v = if hex_fields.contains(&new_key.as_str()) {
+                            let converted_v = if new_key == "transactions" {
+                                match v {
+                                    serde_json::Value::Array(txs) => {
+                                        serde_json::Value::Array(
+                                            txs.into_iter().map(convert_transaction).collect()
+                                        )
+                                    }
+                                    other => other
+                                }
+                            } else if hex_fields.contains(&new_key.as_str()) {
                                 match &v {
                                     serde_json::Value::String(s) => {
                                         match hex::decode(s) {

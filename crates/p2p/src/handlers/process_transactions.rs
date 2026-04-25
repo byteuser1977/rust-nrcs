@@ -78,7 +78,7 @@ impl ProcessTransactionsHandler {
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as u8;
 
-        let type_id = TransactionType::from(type_byte);
+        let type_id = TransactionType::from_type(type_byte);
 
         let timestamp: u32 = obj.get("timestamp")
             .and_then(|v| v.as_u64())

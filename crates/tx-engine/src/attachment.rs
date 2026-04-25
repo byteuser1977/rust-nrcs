@@ -439,17 +439,21 @@ impl TransactionDbModel {
     
     pub fn to_transaction(&self) -> AttachmentResult<Transaction> {
         Ok(Transaction {
+            id: 0,
             version: self.version as u8,
-            type_id: TransactionType::from(self.type_id as u8),
+            type_id: TransactionType::from_type(self.type_id as u8),
             subtype: self.subtype as u8,
             timestamp: self.timestamp as u32,
             deadline: self.deadline as u16,
+            sender_public_key: Hash256([0u8; 32]),
             sender_id: self.sender_id as u64,
             recipient_id: self.recipient_id.map(|id| id as u64),
             amount: self.amount as u64,
             fee: self.fee as u64,
             height: self.height as u32,
             block_id: self.block_id as u64,
+            block_timestamp: 0,
+            transaction_index: 0,
             signature: {
                 let mut arr = [0u8; 64];
                 arr.copy_from_slice(&self.signature[..64]);
@@ -460,6 +464,7 @@ impl TransactionDbModel {
                 arr.copy_from_slice(&self.full_hash[..32]);
                 Hash256(arr)
             },
+            referenced_transaction_full_hash: None,
             attachment_bytes: self.attachment_bytes.clone(),
             phased: false,
             has_message: false,
