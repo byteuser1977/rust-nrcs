@@ -338,7 +338,7 @@ impl BlockchainSyncDaemon {
                         info!("Received {} blocks from peer, processing...", next_blocks.len());
 
                         for (block_idx, block_data) in next_blocks.iter().enumerate() {
-                            if let Err(e) = Self::process_downloaded_block(&block_data, start_idx + block_idx, block_verifier).await {
+                            if let Err(e) = Self::process_downloaded_block(&block_data, block_idx, block_verifier).await {
                                 warn!("Failed to process downloaded block: {}", e);
                             }
                         }
@@ -359,7 +359,7 @@ impl BlockchainSyncDaemon {
 
     async fn process_downloaded_block(
         block_data: &serde_json::Value,
-        block_index: usize,
+        _block_index: usize,
         block_verifier: &Arc<dyn BlockVerifier>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let block_json = match block_data.get("block") {
@@ -374,7 +374,9 @@ impl BlockchainSyncDaemon {
         let mut normalized_json = Self::normalize_block_json(block_json);
 
         if let Some(obj) = normalized_json.as_object_mut() {
-            obj.insert("height".to_string(), serde_json::Value::Number((block_index as u64 + 1).into()));
+            if !obj.contains_key("height") {
+                obj.insert("height".to_string(), serde_json::Value::Number(0.into()));
+            }
             if !obj.contains_key("nonce") {
                 obj.insert("nonce".to_string(), serde_json::Value::Number(0.into()));
             }

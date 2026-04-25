@@ -32,9 +32,6 @@ impl BlockchainVerifier {
                 format!("unsupported block version: {}", block.version)
             ));
         }
-        if block.height == 0 {
-            return Err(BlockchainError::InvalidBlock("height cannot be zero".to_string()));
-        }
         Ok(())
     }
 
@@ -58,6 +55,11 @@ impl BlockchainVerifier {
     }
 
     async fn insert_block(&self, block: &Block) -> Result<()> {
+        if let Ok(Some(_)) = self.block_repo.find_by_height(block.height as i32).await {
+            debug!("Block at height {} already exists, skipping", block.height);
+            return Ok(());
+        }
+
         let block_model = BlockModel::from_domain(block)?;
         
         self.block_repo.insert(&block_model).await
@@ -80,20 +82,21 @@ impl BlockchainVerifier {
 
 #[async_trait]
 impl BlockVerifier for BlockchainVerifier {
-    async fn verify_and_process(&self, block: Block) -> anyhow::Result<()> {
+    async fn verify_and_process(&self, mut block: Block) -> anyhow::Result<()> {
         self.validate_basic(&block)?;
 
-        let prev_height = block.height.checked_sub(1).ok_or_else(|| {
-            BlockchainError::InvalidTransaction("block height underflow".to_string())
-        })?;
+        if let Ok(Some(_)) = self.block_repo.find_by_height(block.height as i32).await {
+            debug!("Block at height {} already exists, skipping", block.height);
+            return Ok(());
+        }
 
-        if prev_height > 0 {
-            let prev_exists = self.block_exists(prev_height).await?;
-            if !prev_exists {
-                return Err(BlockchainError::InvalidBlock(format!(
-                    "previous block at height {} not found", prev_height
-                )).into());
-            }
+        let current_height = match self.block_repo.get_height().await {
+            Ok(h) if h > 0 => h as u32,
+            _ => 0,
+        };
+
+        if block.height == 0 {
+            block.height = current_height + 1;
         }
 
         let computed_payload_hash = self.compute_payload_hash(&block.transactions)?;
