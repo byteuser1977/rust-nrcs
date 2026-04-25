@@ -180,6 +180,14 @@ async fn main() -> Result<()> {
             }
             info!("SQLite migrations completed");
             
+            // 确保创世区块存在
+            let pool_any = sqlx::any::AnyPool::connect(&database_url)
+                .await
+                .context("Failed to connect to SQLite database (AnyPool)")?;
+            orm::genesis::ensure_genesis(&pool_any).await
+                .context("Failed to create genesis block")?;
+            info!("Genesis block ensured");
+            
             // 创建数据库仓库
             let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::SqliteBlockRepository::new(pool.clone()));
             let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::SqliteTransactionRepository::new(pool.clone()));

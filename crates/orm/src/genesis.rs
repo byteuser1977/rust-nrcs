@@ -33,6 +33,8 @@ fn load_genesis_config() -> sqlx::Result<(i64, Vec<(i64, i64)>)> {
     let timestamp = parse_genesis_time(time_str)?;
 
     // Parse transactions
+    // Note: Java uses Long.parseUnsignedLong for recipient IDs
+    // We need to handle potentially large unsigned values
     let mut accounts = Vec::new();
     for tx in transactions {
         let recipient = tx["recipient"].as_str()
@@ -40,8 +42,25 @@ fn load_genesis_config() -> sqlx::Result<(i64, Vec<(i64, i64)>)> {
                 std::io::ErrorKind::InvalidData,
                 "recipient not a string",
             ))))?;
-        let recipient_id: i64 = recipient.parse()
-            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        
+        // Parse as unsigned first, then convert to signed (for database storage)
+        let recipient_id: i64 = if recipient.starts_with('-') {
+            // Handle negative string representation of unsigned values
+            let unsigned_val: u64 = recipient.parse()
+                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+            unsigned_val as i64
+        } else {
+            // Try parsing as unsigned first (for values > i64::MAX)
+            match recipient.parse::<u64>() {
+                Ok(unsigned_val) => unsigned_val as i64,
+                Err(_) => {
+                    // Fall back to signed parsing
+                    recipient.parse()
+                        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?
+                }
+            }
+        };
+        
         let amount = tx["amount"].as_i64()
             .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -151,6 +170,27 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
     let height = 0i32; // 创世区块高度为 0
     let block_id = GENESIS_BLOCK_ID as i64;
 
+    // Genesis block constants from Java NRCS
+    // generation_signature: 64 bytes of zeros
+    let generation_signature: Vec<u8> = vec![0u8; 64];
+    
+    // block_signature from Java NRCS genesis block
+    let block_signature_hex = "47b1aa800d657ccad4aaa8c946b2b0d2a7337fd3ab8e8c9ed6a06a49b7756e04a3ff13b15f6471afdff30313e1c47c4c2ab0e209c78a0673a42c254b74cc0201";
+    let block_signature = hex::decode(block_signature_hex)
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+    
+    // payload_hash from Java NRCS genesis block
+    let payload_hash_hex = "8f58dc2f809613424e608586df83b42513056861a864dff3cd00d88baca681ce";
+    let payload_hash = hex::decode(payload_hash_hex)
+        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+    
+    // generator_id from Java NRCS genesis block
+    // Note: This value exceeds i64::MAX, so we parse as u64 first
+    let generator_id: i64 = 18365787021584764528u64 as i64;
+    
+    // cumulative_difficulty: 0 as a single byte
+    let cumulative_difficulty: Vec<u8> = vec![0u8; 1];
+
     // Insert genesis block
     // version = -1 表示创世区块
     // base_target = INITIAL_BASE_TARGET (153722867)
@@ -162,16 +202,21 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
             base_target, next_block_id, height, generation_signature,
             block_signature, payload_hash, generator_id
         ) VALUES (
-            ?, -1, ?, NULL, ?, 0, 0, NULL, X'00', ?, NULL, ?, NULL, NULL, NULL, ?
+            ?, -1, ?, NULL, ?, 0, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?
         )
         "#
     )
     .bind(block_id)                           // id
     .bind(timestamp as i32)                   // timestamp
     .bind(total_amount)                       // total_amount
+    .bind(256i32)                             // payload_length (2 transactions * 128 bytes each)
+    .bind(&cumulative_difficulty)             // cumulative_difficulty
     .bind(INITIAL_BASE_TARGET as i64)         // base_target
     .bind(height)                             // height
-    .bind(1i64)                               // generator_id
+    .bind(&generation_signature)              // generation_signature
+    .bind(&block_signature)                   // block_signature
+    .bind(&payload_hash)                      // payload_hash
+    .bind(generator_id)                       // generator_id
     .execute(pool)
     .await?;
 

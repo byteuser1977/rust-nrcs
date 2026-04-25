@@ -482,11 +482,39 @@ impl BlockchainSyncDaemon {
                 obj.insert("nonce".to_string(), serde_json::Value::Number(0.into()));
             }
             if !obj.contains_key("cumulative_difficulty") {
-                obj.insert("cumulative_difficulty".to_string(), serde_json::Value::Array(vec![]));
+                if let Some(cd_str) = obj.get("cumulative_difficulty").and_then(|v| v.as_str()) {
+                    if let Ok(cd) = cd_str.parse::<i64>() {
+                        obj.insert("cumulative_difficulty".to_string(), serde_json::Value::Number(cd.into()));
+                    }
+                } else {
+                    obj.insert("cumulative_difficulty".to_string(), serde_json::Value::Array(vec![]));
+                }
             }
+            
+            if obj.contains_key("base_target") {
+                if let Some(bt_val) = obj.get("base_target").cloned() {
+                    match bt_val {
+                        serde_json::Value::String(s) => {
+                            if let Ok(bt) = s.parse::<i64>() {
+                                obj.insert("base_target".to_string(), serde_json::Value::Number(bt.into()));
+                                debug!("Parsed base_target from string: {} -> {}", s, bt);
+                            }
+                        }
+                        serde_json::Value::Number(n) => {
+                            debug!("base_target already a number: {:?}", n);
+                        }
+                        _ => {
+                            warn!("Unexpected base_target format: {:?}", bt_val);
+                        }
+                    }
+                }
+            }
+            
             if !obj.contains_key("base_target") {
-                obj.insert("base_target".to_string(), serde_json::Value::Number(1_000_000.into()));
+                warn!("Missing base_target in block JSON, keys: {:?}", obj.keys().collect::<Vec<_>>());
+                obj.insert("base_target".to_string(), serde_json::Value::Number(153722867i64.into()));
             }
+            
             if !obj.contains_key("total_amount") && obj.contains_key("total_amount_n_q_t") {
                 let v = obj.get("total_amount_n_q_t").cloned().unwrap_or(serde_json::Value::Number(0.into()));
                 obj.insert("total_amount".to_string(), v);
@@ -494,6 +522,46 @@ impl BlockchainSyncDaemon {
             if !obj.contains_key("total_fee") && obj.contains_key("total_fee_n_q_t") {
                 let v = obj.get("total_fee_n_q_t").cloned().unwrap_or(serde_json::Value::Number(0.into()));
                 obj.insert("total_fee".to_string(), v);
+            }
+            
+            if !obj.contains_key("id") {
+                if let Some(block_id) = obj.get("block").and_then(|v| v.as_str()) {
+                    if let Ok(id) = block_id.parse::<i64>() {
+                        obj.insert("id".to_string(), serde_json::Value::Number(id.into()));
+                    }
+                }
+            }
+            
+            if obj.contains_key("previous_block") {
+                if let Some(pb_val) = obj.get("previous_block").cloned() {
+                    match pb_val {
+                        serde_json::Value::String(s) => {
+                            if let Ok(pb) = s.parse::<i64>() {
+                                obj.insert("previous_block_id".to_string(), serde_json::Value::Number(pb.into()));
+                            }
+                        }
+                        serde_json::Value::Number(n) => {
+                            obj.insert("previous_block_id".to_string(), serde_json::Value::Number(n));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            
+            if obj.contains_key("generator") {
+                if let Some(gen_val) = obj.get("generator").cloned() {
+                    match gen_val {
+                        serde_json::Value::String(s) => {
+                            if let Ok(gen) = s.parse::<i64>() {
+                                obj.insert("generator_id".to_string(), serde_json::Value::Number(gen.into()));
+                            }
+                        }
+                        serde_json::Value::Number(n) => {
+                            obj.insert("generator_id".to_string(), serde_json::Value::Number(n));
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
 
