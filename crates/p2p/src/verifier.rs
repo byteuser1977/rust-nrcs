@@ -112,6 +112,13 @@ impl BlockVerifier for BlockchainVerifier {
 
         Ok(())
     }
+
+    async fn has_block(&self, block_id: u64) -> anyhow::Result<bool> {
+        match self.block_repo.has_block(block_id as i64).await {
+            Ok(exists) => Ok(exists),
+            Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
+        }
+    }
 }
 
 pub struct NoOpBlockVerifier;
@@ -132,5 +139,9 @@ impl Default for NoOpBlockVerifier {
 impl BlockVerifier for NoOpBlockVerifier {
     async fn verify_and_process(&self, _block: Block) -> anyhow::Result<()> {
         Ok(())
+    }
+
+    async fn has_block(&self, _block_id: u64) -> anyhow::Result<bool> {
+        Ok(false)
     }
 }

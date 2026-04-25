@@ -36,6 +36,7 @@ use tx_engine::TransactionProcessor;
 #[async_trait]
 pub trait BlockVerifier: Send + Sync {
     async fn verify_and_process(&self, block: Block) -> Result<()>;
+    async fn has_block(&self, block_id: u64) -> Result<bool>;
 }
 
 pub struct Handler {

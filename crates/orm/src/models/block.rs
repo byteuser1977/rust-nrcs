@@ -33,6 +33,7 @@ impl BlockModel {
             version: self.version as u32,
             timestamp: self.timestamp as Timestamp,
             height: self.height as Height,
+            previous_block_id: self.previous_block_id.unwrap_or(0) as u64,
             previous_block_hash: self
                 .previous_block_hash
                 .as_ref()
@@ -43,6 +44,7 @@ impl BlockModel {
                 BlockchainError::InvalidHash("payload_hash length mismatch".to_string())
             })?,
             generator_id: self.generator_id as AccountId,
+            generator_public_key: None,
             nonce: 0,
             base_target: self.base_target as u64,
             cumulative_difficulty: self.cumulative_difficulty.clone(),
@@ -67,12 +69,14 @@ impl BlockModel {
     }
 
     pub fn from_domain(block: &Block) -> Result<Self> {
+        let id = block.calculate_id()?;
+        
         Ok(Self {
             db_id: 0,
-            id: block.height as i64,
+            id: id as i64,
             version: block.version as i32,
             timestamp: block.timestamp as i32,
-            previous_block_id: None,
+            previous_block_id: Some(block.previous_block_id as i64),
             total_amount: block.total_amount as i64,
             total_fee: block.total_fee as i64,
             payload_length: block.payload_length as i32,

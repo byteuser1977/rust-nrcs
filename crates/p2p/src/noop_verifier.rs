@@ -22,4 +22,8 @@ impl BlockVerifier for NoOpBlockVerifier {
     async fn verify_and_process(&self, _block: Block) -> Result<()> {
         Ok(())
     }
+
+    async fn has_block(&self, _block_id: u64) -> Result<bool> {
+        Ok(false)
+    }
 }

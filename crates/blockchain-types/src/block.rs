@@ -23,12 +23,17 @@ pub struct Block {
     pub timestamp: Timestamp,
     /// 区块高度（从 1 开始）
     pub height: Height,
+    /// 前序区块的ID（用于链式连接）
+    pub previous_block_id: u64,
     /// 前序区块的哈希（SHA-256，32 字节）
     pub previous_block_hash: Hash256,
     /// 交易 Payload 的哈希（Merkle Root）
     pub payload_hash: Hash256,
     /// 出块者账户 ID（Generator ID）
     pub generator_id: AccountId,
+    /// 出块者公钥（32字节）
+    #[serde(skip)]
+    pub generator_public_key: Option<[u8; 32]>,
     /// 随机数（Nonce）
     /// - PoW 场景为挖矿随机数
     /// - PoS 场景为 0
@@ -67,9 +72,11 @@ impl Block {
             version: BLOCK_VERSION,
             timestamp: 0, // 需填充
             height,
+            previous_block_id: 0,
             previous_block_hash,
             payload_hash: Hash256([0u8; 32]),
             generator_id,
+            generator_public_key: None,
             nonce: 0,
             base_target: 1_000_000, // 默认值
             cumulative_difficulty: vec![],
@@ -80,6 +87,60 @@ impl Block {
             block_signature: Hash512([0u8; 64]),
             transactions: vec![],
         }
+    }
+
+    /// 计算区块ID（参考Java Block.getId()）
+    /// 对区块字节进行SHA-256哈希，取前8个字节（小端序）
+    pub fn calculate_id(&self) -> Result<u64> {
+        use sha2::{Digest, Sha256};
+        
+        let data = self.serialize_for_id();
+        
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let hash = hasher.finalize();
+        
+        let mut id_bytes = [0u8; 8];
+        id_bytes.copy_from_slice(&hash[..8]);
+        
+        id_bytes.reverse();
+        
+        Ok(u64::from_be_bytes(id_bytes))
+    }
+    
+    /// 序列化区块用于ID计算（参考Java Block.bytes()）
+    pub fn serialize_for_id(&self) -> Vec<u8> {
+        let mut buf = Vec::new();
+        
+        buf.extend_from_slice(&self.version.to_le_bytes());
+        buf.extend_from_slice(&self.timestamp.to_le_bytes());
+        buf.extend_from_slice(&self.previous_block_id.to_le_bytes());
+        buf.extend_from_slice(&(self.transactions.len() as i32).to_le_bytes());
+        
+        if self.version < 3 {
+            buf.extend_from_slice(&((self.total_amount / 100_000_000) as i32).to_le_bytes());
+            buf.extend_from_slice(&((self.total_fee / 100_000_000) as i32).to_le_bytes());
+        } else {
+            buf.extend_from_slice(&self.total_amount.to_le_bytes());
+            buf.extend_from_slice(&self.total_fee.to_le_bytes());
+        }
+        
+        buf.extend_from_slice(&self.payload_length.to_le_bytes());
+        buf.extend_from_slice(&self.payload_hash.0);
+        
+        if let Some(pub_key) = &self.generator_public_key {
+            buf.extend_from_slice(pub_key);
+        } else {
+            buf.extend_from_slice(&[0u8; 32]);
+        }
+        
+        buf.extend_from_slice(&self.generation_signature.0);
+        
+        if self.version > 1 {
+            buf.extend_from_slice(&self.previous_block_hash.0);
+        }
+        
+        buf
     }
 
     /// 计算区块头的完整哈希（用于区块 ID）

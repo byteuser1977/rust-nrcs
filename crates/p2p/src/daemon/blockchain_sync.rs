@@ -138,7 +138,7 @@ impl BlockchainSyncDaemon {
 
         info!("Common milestone block id: {}", common_block_id);
 
-        let chain_block_ids = Self::get_block_ids_after_common(peer_addr, common_block_id).await?;
+        let chain_block_ids = Self::get_block_ids_after_common(peer_addr, common_block_id, block_verifier).await?;
         if chain_block_ids.len() < 2 {
             debug!("Not enough blocks after common block");
             return Ok(());
@@ -239,9 +239,10 @@ impl BlockchainSyncDaemon {
     async fn get_block_ids_after_common(
         peer_addr: std::net::SocketAddr,
         start_block_id: u64,
+        block_verifier: &Arc<dyn BlockVerifier>,
     ) -> Result<Vec<u64>, Box<dyn std::error::Error + Send + Sync>> {
         let mut block_list = Vec::new();
-        let match_id = start_block_id;
+        let mut match_id = start_block_id;
         let limit = 1440;
 
         let mut request = PeerRequest::new(RequestType::GetNextBlockIds, 1);
@@ -266,9 +267,13 @@ impl BlockchainSyncDaemon {
                         if let Some(id_str) = next_block_id.as_str() {
                             if let Ok(block_id) = Self::parse_block_id(id_str) {
                                 if matching {
-                                    block_list.push(match_id);
-                                    block_list.push(block_id);
-                                    matching = false;
+                                    if Self::has_block(block_id, block_verifier).await? {
+                                        match_id = block_id;
+                                    } else {
+                                        block_list.push(match_id);
+                                        block_list.push(block_id);
+                                        matching = false;
+                                    }
                                 } else {
                                     block_list.push(block_id);
                                 }
@@ -291,6 +296,19 @@ impl BlockchainSyncDaemon {
         }
 
         Ok(block_list)
+    }
+
+    async fn has_block(
+        block_id: u64,
+        block_verifier: &Arc<dyn BlockVerifier>,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        match block_verifier.has_block(block_id).await {
+            Ok(exists) => Ok(exists),
+            Err(e) => {
+                debug!("Failed to check if block {} exists: {}", block_id, e);
+                Ok(false)
+            }
+        }
     }
 
     async fn download_blocks(

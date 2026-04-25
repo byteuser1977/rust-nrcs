@@ -365,15 +365,46 @@ impl Transaction {
     }
 
     pub fn calculate_id(&self) -> u64 {
-        use sha2::{Digest, Sha256};
+        match self.calculate_full_hash() {
+            Ok(full_hash) => {
+                let mut id_bytes = [0u8; 8];
+                id_bytes.copy_from_slice(&full_hash.0[..8]);
+                
+                id_bytes.reverse();
+                
+                u64::from_be_bytes(id_bytes)
+            }
+            Err(_) => {
+                use sha2::{Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(&self.signature.0);
+                let hash = hasher.finalize();
+                
+                let mut id_bytes = [0u8; 8];
+                id_bytes.copy_from_slice(&hash[..8]);
+                u64::from_le_bytes(id_bytes)
+            }
+        }
+    }
 
+    pub fn calculate_full_hash(&self) -> Result<Hash256> {
+        use sha2::{Digest, Sha256};
+        
+        let data = self.serialize_for_signing();
+        
         let mut hasher = Sha256::new();
         hasher.update(&self.signature.0);
+        let signature_hash = hasher.finalize();
+        
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        hasher.update(&signature_hash);
         let hash = hasher.finalize();
-
-        let mut id_bytes = [0u8; 8];
-        id_bytes.copy_from_slice(&hash[..8]);
-        u64::from_le_bytes(id_bytes)
+        
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&hash);
+        
+        Ok(Hash256(arr))
     }
 
     pub fn compute_hash(&self) -> Result<Hash256> {

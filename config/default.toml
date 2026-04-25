@@ -22,7 +22,7 @@ connection_timeout = "5s"
 [api]
 # HTTP API 服务器
 host = "0.0.0.0"
-port = 8080
+port = 17977
 cors_allowed_origins = ["*"]
 debug = false
 
@@ -34,13 +34,13 @@ rate_limit_window_secs = 60
 [websocket]
 # WebSocket 服务器
 enabled = true
-port = 8081
+port = 17978
 ping_interval_secs = 30
 
 [p2p]
 # P2P 网络配置 - 对齐 Java NRCS
-listen_addr = "/ip4/0.0.0.0/tcp/17974"
-external_addr = "/ip4/0.0.0.0/tcp/17974"
+listen_addr = "/ip4/0.0.0.0/tcp/17975"
+external_addr = "/ip4/0.0.0.0/tcp/17975"
 bootstrap_nodes = [
   "/ip4/192.168.2.164/tcp/17974",  # Java-NRCS 节点
 ]

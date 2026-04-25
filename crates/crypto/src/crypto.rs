@@ -303,12 +303,24 @@ pub fn derive_account_id(passphrase: &str) -> CryptoResult<String> {
     
     let hash = sha256(&pub_key_bytes);
     
-    let account_id = u64::from_le_bytes([
-        hash[0], hash[1], hash[2], hash[3],
-        hash[4], hash[5], hash[6], hash[7],
-    ]);
+    let mut id_bytes = [0u8; 8];
+    id_bytes.copy_from_slice(&hash[..8]);
+    id_bytes.reverse();
+    
+    let account_id = u64::from_be_bytes(id_bytes);
     
     Ok(format!("NRCS-{}", crate::reed_solomon::encode(account_id)))
+}
+
+/// 从公钥直接计算account ID（不依赖passphrase）
+pub fn account_id_from_public_key(public_key: &[u8]) -> u64 {
+    let hash = sha256(public_key);
+    
+    let mut id_bytes = [0u8; 8];
+    id_bytes.copy_from_slice(&hash[..8]);
+    id_bytes.reverse();
+    
+    u64::from_be_bytes(id_bytes)
 }
 
 /// 从助记词派生公钥
