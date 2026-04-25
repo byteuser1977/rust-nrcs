@@ -425,8 +425,8 @@ mod tests {
     #[test]
     fn test_transaction_type_conversion() {
         assert_eq!(u8::from(TransactionType::Payment), 0);
-        assert_eq!(TransactionType::from(0), TransactionType::Payment);
-        assert_eq!(TransactionType::from(255), TransactionType::Custom(255));
+        assert_eq!(TransactionType::from_type(0), TransactionType::Payment);
+        assert_eq!(TransactionType::from_type(255), TransactionType::Unknown);
     }
     
     #[test]

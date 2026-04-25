@@ -150,6 +150,34 @@ impl Peer {
         self.services & service_flag != 0
     }
 
+    /// 获取节点权重
+    /// 
+    /// 对应 NRCS Java: Peer.getWeight()
+    /// 权重基于服务标志和下载/上传流量计算
+    pub fn get_weight(&self) -> u64 {
+        // 基础权重为 1
+        let mut weight: u64 = 1;
+        
+        // 如果提供服务，增加权重
+        // 服务标志: 1=API, 2=API_SSL, 4=CORS, 8=HALLMARK
+        if self.services > 0 {
+            weight += self.services.count_ones() as u64 * 10;
+        }
+        
+        // 根据下载流量增加权重（每 1MB 增加 1 点权重）
+        weight += self.downloaded_volume / (1024 * 1024);
+        
+        // 根据上传流量增加权重（每 1MB 增加 1 点权重）
+        weight += self.uploaded_volume / (1024 * 1024);
+        
+        weight
+    }
+
+    /// 检查是否在黑名单中
+    pub fn is_blacklisted(&self) -> bool {
+        self.blacklisting_time > 0
+    }
+
     pub fn update_metadata(
         &mut self,
         version: Option<String>,
@@ -401,6 +429,62 @@ impl Peers {
             }
         }
         None
+    }
+
+    /// 获取公共节点列表（非黑名单、已连接、有公告地址）
+    /// 
+    /// 对应 NRCS Java: Peers.getPublicPeers(PeerState state, boolean applyPullThreshold)
+    pub async fn get_public_peers(&self, state: PeerState) -> Vec<Peer> {
+        let known = self.known_peers.read().await;
+        let blacklist = self.blacklist.read().await;
+        
+        let mut public_peers = Vec::new();
+        for p in known.values() {
+            let peer = p.lock().await;
+            if !blacklist.contains(&peer.address) 
+                && peer.state == state 
+                && peer.announced_address.is_some() {
+                public_peers.push(peer.clone());
+            }
+        }
+        public_peers
+    }
+
+    /// 使用加权随机选择获取节点
+    /// 
+    /// 对应 NRCS Java: Peers.getWeightedPeer(List<IPeer> selectedPeers)
+    pub async fn get_weighted_peer(&self, state: PeerState) -> Option<Peer> {
+        let selected_peers = self.get_public_peers(state).await;
+        
+        if selected_peers.is_empty() {
+            return None;
+        }
+
+        // 计算总权重
+        let total_weight: u64 = selected_peers.iter()
+            .map(|p| {
+                let w = p.get_weight();
+                if w == 0 { 1 } else { w }
+            })
+            .sum();
+
+        // 使用随机数选择节点
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let mut hit = rng.gen_range(0..total_weight);
+
+        for peer in &selected_peers {
+            let weight = peer.get_weight();
+            let weight = if weight == 0 { 1 } else { weight };
+            
+            if hit < weight {
+                return Some(peer.clone());
+            }
+            hit -= weight;
+        }
+
+        // 如果没有选中，返回第一个
+        selected_peers.into_iter().next()
     }
 
     /// Remove a peer

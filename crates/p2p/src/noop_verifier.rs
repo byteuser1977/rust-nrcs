@@ -26,4 +26,20 @@ impl BlockVerifier for NoOpBlockVerifier {
     async fn has_block(&self, _block_id: u64) -> Result<bool> {
         Ok(false)
     }
+
+    async fn get_last_block_id(&self) -> Result<Option<u64>> {
+        Ok(None)
+    }
+
+    async fn get_last_block_cumulative_difficulty(&self) -> Result<Vec<u8>> {
+        Ok(vec![])
+    }
+
+    async fn can_connect_block(&self, _previous_block_id: u64) -> Result<bool> {
+        Ok(true)
+    }
+
+    async fn process_fork_block(&self, _block: Block) -> Result<()> {
+        Ok(())
+    }
 }

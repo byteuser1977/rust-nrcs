@@ -3,7 +3,7 @@
 use crate::block::Block;
 use crate::transaction::{Transaction, TransactionType};
 use crate::{AccountId, Hash256, Hash512, Amount, Signature};
-use crate::constants::{GENESIS_BLOCK_ID, ONE_NRCS, MAX_BALANCE_NQT};
+use crate::constants::{GENESIS_BLOCK_ID, ONE_NRCS, MAX_BALANCE_NQT, INITIAL_BASE_TARGET};
 
 pub const GENESIS_YEAR: i32 = 2020;
 pub const GENESIS_MONTH: u32 = 1;
@@ -112,7 +112,7 @@ pub fn create_genesis_block() -> Result<Block, Box<dyn std::error::Error>> {
         generator_id: Some(CREATOR_ID as u64),
         generator_public_key: Some(CREATOR_PUBLIC_KEY),
         nonce: 0,
-        base_target: 1_000_000,
+        base_target: INITIAL_BASE_TARGET,
         cumulative_difficulty: vec![],
         total_amount: MAX_BALANCE_NQT,
         total_fee: 0,

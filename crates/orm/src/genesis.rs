@@ -1,10 +1,10 @@
 //! Genesis block creation aligned with Java GenesisGenerator.
 
-use sqlx::PgPool;
+use sqlx::AnyPool;
 use serde_json::Value;
 use std::fs;
 use chrono::{NaiveDate, FixedOffset, TimeZone};
-use blockchain_types::constants::GENESIS_BLOCK_ID;
+use blockchain_types::constants::{GENESIS_BLOCK_ID, INITIAL_BASE_TARGET};
 
 /// Load genesis configuration from config/genesis.json.
 /// Returns (timestamp, Vec<(account_id, balance)>)
@@ -137,7 +137,7 @@ fn parse_genesis_time(s: &str) -> sqlx::Result<i64> {
 
 /// Create and insert the genesis block if none exists.
 /// Mirrors Java GenesisGenerator logic but without secret phrase requirement.
-pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
+pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
     // Check if any block exists
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM block")
         .fetch_one(pool)
@@ -148,10 +148,12 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
 
     let (timestamp, accounts) = load_genesis_config()?;
     let total_amount: i64 = accounts.iter().map(|(_, amt)| *amt).sum();
-    let height = 1i32;
+    let height = 0i32; // 创世区块高度为 0
     let block_id = GENESIS_BLOCK_ID as i64;
 
     // Insert genesis block
+    // version = -1 表示创世区块
+    // base_target = INITIAL_BASE_TARGET (153722867)
     sqlx::query(
         r#"
         INSERT INTO block (
@@ -160,15 +162,16 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
             base_target, next_block_id, height, generation_signature,
             block_signature, payload_hash, generator_id
         ) VALUES (
-            $3, 1, $1, NULL, $2, 0, 0, NULL, '{}', 1000000, NULL, $4, NULL, NULL, NULL, $5
+            ?, -1, ?, NULL, ?, 0, 0, NULL, X'00', ?, NULL, ?, NULL, NULL, NULL, ?
         )
         "#
     )
-    .bind(timestamp as i32)
-    .bind(total_amount)
-    .bind(block_id)
-    .bind(height)
-    .bind(1) // generator_id
+    .bind(block_id)                           // id
+    .bind(timestamp as i32)                   // timestamp
+    .bind(total_amount)                       // total_amount
+    .bind(INITIAL_BASE_TARGET as i64)         // base_target
+    .bind(height)                             // height
+    .bind(1i64)                               // generator_id
     .execute(pool)
     .await?;
 
@@ -179,10 +182,11 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
             INSERT INTO account (
                 id, balance, unconfirmed_balance, forged_balance,
                 active_lessee_id, has_control_phasing, height, latest
-            ) VALUES ($1, $2, $2, 0, NULL, FALSE, $3, TRUE)
+            ) VALUES (?, ?, ?, 0, NULL, 0, ?, 1)
             "#
         )
         .bind(account_id)
+        .bind(balance)
         .bind(balance)
         .bind(height)
         .execute(pool)
@@ -193,10 +197,11 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
             INSERT INTO account_ledger (
                 account_id, event_type, event_id, holding_type, holding_id,
                 "CHANGE", balance, block_id, height, timestamp
-            ) VALUES ($1, 0, $3, 0, NULL, $2, $2, $3, $4, $5)
+            ) VALUES (?, 0, 1, 0, NULL, ?, ?, ?, ?, ?)
             "#
         )
         .bind(account_id)
+        .bind(balance)
         .bind(balance)
         .bind(block_id)
         .bind(height)
@@ -211,13 +216,193 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[sqlx::test]
-    async fn test_genesis_creates_initial_state(pool: PgPool) -> sqlx::Result<()> {
-        ensure_genesis(&pool).await?;
+    use sqlx::any::AnyPoolOptions;
+
+    async fn setup_sqlite_pool() -> sqlx::Result<AnyPool> {
+        let pool = AnyPoolOptions::new()
+            .connect("sqlite::memory:")
+            .await?;
+        
+        // 创建表结构
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS block (
+                id INTEGER PRIMARY KEY,
+                version INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL,
+                previous_block_id INTEGER,
+                total_amount INTEGER NOT NULL,
+                total_fee INTEGER NOT NULL,
+                payload_length INTEGER NOT NULL,
+                previous_block_hash BLOB,
+                cumulative_difficulty BLOB NOT NULL,
+                base_target INTEGER NOT NULL,
+                next_block_id INTEGER,
+                height INTEGER NOT NULL,
+                generation_signature BLOB,
+                block_signature BLOB,
+                payload_hash BLOB,
+                generator_id INTEGER NOT NULL
+            )
+        "#)
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS account (
+                id INTEGER PRIMARY KEY,
+                balance INTEGER NOT NULL,
+                unconfirmed_balance INTEGER NOT NULL,
+                forged_balance INTEGER NOT NULL,
+                active_lessee_id INTEGER,
+                has_control_phasing INTEGER NOT NULL DEFAULT 0,
+                height INTEGER NOT NULL,
+                latest INTEGER NOT NULL DEFAULT 1
+            )
+        "#)
+        .execute(&pool)
+        .await?;
+
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS account_ledger (
+                account_id INTEGER NOT NULL,
+                event_type INTEGER NOT NULL,
+                event_id INTEGER NOT NULL,
+                holding_type INTEGER NOT NULL,
+                holding_id INTEGER,
+                "CHANGE" INTEGER NOT NULL,
+                balance INTEGER NOT NULL,
+                block_id INTEGER NOT NULL,
+                height INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL
+            )
+        "#)
+        .execute(&pool)
+        .await?;
+
+        Ok(pool)
+    }
+
+    #[tokio::test]
+    async fn test_genesis_creates_initial_state() -> sqlx::Result<()> {
+        let pool = setup_sqlite_pool().await?;
+        
+        // 创建测试用的 genesis.json 文件
+        let genesis_config = r#"{
+            "genesis_time": "2024-1-1 00:00:00.000",
+            "transactions": [
+                {"recipient": "123456789", "amount": 1000000000},
+                {"recipient": "987654321", "amount": 500000000}
+            ]
+        }"#;
+        
+        // 写入临时文件（使用绝对路径）
+        // load_genesis_config 读取 config/genesis.json，所以需要创建 config 子目录
+        let temp_dir = std::env::temp_dir().join("nrcs_test_config_1");
+        let config_dir = temp_dir.join("config");
+        std::fs::create_dir_all(&config_dir).ok();
+        let config_path = config_dir.join("genesis.json");
+        std::fs::write(&config_path, genesis_config)?;
+        
+        // 临时更改工作目录
+        let original_dir = std::env::current_dir().ok();
+        std::env::set_current_dir(&temp_dir).ok();
+        
+        let result = ensure_genesis(&pool).await;
+        
+        // 恢复工作目录
+        if let Some(dir) = original_dir {
+            std::env::set_current_dir(dir).ok();
+        }
+        
+        result?;
+        
         let block_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM block")
             .fetch_one(&pool)
             .await?;
         assert_eq!(block_count.0, 1);
+
+        // 清理临时文件
+        std::fs::remove_dir_all(&temp_dir).ok();
+        
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_genesis_block_height_is_zero() -> sqlx::Result<()> {
+        let pool = setup_sqlite_pool().await?;
+        
+        let genesis_config = r#"{
+            "genesis_time": "2024-1-1 00:00:00.000",
+            "transactions": []
+        }"#;
+        
+        // 写入临时文件（使用绝对路径）
+        let temp_dir = std::env::temp_dir().join("nrcs_test_config_2");
+        let config_dir = temp_dir.join("config");
+        std::fs::create_dir_all(&config_dir).ok();
+        let config_path = config_dir.join("genesis.json");
+        std::fs::write(&config_path, genesis_config)?;
+        
+        // 临时更改工作目录
+        let original_dir = std::env::current_dir().ok();
+        std::env::set_current_dir(&temp_dir).ok();
+        
+        let result = ensure_genesis(&pool).await;
+        
+        // 恢复工作目录
+        if let Some(dir) = original_dir {
+            std::env::set_current_dir(dir).ok();
+        }
+        
+        result?;
+        
+        let height: (i32,) = sqlx::query_as("SELECT height FROM block LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(height.0, 0, "Genesis block height should be 0");
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+        
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_genesis_base_target() -> sqlx::Result<()> {
+        let pool = setup_sqlite_pool().await?;
+        
+        let genesis_config = r#"{
+            "genesis_time": "2024-1-1 00:00:00.000",
+            "transactions": []
+        }"#;
+        
+        // 写入临时文件（使用绝对路径）
+        let temp_dir = std::env::temp_dir().join("nrcs_test_config_3");
+        let config_dir = temp_dir.join("config");
+        std::fs::create_dir_all(&config_dir).ok();
+        let config_path = config_dir.join("genesis.json");
+        std::fs::write(&config_path, genesis_config)?;
+        
+        // 临时更改工作目录
+        let original_dir = std::env::current_dir().ok();
+        std::env::set_current_dir(&temp_dir).ok();
+        
+        let result = ensure_genesis(&pool).await;
+        
+        // 恢复工作目录
+        if let Some(dir) = original_dir {
+            std::env::set_current_dir(dir).ok();
+        }
+        
+        result?;
+        
+        let base_target: (i64,) = sqlx::query_as("SELECT base_target FROM block LIMIT 1")
+            .fetch_one(&pool)
+            .await?;
+        assert_eq!(base_target.0, blockchain_types::constants::INITIAL_BASE_TARGET as i64, 
+            "Genesis block base_target should be INITIAL_BASE_TARGET");
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+        
         Ok(())
     }
 }

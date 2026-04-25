@@ -125,6 +125,34 @@ impl BlockVerifier for BlockchainVerifier {
             Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
         }
     }
+
+    async fn get_last_block_id(&self) -> anyhow::Result<Option<u64>> {
+        match self.block_repo.find_latest().await {
+            Ok(Some(block)) => Ok(Some(block.id as u64)),
+            Ok(None) => Ok(None),
+            Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
+        }
+    }
+
+    async fn get_last_block_cumulative_difficulty(&self) -> anyhow::Result<Vec<u8>> {
+        match self.block_repo.find_latest().await {
+            Ok(Some(block)) => Ok(block.cumulative_difficulty),
+            Ok(None) => Ok(vec![]),
+            Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
+        }
+    }
+
+    async fn can_connect_block(&self, previous_block_id: u64) -> anyhow::Result<bool> {
+        match self.get_last_block_id().await? {
+            Some(last_id) => Ok(last_id == previous_block_id),
+            None => Ok(false),
+        }
+    }
+
+    async fn process_fork_block(&self, block: Block) -> anyhow::Result<()> {
+        warn!("Fork block detected at height {}, storing for later processing", block.height);
+        self.verify_and_process(block).await
+    }
 }
 
 pub struct NoOpBlockVerifier;
@@ -149,5 +177,21 @@ impl BlockVerifier for NoOpBlockVerifier {
 
     async fn has_block(&self, _block_id: u64) -> anyhow::Result<bool> {
         Ok(false)
+    }
+
+    async fn get_last_block_id(&self) -> anyhow::Result<Option<u64>> {
+        Ok(None)
+    }
+
+    async fn get_last_block_cumulative_difficulty(&self) -> anyhow::Result<Vec<u8>> {
+        Ok(vec![])
+    }
+
+    async fn can_connect_block(&self, _previous_block_id: u64) -> anyhow::Result<bool> {
+        Ok(true)
+    }
+
+    async fn process_fork_block(&self, _block: Block) -> anyhow::Result<()> {
+        Ok(())
     }
 }

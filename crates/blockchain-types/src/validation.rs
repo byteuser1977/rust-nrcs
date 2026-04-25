@@ -341,21 +341,23 @@ impl Default for TransactionValidator {
 mod tests {
     use super::*;
 
-    fn create_test_block(version: u32, height: u32) -> Block {
+    fn create_test_block(version: i32, height: u32) -> Block {
         Block {
             version,
             timestamp: 0,
             height,
+            previous_block_id: None,
             previous_block_hash: Hash256([0u8; 32]),
             payload_hash: Hash256([0u8; 32]),
             generator_id: Some(0),
+            generator_public_key: None,
             nonce: 0,
             base_target: INITIAL_BASE_TARGET,
             cumulative_difficulty: vec![],
             total_amount: 0,
             total_fee: 0,
             payload_length: 0,
-            generation_signature: Hash512([0u8; 64]),
+            generation_signature: Hash256([0u8; 32]),
             block_signature: Hash512([0u8; 64]),
             transactions: vec![],
         }

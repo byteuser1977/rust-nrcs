@@ -66,7 +66,7 @@ impl From<&str> for RequestType {
 }
 
 /// 基础请求（所有 RPC 共享字段）
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PeerRequest {
     #[serde(rename = "requestType")]
     pub request_type: RequestType,

@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn test_hit_calculation() {
         let public_key = [1u8; 32];
-        let gen_sig = [2u8; 64];
+        let gen_sig = [2u8; 32];
         
         let hit = calculate_hit(&public_key, &gen_sig);
         assert!(hit > BigUint::zero());

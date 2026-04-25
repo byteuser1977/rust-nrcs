@@ -167,6 +167,22 @@ impl BlockRepository for MockBlockRepository {
     async fn find_by_generator(&self, _generator_id: i64) -> RepositoryResult<Vec<BlockModel>> {
         Ok(vec![])
     }
+
+    async fn get_height(&self) -> RepositoryResult<i32> {
+        Ok(1)
+    }
+
+    async fn get_block_id_at_height(&self, _height: i32) -> RepositoryResult<Option<i64>> {
+        Ok(None)
+    }
+
+    async fn has_block(&self, _id: i64) -> RepositoryResult<bool> {
+        Ok(false)
+    }
+
+    async fn get_ids_after(&self, _block_id: i64, _limit: i32) -> RepositoryResult<Vec<i64>> {
+        Ok(vec![])
+    }
 }
 
 /// 模拟交易仓库

@@ -20,7 +20,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use std::cmp::min;
 
-const SEGMENT_SIZE: usize = 10;
+const SEGMENT_SIZE: usize = 36;
 const MAX_BLOCKS_BATCH: usize = 720;
 
 pub struct BlockchainSyncDaemon {
@@ -328,6 +328,12 @@ impl BlockchainSyncDaemon {
         }
     }
 
+    /// 最大重试次数
+    const MAX_RETRIES: usize = 3;
+    
+    /// 重试延迟（毫秒）
+    const RETRY_DELAY_MS: u64 = 1000;
+
     async fn download_blocks(
         peer_addr: std::net::SocketAddr,
         chain_block_ids: &[u64],
@@ -347,8 +353,9 @@ impl BlockchainSyncDaemon {
             get_list.push((start, seg_stop));
         }
 
-        let mut processed = 0;
-
+        // 并发下载所有段（带重试机制）
+        let mut download_futures = Vec::new();
+        
         for &(start_idx, stop_idx) in &get_list {
             let block_id = chain_block_ids.get(start_idx).copied().unwrap_or(0);
 
@@ -361,7 +368,48 @@ impl BlockchainSyncDaemon {
             request.set("blockIds", &id_list);
             request.set("blockId", &block_id.to_string());
 
-            match WebsocketClient::send_request(peer_addr, request).await {
+            let peer_addr_clone = peer_addr;
+            download_futures.push(async move {
+                // 重试机制
+                let mut last_error = None;
+                for retry in 0..Self::MAX_RETRIES {
+                    match WebsocketClient::send_request(peer_addr_clone, request.clone()).await {
+                        Ok(response) => {
+                            // 验证响应
+                            if let Some(next_blocks) = response.get("nextBlocks").and_then(|v| v.as_array()) {
+                                if !next_blocks.is_empty() {
+                                    return (start_idx, stop_idx, Ok(response));
+                                }
+                            }
+                            // 空响应，重试
+                            last_error = Some("Empty response".to_string());
+                            if retry < Self::MAX_RETRIES - 1 {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(Self::RETRY_DELAY_MS)).await;
+                            }
+                        }
+                        Err(e) => {
+                            last_error = Some(e.to_string());
+                            if retry < Self::MAX_RETRIES - 1 {
+                                warn!("Retry {}/{} for segment {}: {}", retry + 1, Self::MAX_RETRIES, start_idx, e);
+                                tokio::time::sleep(tokio::time::Duration::from_millis(Self::RETRY_DELAY_MS)).await;
+                            }
+                        }
+                    }
+                }
+                (start_idx, stop_idx, Err(last_error.unwrap_or_else(|| "Unknown error".to_string())))
+            });
+        }
+
+        // 并发执行所有下载请求
+        let results = futures::future::join_all(download_futures).await;
+
+        // 按顺序处理结果
+        let mut processed = 0;
+        let mut all_blocks: Vec<(usize, serde_json::Value)> = Vec::new();
+        let mut failed_segments = Vec::new();
+
+        for (start_idx, _stop_idx, result) in results {
+            match result {
                 Ok(response) => {
                     if let Some(next_blocks) = response.get("nextBlocks").and_then(|v| v.as_array()) {
                         if next_blocks.len() > SEGMENT_SIZE {
@@ -369,25 +417,42 @@ impl BlockchainSyncDaemon {
                                   peer_addr, next_blocks.len(), SEGMENT_SIZE);
                         }
 
-                        processed += next_blocks.len();
-                        info!("Received {} blocks from peer, processing...", next_blocks.len());
+                        info!("Received {} blocks from peer for segment starting at {}", 
+                              next_blocks.len(), start_idx);
 
-                        let base_height = start_idx as u32 + 1;
                         for (block_idx, block_data) in next_blocks.iter().enumerate() {
-                            if let Err(e) = Self::process_downloaded_block(&block_data, base_height + block_idx as u32, block_verifier).await {
-                                warn!("Failed to process downloaded block: {}", e);
-                            }
+                            all_blocks.push((start_idx + block_idx, block_data.clone()));
                         }
                     }
                 }
                 Err(e) => {
-                    debug!("Failed to get next blocks: {}", e);
+                    warn!("Failed to get next blocks for segment {} after {} retries: {}", 
+                          start_idx, Self::MAX_RETRIES, e);
+                    failed_segments.push(start_idx);
                 }
             }
         }
 
+        // 报告失败的段
+        if !failed_segments.is_empty() {
+            warn!("Failed to download {} segments: {:?}", failed_segments.len(), failed_segments);
+        }
+
+        // 按区块索引排序
+        all_blocks.sort_by_key(|(idx, _)| *idx);
+
+        // 处理所有下载的区块
+        for (block_idx, block_data) in all_blocks {
+            let block_height = block_idx as u32 + 1;
+            if let Err(e) = Self::process_downloaded_block(&block_data, block_height, block_verifier).await {
+                warn!("Failed to process downloaded block at height {}: {}", block_height, e);
+            } else {
+                processed += 1;
+            }
+        }
+
         if processed > 0 {
-            info!("Downloaded {} blocks total", processed);
+            info!("Downloaded and processed {} blocks total", processed);
         }
 
         Ok(())
