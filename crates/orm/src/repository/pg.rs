@@ -146,7 +146,7 @@ impl BlockRepository for PgBlockRepository {
 #[async_trait]
 impl Repository<BlockModel> for PgBlockRepository {
     async fn insert(&self, block: &BlockModel) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO block (
                 id, version, timestamp, previous_block_id, total_amount,
@@ -156,24 +156,24 @@ impl Repository<BlockModel> for PgBlockRepository {
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
             )
-            "#,
-            block.id,
-            block.version,
-            block.timestamp,
-            block.previous_block_id,
-            block.total_amount,
-            block.total_fee,
-            block.payload_length,
-            block.previous_block_hash.as_deref(),
-            block.cumulative_difficulty.as_slice(),
-            block.base_target,
-            block.next_block_id,
-            block.height,
-            block.generation_signature.as_slice(),
-            block.block_signature.as_slice(),
-            block.payload_hash.as_slice(),
-            block.generator_id
+            "#
         )
+        .bind(block.id)
+        .bind(block.version)
+        .bind(block.timestamp)
+        .bind(block.previous_block_id)
+        .bind(block.total_amount)
+        .bind(block.total_fee)
+        .bind(block.payload_length)
+        .bind(block.previous_block_hash.as_deref())
+        .bind(block.cumulative_difficulty.as_slice())
+        .bind(block.base_target)
+        .bind(block.next_block_id)
+        .bind(block.height)
+        .bind(block.generation_signature.as_slice())
+        .bind(block.block_signature.as_slice())
+        .bind(block.payload_hash.as_slice())
+        .bind(block.generator_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -193,7 +193,7 @@ impl Repository<BlockModel> for PgBlockRepository {
     }
 
     async fn update(&self, block: &BlockModel) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE block SET
                 version = $2, timestamp = $3, previous_block_id = $4,
@@ -228,7 +228,7 @@ impl Repository<BlockModel> for PgBlockRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query!("DELETE FROM block WHERE db_id = $1", db_id)
+        sqlx::query("DELETE FROM block WHERE db_id = $1", db_id)
             .execute(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -350,7 +350,7 @@ impl Repository<TransactionModel> for PgTransactionRepository {
         sqlx::query(
             r#"
             INSERT INTO transaction (
-                id, deadline, sender_public_key, recipient_id, amount, fee, full_hash,
+                id, deadline, recipient_id, amount, fee, full_hash,
                 height, block_id, block_timestamp, transaction_index, signature, timestamp, type, subtype,
                 sender_id, referenced_transaction_full_hash,
                 attachment_bytes, version, phased,
@@ -359,13 +359,12 @@ impl Repository<TransactionModel> for PgTransactionRepository {
                 ec_block_id, has_encrypttoself_message, has_prunable_encrypted_message
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-                $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
+                $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
             )
             "#
         )
         .bind(tx.id)
         .bind(tx.deadline)
-        .bind(&tx.sender_public_key)
         .bind(tx.recipient_id)
         .bind(tx.amount)
         .bind(tx.fee)
@@ -482,7 +481,7 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE account
             SET balance = $2, unconfirmed_balance = $3
@@ -502,7 +501,7 @@ impl AccountRepository for PgAccountRepository {
 #[async_trait]
 impl Repository<AccountModel> for PgAccountRepository {
     async fn insert(&self, account: &AccountModel) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO account (
                 id, balance, unconfirmed_balance, forged_balance,
@@ -537,7 +536,7 @@ impl Repository<AccountModel> for PgAccountRepository {
     }
 
     async fn update(&self, account: &AccountModel) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE account SET
                 balance = $2, unconfirmed_balance = $3, forged_balance = $4,
@@ -637,7 +636,7 @@ impl AccountAssetRepository for PgAccountAssetRepository {
     }
 
     async fn update_quantity(&self, account_id: i64, asset_id: i64, quantity: i64, height: i32) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE account_asset
             SET quantity = $3, height = $4, latest = TRUE
@@ -655,7 +654,7 @@ impl AccountAssetRepository for PgAccountAssetRepository {
     }
 
     async fn increase_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE account_asset
             SET quantity = quantity + $3, latest = TRUE
@@ -672,7 +671,7 @@ impl AccountAssetRepository for PgAccountAssetRepository {
     }
 
     async fn decrease_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
-        let result = sqlx::query!(
+        let result = sqlx::query(
             r#"
             UPDATE account_asset
             SET quantity = quantity - $3, latest = TRUE
@@ -696,7 +695,7 @@ impl AccountAssetRepository for PgAccountAssetRepository {
 #[async_trait]
 impl Repository<AccountAssetModel> for PgAccountAssetRepository {
     async fn insert(&self, aa: &AccountAssetModel) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO account_asset (
                 account_id, asset_id, quantity, unconfirmed_quantity, height, latest
@@ -728,7 +727,7 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
     }
 
     async fn update(&self, aa: &AccountAssetModel) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             UPDATE account_asset SET
                 quantity = $2, unconfirmed_quantity = $3, height = $4, latest = $5
@@ -838,7 +837,7 @@ impl AssetRepository for PgAssetRepository {
 #[async_trait]
 impl Repository<AssetModel> for PgAssetRepository {
     async fn insert(&self, asset: &AssetModel) -> RepositoryResult<()> {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO asset (
                 id, account_id, name, description, quantity, decimals,

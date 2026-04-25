@@ -94,7 +94,7 @@ impl BlockchainProcessor {
         let block_signature = block.block_signature.0.to_vec();
         let payload_hash = block.payload_hash.0.to_vec();
         
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO block (
                 id, version, timestamp, previous_block_id, total_amount,
@@ -104,24 +104,24 @@ impl BlockchainProcessor {
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
             )
-            "#,
-            block.height as i64,
-            block.version as i32,
-            block.timestamp as i32,
-            None::<i64>,
-            block.total_amount as i64,
-            block.total_fee as i64,
-            block.payload_length as i32,
-            previous_block_hash.as_deref(),
-            cumulative_difficulty.as_slice(),
-            block.base_target as i64,
-            None::<i64>,
-            block.height as i32,
-            generation_signature.as_slice(),
-            block_signature.as_slice(),
-            payload_hash.as_slice(),
-            block.generator_id as i64,
+            "#
         )
+        .bind(block.height as i64)
+        .bind(block.version as i32)
+        .bind(block.timestamp as i32)
+        .bind(None::<i64>)
+        .bind(block.total_amount as i64)
+        .bind(block.total_fee as i64)
+        .bind(block.payload_length as i32)
+        .bind(previous_block_hash.as_deref())
+        .bind(cumulative_difficulty.as_slice())
+        .bind(block.base_target as i64)
+        .bind(None::<i64>)
+        .bind(block.height as i32)
+        .bind(generation_signature.as_slice())
+        .bind(block_signature.as_slice())
+        .bind(payload_hash.as_slice())
+        .bind(block.generator_id as i64)
         .execute(&self.pool)
         .await
         .map_err(|e| BlockchainError::Database(e.to_string()))?;

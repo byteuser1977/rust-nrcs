@@ -11,7 +11,6 @@ pub struct TransactionModel {
     pub db_id: i64,
     pub id: i64,
     pub deadline: i16,
-    pub sender_public_key: Vec<u8>,
     pub recipient_id: Option<i64>,
     pub amount: i64,
     pub fee: i64,
@@ -42,14 +41,6 @@ pub struct TransactionModel {
 
 impl TransactionModel {
     pub fn to_domain(&self) -> Result<Transaction> {
-        let sender_public_key = if self.sender_public_key.len() == 32 {
-            let mut arr = [0u8; 32];
-            arr.copy_from_slice(&self.sender_public_key);
-            Hash256(arr)
-        } else {
-            Hash256([0u8; 32])
-        };
-
         let signature = if self.signature.len() == 64 {
             let mut arr = [0u8; 64];
             arr.copy_from_slice(&self.signature);
@@ -83,7 +74,7 @@ impl TransactionModel {
             subtype: self.subtype as u8,
             timestamp: self.timestamp as Timestamp,
             deadline: self.deadline as u16,
-            sender_public_key,
+            sender_public_key: Hash256([0u8; 32]),
             sender_id: self.sender_id as AccountId,
             recipient_id: self.recipient_id.map(|id| id as AccountId),
             amount: self.amount as Amount,
@@ -114,7 +105,6 @@ impl TransactionModel {
             db_id: 0,
             id: tx.id as i64,
             deadline: tx.deadline as i16,
-            sender_public_key: tx.sender_public_key.0.to_vec(),
             recipient_id: tx.recipient_id.map(|id| id as i64),
             amount: tx.amount as i64,
             fee: tx.fee as i64,

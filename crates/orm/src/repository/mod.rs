@@ -1,9 +1,9 @@
-pub mod traits;
-pub mod pg;
-pub mod public_key;
 pub mod sqlite;
+// pub mod pg;  // Temporarily disabled due to SQLx macro issues
+pub mod public_key;
+pub mod traits;
 
-pub use traits::*;
-pub use pg::*;
-pub use public_key::*;
 pub use sqlite::*;
+// pub use pg::*;
+pub use public_key::*;
+pub use traits::*;

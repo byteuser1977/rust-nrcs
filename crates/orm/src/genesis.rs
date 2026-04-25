@@ -151,7 +151,7 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
     let block_id = 1i64;
 
     // Insert genesis block
-    sqlx::query!(
+    sqlx::query(
         r#"
         INSERT INTO block (
             id, version, timestamp, previous_block_id, total_amount,
@@ -161,42 +161,42 @@ pub async fn ensure_genesis(pool: &PgPool) -> sqlx::Result<()> {
         ) VALUES (
             1, 1, $1, NULL, $2, 0, 0, NULL, '{}', 1000000, NULL, 1, NULL, NULL, NULL, 1
         )
-        "#,
-        timestamp as i32,
-        total_amount
+        "#
     )
+    .bind(timestamp as i32)
+    .bind(total_amount)
     .execute(pool)
     .await?;
 
     // Insert initial accounts
     for (account_id, balance) in accounts {
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO account (
                 id, balance, unconfirmed_balance, forged_balance,
                 active_lessee_id, has_control_phasing, height, latest
             ) VALUES ($1, $2, $2, 0, NULL, FALSE, $3, TRUE)
-            "#,
-            account_id,
-            balance,
-            height
+            "#
         )
+        .bind(account_id)
+        .bind(balance)
+        .bind(height)
         .execute(pool)
         .await?;
 
-        sqlx::query!(
+        sqlx::query(
             r#"
             INSERT INTO account_ledger (
                 account_id, event_type, event_id, holding_type, holding_id,
                 "CHANGE", balance, block_id, height, timestamp
             ) VALUES ($1, 0, 1, 0, NULL, $2, $2, $3, $4, $5)
-            "#,
-            account_id,
-            balance,
-            block_id,
-            height,
-            timestamp as i32
+            "#
         )
+        .bind(account_id)
+        .bind(balance)
+        .bind(block_id)
+        .bind(height)
+        .bind(timestamp as i32)
         .execute(pool)
         .await?;
     }

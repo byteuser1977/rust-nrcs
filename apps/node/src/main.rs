@@ -158,24 +158,7 @@ async fn main() -> Result<()> {
     
     match db_type {
         DatabaseType::PostgreSQL => {
-            let pool = PgPool::connect(&database_url)
-                .await
-                .context("Failed to connect to PostgreSQL database")?;
-            
-            info!("PostgreSQL database connected, genesis creation skipped - awaiting sync from Java-NRCS");
-            
-            // 创建数据库仓库
-            let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::PgBlockRepository::new(pool.clone()));
-            let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::PgTransactionRepository::new(pool.clone()));
-            let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::PgAssetRepository::new(pool.clone()));
-            let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::PgAccountAssetRepository::new(pool.clone()));
-            let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::PgAccountRepository::new(pool.clone()));
-            let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::PgPublicKeyRepository::new(pool.clone()));
-            let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(
-                BlockchainVerifier::new(Arc::clone(&block_repo), Arc::clone(&tx_repo))
-            );
-            
-            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, account_repo, public_key_repo, block_verifier).await
+            return Err(anyhow::anyhow!("PostgreSQL is temporarily disabled. Please use SQLite."));
         }
         DatabaseType::SQLite => {
             let pool = SqlitePool::connect(&database_url)

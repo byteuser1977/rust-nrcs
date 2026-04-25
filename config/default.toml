@@ -3,7 +3,7 @@
 
 [database]
 # 数据库连接
-url = "postgres://nrcs_user:password@localhost:5432/nrcs_db"
+url = "sqlite://nrcs.db?mode=rwc"
 pool_size = 10
 min_connections = 5
 max_connections = 50
