@@ -24,12 +24,16 @@ pub struct Block {
     /// 区块高度（从 1 开始）
     pub height: Height,
     /// 前序区块的ID（用于链式连接）
+    #[serde(alias = "previousBlock", alias = "previous_block")]
     pub previous_block_id: u64,
     /// 前序区块的哈希（SHA-256，32 字节）
+    #[serde(alias = "previousBlockHash")]
     pub previous_block_hash: Hash256,
     /// 交易 Payload 的哈希（Merkle Root）
+    #[serde(alias = "payloadHash")]
     pub payload_hash: Hash256,
     /// 出块者账户 ID（Generator ID）
+    #[serde(alias = "generatorId")]
     pub generator_id: AccountId,
     /// 出块者公钥（32字节）
     #[serde(skip)]
@@ -41,21 +45,28 @@ pub struct Block {
     /// 基础难度目标值（Base Target）
     /// 用于计算区块是否满足难度要求：`hash < base_target`
     /// 越小难度越大
+    #[serde(alias = "baseTarget")]
     pub base_target: u64,
     /// 累计难度（从创世区块到当前区块总难度）
     /// 使用变长字节数组存储（BigInteger 格式），Rust 中使用 `num-bigint`
+    #[serde(alias = "cumulativeDifficulty")]
     pub cumulative_difficulty: Vec<u8>,
     /// 总金额（包含在区块中的所有交易金额总和）
     /// 单位：NQT（10^-8）
+    #[serde(alias = "totalAmountNQT")]
     pub total_amount: Amount,
     /// 总手续费
+    #[serde(alias = "totalFeeNQT")]
     pub total_fee: Amount,
     /// Payload 长度（交易列表的字节数）
+    #[serde(alias = "payloadLength")]
     pub payload_length: u32,
     /// 生成签名
     /// PoS 中出块者使用私钥生成，用于下一个出块者选择
+    #[serde(alias = "generationSignature")]
     pub generation_signature: Hash256,
     /// 区块签名（出块者对区块头签名）
+    #[serde(alias = "blockSignature")]
     pub block_signature: Hash512,
     /// 交易列表
     pub transactions: Vec<Transaction>,
@@ -139,6 +150,8 @@ impl Block {
         if self.version > 1 {
             buf.extend_from_slice(&self.previous_block_hash.0);
         }
+        
+        buf.extend_from_slice(&self.block_signature.0);
         
         buf
     }

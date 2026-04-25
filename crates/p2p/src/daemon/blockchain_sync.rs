@@ -599,6 +599,22 @@ impl BlockchainSyncDaemon {
                                         v
                                     }
                                 }
+                            } else if new_key == "previous_block" {
+                                match &v {
+                                    serde_json::Value::String(s) => {
+                                        match s.parse::<u64>() {
+                                            Ok(num) => {
+                                                debug!("Converted {} to u64: {}", new_key, num);
+                                                serde_json::Value::Number(serde_json::Number::from(num))
+                                            }
+                                            Err(e) => {
+                                                debug!("Failed to parse {} as u64: {}", new_key, e);
+                                                v
+                                            }
+                                        }
+                                    }
+                                    _ => v
+                                }
                             } else {
                                 convert_value(v, hex_fields, account_id_fields)
                             };

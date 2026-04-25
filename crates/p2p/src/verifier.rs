@@ -85,18 +85,25 @@ impl BlockVerifier for BlockchainVerifier {
     async fn verify_and_process(&self, mut block: Block) -> anyhow::Result<()> {
         self.validate_basic(&block)?;
 
+        if block.height == 0 {
+            if block.previous_block_id == 0 {
+                block.height = 1;
+            } else {
+                match self.block_repo.find_by_id(block.previous_block_id as i64).await {
+                    Ok(Some(prev_block)) => {
+                        block.height = prev_block.height as u32 + 1;
+                    }
+                    _ => {
+                        debug!("Previous block {} not found, cannot determine height", block.previous_block_id);
+                        return Err(anyhow::anyhow!("Previous block not found"));
+                    }
+                }
+            }
+        }
+
         if let Ok(Some(_)) = self.block_repo.find_by_height(block.height as i32).await {
             debug!("Block at height {} already exists, skipping", block.height);
             return Ok(());
-        }
-
-        let current_height = match self.block_repo.get_height().await {
-            Ok(h) if h > 0 => h as u32,
-            _ => 0,
-        };
-
-        if block.height == 0 {
-            block.height = current_height + 1;
         }
 
         let computed_payload_hash = self.compute_payload_hash(&block.transactions)?;
