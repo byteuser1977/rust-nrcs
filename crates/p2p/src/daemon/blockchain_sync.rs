@@ -499,14 +499,6 @@ impl BlockchainSyncDaemon {
     }
 
     fn normalize_block_json(json: serde_json::Value) -> serde_json::Value {
-        let hex_fields = [
-            "generation_signature",
-            "block_signature",
-            "previous_block_hash",
-            "payload_hash",
-            "generator_public_key",
-        ];
-
         let account_id_fields = ["generator_id"];
 
         fn convert_transaction(tx_json: serde_json::Value) -> serde_json::Value {
@@ -516,40 +508,7 @@ impl BlockchainSyncDaemon {
                         .into_iter()
                         .map(|(k, v)| {
                             let new_key = BlockchainSyncDaemon::camel_to_snake(&k);
-                            let converted_v = match new_key.as_str() {
-                                "sender_public_key" | "full_hash" | "referenced_transaction_full_hash" => {
-                                    match &v {
-                                        serde_json::Value::String(s) => {
-                                            match hex::decode(s) {
-                                                Ok(bytes) => {
-                                                    serde_json::Value::Array(
-                                                        bytes.iter().map(|b| serde_json::Number::from(*b)).map(serde_json::Value::Number).collect()
-                                                    )
-                                                }
-                                                Err(_) => v,
-                                            }
-                                        }
-                                        _ => v,
-                                    }
-                                }
-                                "signature" => {
-                                    match &v {
-                                        serde_json::Value::String(s) => {
-                                            match hex::decode(s) {
-                                                Ok(bytes) => {
-                                                    serde_json::Value::Array(
-                                                        bytes.iter().map(|b| serde_json::Number::from(*b)).map(serde_json::Value::Number).collect()
-                                                    )
-                                                }
-                                                Err(_) => v,
-                                            }
-                                        }
-                                        _ => v,
-                                    }
-                                }
-                                _ => v
-                            };
-                            (new_key, converted_v)
+                            (new_key, v)
                         })
                         .collect();
                     serde_json::Value::Object(converted)
@@ -558,7 +517,7 @@ impl BlockchainSyncDaemon {
             }
         }
 
-        fn convert_value(value: serde_json::Value, hex_fields: &[&str], account_id_fields: &[&str]) -> serde_json::Value {
+        fn convert_value(value: serde_json::Value, account_id_fields: &[&str]) -> serde_json::Value {
             match value {
                 serde_json::Value::Object(map) => {
                     let converted: serde_json::Map<String, serde_json::Value> = map
@@ -573,20 +532,6 @@ impl BlockchainSyncDaemon {
                                         )
                                     }
                                     other => other
-                                }
-                            } else if hex_fields.contains(&new_key.as_str()) {
-                                match &v {
-                                    serde_json::Value::String(s) => {
-                                        match hex::decode(s) {
-                                            Ok(bytes) => {
-                                                serde_json::Value::Array(
-                                                    bytes.iter().map(|b| serde_json::Number::from(*b)).map(serde_json::Value::Number).collect()
-                                                )
-                                            }
-                                            Err(_) => v,
-                                        }
-                                    }
-                                    _ => v,
                                 }
                             } else if account_id_fields.contains(&new_key.as_str()) {
                                 match &v {
@@ -632,7 +577,7 @@ impl BlockchainSyncDaemon {
                                     _ => v
                                 }
                             } else {
-                                convert_value(v, hex_fields, account_id_fields)
+                                convert_value(v, account_id_fields)
                             };
                             (new_key, converted_v)
                         })
@@ -640,12 +585,12 @@ impl BlockchainSyncDaemon {
                     serde_json::Value::Object(converted)
                 }
                 serde_json::Value::Array(arr) => {
-                    serde_json::Value::Array(arr.into_iter().map(|v| convert_value(v, hex_fields, account_id_fields)).collect())
+                    serde_json::Value::Array(arr.into_iter().map(|v| convert_value(v, account_id_fields)).collect())
                 }
                 other => other,
             }
         }
 
-        convert_value(json, &hex_fields, &account_id_fields)
+        convert_value(json, &account_id_fields)
     }
 }

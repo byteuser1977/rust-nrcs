@@ -48,7 +48,7 @@ impl BlockchainProcessor {
         self.insert_block(block).await?;
 
         info!(target: "blockchain", "Accepted block: height={}, id={}, generator={}, txs={}",
-              block.height, block.compute_hash()?, block.generator_id, block.transactions.len());
+              block.height, block.compute_hash()?, block.get_generator_id(), block.transactions.len());
 
         Ok(block.height)
     }
@@ -121,7 +121,7 @@ impl BlockchainProcessor {
         .bind(generation_signature.as_slice())
         .bind(block_signature.as_slice())
         .bind(payload_hash.as_slice())
-        .bind(block.generator_id as i64)
+        .bind(block.get_generator_id() as i64)
         .execute(&self.pool)
         .await
         .map_err(|e| BlockchainError::Database(e.to_string()))?;

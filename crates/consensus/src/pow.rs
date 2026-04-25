@@ -116,7 +116,7 @@ impl ConsensusEngine for PoWEngine {
         buf.extend_from_slice(&block.height.to_be_bytes());
         buf.extend_from_slice(&block.previous_block_hash.0);
         buf.extend_from_slice(&block.payload_hash.0);
-        buf.extend_from_slice(&block.generator_id.to_be_bytes());
+        buf.extend_from_slice(&block.get_generator_id().to_be_bytes());
         buf.extend_from_slice(&block.nonce.to_be_bytes());
         buf.extend_from_slice(&block.base_target.to_be_bytes());
         buf.extend_from_slice(&(block.cumulative_difficulty.len() as u32).to_be_bytes());

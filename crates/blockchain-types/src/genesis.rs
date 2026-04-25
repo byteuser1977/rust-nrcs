@@ -109,7 +109,7 @@ pub fn create_genesis_block() -> Result<Block, Box<dyn std::error::Error>> {
         previous_block_id: None,
         previous_block_hash: Hash256([0u8; 32]),
         payload_hash: Hash256(payload_hash.into()),
-        generator_id: CREATOR_ID as u64,
+        generator_id: Some(CREATOR_ID as u64),
         generator_public_key: Some(CREATOR_PUBLIC_KEY),
         nonce: 0,
         base_target: 1_000_000,

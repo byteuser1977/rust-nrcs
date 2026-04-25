@@ -40,7 +40,7 @@ impl ProcessBlockHandler {
             }
         };
 
-        debug!("Received block: height={}, generator={}", block.height, block.generator_id);
+        debug!("Received block: height={}, generator={}", block.height, block.get_generator_id());
 
         // Verify and process the block using the injected verifier
         match self.verifier.verify_and_process(block).await {

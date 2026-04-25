@@ -16,7 +16,7 @@
 
 #![allow(warnings)]
 
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, Serializer, Deserializer};
 use std::ops::{Deref, DerefMut};
 
 pub mod constants;
@@ -90,9 +90,80 @@ pub enum BlockchainError {
 
 pub type Result<T> = std::result::Result<T, BlockchainError>;
 
+mod hex_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+    
+    pub fn serialize<const N: usize, S>(arr: &[u8; N], serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&hex::encode(arr))
+    }
+    
+    pub fn deserialize<'de, const N: usize, D>(deserializer: D) -> std::result::Result<[u8; N], D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct HexVisitor<const N: usize>;
+        
+        impl<'de, const N: usize> de::Visitor<'de> for HexVisitor<N> {
+            type Value = [u8; N];
+            
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str(&format!("a hex string of {} bytes or an array", N))
+            }
+            
+            fn visit_str<E>(self, value: &str) -> std::result::Result<[u8; N], E>
+            where
+                E: de::Error,
+            {
+                let bytes = hex::decode(value).map_err(|e| de::Error::custom(format!("invalid hex: {}", e)))?;
+                if bytes.len() != N {
+                    return Err(de::Error::custom(format!("expected {} bytes, got {}", N, bytes.len())));
+                }
+                let mut arr = [0u8; N];
+                arr.copy_from_slice(&bytes);
+                Ok(arr)
+            }
+            
+            fn visit_seq<A>(self, mut seq: A) -> std::result::Result<[u8; N], A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                let mut arr = [0u8; N];
+                for i in 0..N {
+                    arr[i] = seq.next_element()?
+                        .ok_or_else(|| de::Error::invalid_length(i, &self))?;
+                }
+                Ok(arr)
+            }
+        }
+        
+        deserializer.deserialize_any(HexVisitor::<N>)
+    }
+}
+
 /// 固定大小的 SHA-256 哈希（32 字节）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Hash256(#[serde(with = "serde_big_array::BigArray")] pub [u8; 32]);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Hash256(pub [u8; 32]);
+
+impl Serialize for Hash256 {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        hex_serde::serialize::<32, S>(&self.0, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Hash256 {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Hash256(hex_serde::deserialize::<32, D>(deserializer)?))
+    }
+}
 
 impl std::fmt::Display for Hash256 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -113,8 +184,26 @@ impl AsRef<[u8]> for Hash256 {
 }
 
 /// 固定大小的 SHA-512 哈希（64 字节）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Hash512(#[serde(with = "serde_big_array::BigArray")] pub [u8; 64]);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Hash512(pub [u8; 64]);
+
+impl Serialize for Hash512 {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        hex_serde::serialize::<64, S>(&self.0, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Hash512 {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Hash512(hex_serde::deserialize::<64, D>(deserializer)?))
+    }
+}
 
 impl std::fmt::Display for Hash512 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -135,8 +224,26 @@ impl AsRef<[u8]> for Hash512 {
 }
 
 /// 签名类型（Ed25519 和 SM2 均为 64 字节）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Signature(#[serde(with = "serde_big_array::BigArray")] pub [u8; 64]);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Signature(pub [u8; 64]);
+
+impl Serialize for Signature {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        hex_serde::serialize::<64, S>(&self.0, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Signature {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Signature(hex_serde::deserialize::<64, D>(deserializer)?))
+    }
+}
 
 impl std::hash::Hash for Signature {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {

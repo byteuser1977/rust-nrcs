@@ -20,7 +20,7 @@
 
 项目功能约束：
 - 项目基于 NRCS（Java）项目的重构项目，要求完全兼容 NRCS 项目的全部功能，包括：PEER 的区块通讯、API 接口、公式算法、加密算法、数据库结构、智能合约（这部分的开发放在第二步实现）
-- NRCS 源码地址：NRCS 的参考源码在：/Volumes/DATA/data/develop/git/nrcs,在开发及测试过程中遇到的代码问题，需要参考 NRCS 项目的代码，不要自己实现
+- NRCS 源码地址：NRCS 的参考源码在：/mnt/d/workspace/git/nrcs,在开发及测试过程中遇到的代码问题，需要参考 NRCS 项目的代码，不要自己实现
 - orm 的实现要完全基于 NRCS 项目的数据库 schema 实现（migrations 目录中的 schema 是 nrcs 全量脚本），不能有任何差异
 - 全量覆盖实现 orm 的数据库访问的方法
 - 系统代码实现要有效的模块化，避免单一源码文件内容过多

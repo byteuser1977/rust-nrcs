@@ -268,7 +268,7 @@ impl BlockValidator {
         buf.extend_from_slice(&block.height.to_be_bytes());
         buf.extend_from_slice(&block.previous_block_hash.0);
         buf.extend_from_slice(&block.payload_hash.0);
-        buf.extend_from_slice(&block.generator_id.to_be_bytes());
+        buf.extend_from_slice(&block.get_generator_id().to_be_bytes());
         buf.extend_from_slice(&block.nonce.to_be_bytes());
         buf.extend_from_slice(&block.base_target.to_be_bytes());
         buf.extend_from_slice(&(block.cumulative_difficulty.len() as u32).to_be_bytes());
@@ -348,7 +348,7 @@ mod tests {
             height,
             previous_block_hash: Hash256([0u8; 32]),
             payload_hash: Hash256([0u8; 32]),
-            generator_id: 0,
+            generator_id: Some(0),
             nonce: 0,
             base_target: INITIAL_BASE_TARGET,
             cumulative_difficulty: vec![],

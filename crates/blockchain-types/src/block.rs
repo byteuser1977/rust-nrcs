@@ -33,8 +33,9 @@ pub struct Block {
     #[serde(alias = "payloadHash")]
     pub payload_hash: Hash256,
     /// 出块者账户 ID（Generator ID）
-    #[serde(alias = "generatorId")]
-    pub generator_id: AccountId,
+    /// 从 generator_public_key 计算得出，JSON 中可能不存在此字段
+    #[serde(alias = "generatorId", default, skip_serializing_if = "Option::is_none")]
+    pub generator_id: Option<AccountId>,
     /// 出块者公钥（32字节）
     #[serde(alias = "generatorPublicKey", deserialize_with = "deserialize_public_key")]
     pub generator_public_key: Option<[u8; 32]>,
@@ -45,11 +46,11 @@ pub struct Block {
     /// 基础难度目标值（Base Target）
     /// 用于计算区块是否满足难度要求：`hash < base_target`
     /// 越小难度越大
-    #[serde(alias = "baseTarget")]
+    #[serde(alias = "baseTarget", default)]
     pub base_target: u64,
     /// 累计难度（从创世区块到当前区块总难度）
     /// 使用变长字节数组存储（BigInteger 格式），Rust 中使用 `num-bigint`
-    #[serde(alias = "cumulativeDifficulty")]
+    #[serde(alias = "cumulativeDifficulty", default)]
     pub cumulative_difficulty: Vec<u8>,
     /// 总金额（包含在区块中的所有交易金额总和）
     /// 单位：NQT（10^-8）
@@ -69,7 +70,28 @@ pub struct Block {
     #[serde(alias = "blockSignature")]
     pub block_signature: Hash512,
     /// 交易列表
+    #[serde(default)]
     pub transactions: Vec<Transaction>,
+}
+
+impl Block {
+    pub fn get_generator_id(&self) -> AccountId {
+        if let Some(id) = self.generator_id {
+            return id;
+        }
+        if let Some(pub_key) = &self.generator_public_key {
+            return account_id_from_public_key(pub_key);
+        }
+        0
+    }
+}
+
+pub fn account_id_from_public_key(public_key: &[u8; 32]) -> AccountId {
+    use sha2::{Sha256, Digest};
+    let hash = Sha256::digest(public_key);
+    let mut buf = [0u8; 8];
+    buf.copy_from_slice(&hash[..8]);
+    u64::from_le_bytes(buf)
 }
 
 fn deserialize_optional_block_id<'de, D>(deserializer: D) -> std::result::Result<Option<u64>, D::Error>
@@ -201,7 +223,7 @@ impl Block {
             previous_block_id: None,
             previous_block_hash,
             payload_hash: Hash256([0u8; 32]),
-            generator_id,
+            generator_id: Some(generator_id),
             generator_public_key: None,
             nonce: 0,
             base_target: 1_000_000,
@@ -314,7 +336,7 @@ impl Block {
         buf.extend_from_slice(&self.height.to_be_bytes());
         buf.extend_from_slice(&self.previous_block_hash.0);
         buf.extend_from_slice(&self.payload_hash.0);
-        buf.extend_from_slice(&self.generator_id.to_be_bytes());
+        buf.extend_from_slice(&self.get_generator_id().to_be_bytes());
         buf.extend_from_slice(&self.nonce.to_be_bytes());
         buf.extend_from_slice(&self.base_target.to_be_bytes());
         // cumulative_difficulty 变长，先写长度再写内容

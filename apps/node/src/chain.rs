@@ -138,7 +138,7 @@ impl ChainService {
 
     pub async fn process_block(&self, block: Block) -> anyhow::Result<()> {
         // Verify block signature
-        let pubkey_opt = self.account_manager.get_public_key(block.generator_id).await?;
+        let pubkey_opt = self.account_manager.get_public_key(block.get_generator_id()).await?;
         let pubkey = pubkey_opt.ok_or_else(|| anyhow::anyhow!("missing public key for generator"))?;
         block.verify_signature(&pubkey)?;
 
@@ -186,7 +186,7 @@ impl ChainService {
         }
 
         // Credit block reward
-        self.account_manager.credit(block.generator_id, self.block_reward).await?;
+        self.account_manager.credit(block.get_generator_id(), self.block_reward).await?;
 
         Ok(())
     }

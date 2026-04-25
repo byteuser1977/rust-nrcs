@@ -114,7 +114,7 @@ impl BlockVerifier for BlockchainVerifier {
         self.insert_block(&block).await?;
 
         info!("Accepted block: height={}, id={}, generator={}, txs={}",
-              block.height, block.calculate_id().unwrap_or(0), block.generator_id, block.transactions.len());
+              block.height, block.calculate_id().unwrap_or(0), block.get_generator_id(), block.transactions.len());
 
         Ok(())
     }

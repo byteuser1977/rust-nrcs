@@ -70,7 +70,7 @@ fn test_block_model_conversion() {
         height: 100,
         previous_block_hash: Hash256([0x11; 32]),
         payload_hash: Hash256([0x22; 32]),
-        generator_id: 12345,
+        generator_id: Some(12345),
         nonce: 0,
         base_target: 1_000_000,
         cumulative_difficulty: vec![1, 2, 3, 4],

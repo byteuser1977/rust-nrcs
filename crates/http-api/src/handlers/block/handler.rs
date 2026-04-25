@@ -51,7 +51,7 @@ pub async fn get_block(
     Ok(Json(serde_json::json!({
         "block": hex::encode(block_hash),
         "height": block.height,
-        "generator": block.generator_id.to_string(),
+        "generator": block.get_generator_id().to_string(),
         "timestamp": block.timestamp,
         "numberOfTransactions": block.transactions.len(),
         "totalAmountNQT": block.total_amount.to_string(),

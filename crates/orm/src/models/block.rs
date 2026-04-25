@@ -43,7 +43,7 @@ impl BlockModel {
             payload_hash: self.payload_hash.as_slice().try_into().map(Hash256).map_err(|_| {
                 BlockchainError::InvalidHash("payload_hash length mismatch".to_string())
             })?,
-            generator_id: self.generator_id as AccountId,
+            generator_id: Some(self.generator_id as AccountId),
             generator_public_key: None,
             nonce: 0,
             base_target: self.base_target as u64,
@@ -88,7 +88,7 @@ impl BlockModel {
             generation_signature: block.generation_signature.0.to_vec(),
             block_signature: block.block_signature.0.to_vec(),
             payload_hash: block.payload_hash.0.to_vec(),
-            generator_id: block.generator_id as i64,
+            generator_id: block.get_generator_id() as i64,
         })
     }
 }
