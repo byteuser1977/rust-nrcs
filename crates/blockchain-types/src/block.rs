@@ -36,7 +36,7 @@ pub struct Block {
     #[serde(alias = "generatorId")]
     pub generator_id: AccountId,
     /// 出块者公钥（32字节）
-    #[serde(skip)]
+    #[serde(alias = "generatorPublicKey", deserialize_with = "deserialize_public_key")]
     pub generator_public_key: Option<[u8; 32]>,
     /// 随机数（Nonce）
     /// - PoW 场景为挖矿随机数
@@ -134,6 +134,57 @@ where
     }
     
     deserializer.deserialize_any(OptionalBlockIdVisitor)
+}
+
+fn deserialize_public_key<'de, D>(deserializer: D) -> std::result::Result<Option<[u8; 32]>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    
+    struct PublicKeyVisitor;
+    
+    impl<'de> Visitor<'de> for PublicKeyVisitor {
+        type Value = Option<[u8; 32]>;
+        
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a hex string or null")
+        }
+        
+        fn visit_none<E>(self) -> std::result::Result<Option<[u8; 32]>, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+        
+        fn visit_unit<E>(self) -> std::result::Result<Option<[u8; 32]>, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+        
+        fn visit_str<E>(self, value: &str) -> std::result::Result<Option<[u8; 32]>, E>
+        where
+            E: de::Error,
+        {
+            if value.is_empty() {
+                return Ok(None);
+            }
+            
+            let bytes = hex::decode(value).map_err(|e| de::Error::custom(format!("invalid hex: {}", e)))?;
+            if bytes.len() != 32 {
+                return Err(de::Error::custom(format!("expected 32 bytes, got {}", bytes.len())));
+            }
+            
+            let mut array = [0u8; 32];
+            array.copy_from_slice(&bytes);
+            Ok(Some(array))
+        }
+    }
+    
+    deserializer.deserialize_any(PublicKeyVisitor)
 }
 
 impl Block {

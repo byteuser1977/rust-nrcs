@@ -504,9 +504,10 @@ impl BlockchainSyncDaemon {
             "block_signature",
             "previous_block_hash",
             "payload_hash",
+            "generator_public_key",
         ];
 
-        let account_id_fields = ["generator_id", "generator_public_key"];
+        let account_id_fields = ["generator_id"];
 
         fn convert_transaction(tx_json: serde_json::Value) -> serde_json::Value {
             match tx_json {
@@ -564,9 +565,6 @@ impl BlockchainSyncDaemon {
                         .into_iter()
                         .map(|(k, v)| {
                             let mut new_key = BlockchainSyncDaemon::camel_to_snake(&k);
-                            if new_key == "generator_public_key" {
-                                new_key = "generator_id".to_string();
-                            }
                             let converted_v = if new_key == "transactions" {
                                 match v {
                                     serde_json::Value::Array(txs) => {
