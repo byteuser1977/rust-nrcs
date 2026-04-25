@@ -11,7 +11,7 @@ pub const CHAIN: &str = "NRCS";
 
 // ============ 区块链核心常量 ============
 
-pub const BLOCK_VERSION: u32 = 3;
+pub const BLOCK_VERSION: i32 = 3;
 pub const TRANSACTION_VERSION: u8 = 1;
 
 pub const BLOCK_TIME: u32 = 60;
@@ -24,6 +24,8 @@ pub const ONE_NRCS: u64 = 100_000_000;
 pub const ONE_FXT: u64 = ONE_NRCS;
 pub const MAX_BALANCE_NQT: u64 = MAX_BALANCE_NRCS * ONE_NRCS;
 pub const MAX_BALANCE_FXT: u64 = MAX_BALANCE_NRCS;
+
+pub const GENESIS_BLOCK_ID: u64 = 3488276486778630462;
 
 // ============ PoS共识常量 ============
 

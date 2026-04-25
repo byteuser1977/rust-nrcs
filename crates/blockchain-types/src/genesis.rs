@@ -47,7 +47,7 @@ pub fn create_genesis(config: GenesisConfig) -> (Block, Vec<Account>) {
         version: 1,
         timestamp: config.timestamp as Timestamp,
         height,
-        previous_block_id: 0,
+        previous_block_id: None,
         previous_block_hash: previous_hash,
         payload_hash,
         generator_id: config.generator_account_id,

@@ -18,7 +18,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum ValidationError {
     #[error("invalid block version: {0}")]
-    InvalidVersion(u32),
+    InvalidVersion(i32),
     
     #[error("invalid block height: {0}")]
     InvalidHeight(u32),

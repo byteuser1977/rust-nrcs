@@ -13,6 +13,7 @@ use crate::protocol::{PeerRequest, RequestType};
 use crate::websocket::WebsocketClient;
 use crate::handlers::BlockVerifier;
 use blockchain_types::prelude::Block;
+use blockchain_types::constants::GENESIS_BLOCK_ID;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -130,7 +131,13 @@ impl BlockchainSyncDaemon {
         let peer_cumulative_difficulty = cumulative_difficulty.unwrap();
         info!("Peer cumulative difficulty: {}", peer_cumulative_difficulty);
 
-        let common_block_id = Self::get_common_milestone_block_id(peer_addr).await?;
+        let common_block_id = if block_verifier.has_block(GENESIS_BLOCK_ID).await.unwrap_or(false) {
+            Self::get_common_milestone_block_id(peer_addr).await?
+        } else {
+            info!("No local blocks, starting from genesis block");
+            GENESIS_BLOCK_ID
+        };
+        
         if common_block_id == 0 {
             debug!("Could not find common milestone block");
             return Ok(());
@@ -249,9 +256,15 @@ impl BlockchainSyncDaemon {
         request.set("blockId", &start_block_id.to_string());
         request.set("limit", &(limit as i32));
 
+        info!("Requesting block IDs after {} from peer", start_block_id);
+
         match WebsocketClient::send_request(peer_addr, request).await {
             Ok(response) => {
+                info!("Received response: {:?}", response);
+                
                 if let Some(next_block_ids) = response.get("nextBlockIds").and_then(|v| v.as_array()) {
+                    info!("Received {} block IDs from peer", next_block_ids.len());
+                    
                     if next_block_ids.is_empty() {
                         block_list.push(match_id);
                         return Ok(block_list);
@@ -263,16 +276,20 @@ impl BlockchainSyncDaemon {
                     }
 
                     let mut matching = true;
-                    for next_block_id in next_block_ids {
+                    for (index, next_block_id) in next_block_ids.iter().enumerate() {
                         if let Some(id_str) = next_block_id.as_str() {
                             if let Ok(block_id) = Self::parse_block_id(id_str) {
+                                info!("Block ID[{}]: {}", index, block_id);
+                                
                                 if matching {
                                     if Self::has_block(block_id, block_verifier).await? {
                                         match_id = block_id;
+                                        info!("Block {} already exists locally, continuing", block_id);
                                     } else {
                                         block_list.push(match_id);
                                         block_list.push(block_id);
                                         matching = false;
+                                        info!("Block {} not found locally, adding to download list", block_id);
                                     }
                                 } else {
                                     block_list.push(block_id);

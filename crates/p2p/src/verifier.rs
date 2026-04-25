@@ -86,15 +86,15 @@ impl BlockVerifier for BlockchainVerifier {
         self.validate_basic(&block)?;
 
         if block.height == 0 {
-            if block.previous_block_id == 0 {
-                block.height = 1;
-            } else {
-                match self.block_repo.find_by_id(block.previous_block_id as i64).await {
+            if block.previous_block_id.is_none() {
+                block.height = 0;
+            } else if let Some(prev_id) = block.previous_block_id {
+                match self.block_repo.find_by_id(prev_id as i64).await {
                     Ok(Some(prev_block)) => {
                         block.height = prev_block.height as u32 + 1;
                     }
                     _ => {
-                        debug!("Previous block {} not found, cannot determine height", block.previous_block_id);
+                        debug!("Previous block {} not found, cannot determine height", prev_id);
                         return Err(anyhow::anyhow!("Previous block not found"));
                     }
                 }
@@ -114,8 +114,8 @@ impl BlockVerifier for BlockchainVerifier {
 
         self.insert_block(&block).await?;
 
-        info!("Accepted block: height={}, generator={}, txs={}",
-              block.height, block.generator_id, block.transactions.len());
+        info!("Accepted block: height={}, id={}, generator={}, txs={}",
+              block.height, block.calculate_id().unwrap_or(0), block.generator_id, block.transactions.len());
 
         Ok(())
     }

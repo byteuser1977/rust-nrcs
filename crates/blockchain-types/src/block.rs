@@ -18,14 +18,14 @@ use ed25519_dalek::{Verifier, Signature as EdSignature};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Block {
     /// 区块版本
-    pub version: u32,
+    pub version: i32,
     /// 区块时间戳（Unix 秒）
     pub timestamp: Timestamp,
-    /// 区块高度（从 1 开始）
+    /// 区块高度（从 0 开始）
     pub height: Height,
-    /// 前序区块的ID（用于链式连接）
-    #[serde(alias = "previousBlock", alias = "previous_block")]
-    pub previous_block_id: u64,
+    /// 前序区块的ID（用于链式连接，创世区块为None）
+    #[serde(alias = "previousBlock", alias = "previous_block", deserialize_with = "deserialize_optional_block_id")]
+    pub previous_block_id: Option<u64>,
     /// 前序区块的哈希（SHA-256，32 字节）
     #[serde(alias = "previousBlockHash")]
     pub previous_block_hash: Hash256,
@@ -72,6 +72,70 @@ pub struct Block {
     pub transactions: Vec<Transaction>,
 }
 
+fn deserialize_optional_block_id<'de, D>(deserializer: D) -> std::result::Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    
+    struct OptionalBlockIdVisitor;
+    
+    impl<'de> Visitor<'de> for OptionalBlockIdVisitor {
+        type Value = Option<u64>;
+        
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a string, number, or null")
+        }
+        
+        fn visit_none<E>(self) -> std::result::Result<Option<u64>, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+        
+        fn visit_unit<E>(self) -> std::result::Result<Option<u64>, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+        
+        fn visit_str<E>(self, value: &str) -> std::result::Result<Option<u64>, E>
+        where
+            E: de::Error,
+        {
+            if value.is_empty() || value == "null" {
+                Ok(None)
+            } else {
+                value.parse::<u64>()
+                    .map(Some)
+                    .map_err(de::Error::custom)
+            }
+        }
+        
+        fn visit_u64<E>(self, value: u64) -> std::result::Result<Option<u64>, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(value))
+        }
+        
+        fn visit_i64<E>(self, value: i64) -> std::result::Result<Option<u64>, E>
+        where
+            E: de::Error,
+        {
+            if value < 0 {
+                Ok(None)
+            } else {
+                Ok(Some(value as u64))
+            }
+        }
+    }
+    
+    deserializer.deserialize_any(OptionalBlockIdVisitor)
+}
+
 impl Block {
     /// 创建新区块的便捷构造函数
     pub fn new(
@@ -80,16 +144,16 @@ impl Block {
         generator_id: AccountId,
     ) -> Self {
         Self {
-            version: BLOCK_VERSION,
-            timestamp: 0, // 需填充
+            version: BLOCK_VERSION as i32,
+            timestamp: 0,
             height,
-            previous_block_id: 0,
+            previous_block_id: None,
             previous_block_hash,
             payload_hash: Hash256([0u8; 32]),
             generator_id,
             generator_public_key: None,
             nonce: 0,
-            base_target: 1_000_000, // 默认值
+            base_target: 1_000_000,
             cumulative_difficulty: vec![],
             total_amount: 0,
             total_fee: 0,
@@ -125,7 +189,10 @@ impl Block {
         
         buf.extend_from_slice(&self.version.to_le_bytes());
         buf.extend_from_slice(&self.timestamp.to_le_bytes());
-        buf.extend_from_slice(&self.previous_block_id.to_le_bytes());
+        
+        let prev_block_id = self.previous_block_id.unwrap_or(0);
+        buf.extend_from_slice(&prev_block_id.to_le_bytes());
+        
         buf.extend_from_slice(&(self.transactions.len() as i32).to_le_bytes());
         
         if self.version < 3 {

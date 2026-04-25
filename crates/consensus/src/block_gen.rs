@@ -16,7 +16,7 @@ use crate::generation_signature::calculate_generation_signature;
 
 #[derive(Debug, Clone)]
 pub struct BlockTemplate {
-    pub version: u32,
+    pub version: i32,
     pub timestamp: u32,
     pub height: u32,
     pub previous_block_hash: Hash256,
@@ -141,7 +141,7 @@ impl BlockGenerator {
             version: template.version,
             timestamp: template.timestamp,
             height: template.height,
-            previous_block_id: 0,
+            previous_block_id: Some(0),
             previous_block_hash: template.previous_block_hash,
             payload_hash,
             generator_id: template.generator_id,

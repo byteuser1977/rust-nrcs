@@ -30,10 +30,10 @@ pub struct BlockModel {
 impl BlockModel {
     pub fn to_domain(&self) -> Result<Block> {
         let block = Block {
-            version: self.version as u32,
+            version: self.version,
             timestamp: self.timestamp as Timestamp,
             height: self.height as Height,
-            previous_block_id: self.previous_block_id.unwrap_or(0) as u64,
+            previous_block_id: self.previous_block_id.map(|id| id as u64),
             previous_block_hash: self
                 .previous_block_hash
                 .as_ref()
@@ -74,9 +74,9 @@ impl BlockModel {
         Ok(Self {
             db_id: 0,
             id: id as i64,
-            version: block.version as i32,
+            version: block.version,
             timestamp: block.timestamp as i32,
-            previous_block_id: Some(block.previous_block_id as i64),
+            previous_block_id: block.previous_block_id.map(|id| id as i64),
             total_amount: block.total_amount as i64,
             total_fee: block.total_fee as i64,
             payload_length: block.payload_length as i32,
