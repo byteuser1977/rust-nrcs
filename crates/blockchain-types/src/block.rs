@@ -547,7 +547,16 @@ impl Block {
             buf.extend_from_slice(&[0u8; 32]);
         }
         
-        buf.extend_from_slice(&self.generation_signature);
+        if self.version == 1 || self.version == -1 {
+            buf.extend_from_slice(&self.generation_signature);
+        } else {
+            if self.generation_signature.len() >= 32 {
+                buf.extend_from_slice(&self.generation_signature[..32]);
+            } else {
+                buf.extend_from_slice(&self.generation_signature);
+                buf.extend_from_slice(&vec![0u8; 32 - self.generation_signature.len()]);
+            }
+        }
         
         if self.version > 1 {
             buf.extend_from_slice(&self.previous_block_hash.0);

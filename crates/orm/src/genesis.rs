@@ -157,7 +157,6 @@ fn parse_genesis_time(s: &str) -> sqlx::Result<i64> {
 /// Create and insert the genesis block if none exists.
 /// Mirrors Java GenesisGenerator logic but without secret phrase requirement.
 pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
-    // Check if any block exists
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM block")
         .fetch_one(pool)
         .await?;
@@ -165,35 +164,28 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
         return Ok(());
     }
 
-    let (timestamp, accounts) = load_genesis_config()?;
-    let total_amount: i64 = accounts.iter().map(|(_, amt)| *amt).sum();
-    let height = 0i32; // 创世区块高度为 0
+    let (_unix_timestamp, accounts) = load_genesis_config()?;
+    
+    let one_nrcs_nqt: i64 = 100_000_000;
+    let total_amount: i64 = accounts.iter().map(|(_, amt)| *amt * one_nrcs_nqt).sum();
+    let height = 0i32;
     let block_id = GENESIS_BLOCK_ID as i64;
+    let timestamp = 0i32;
 
-    // Genesis block constants from Java NRCS
-    // generation_signature: 64 bytes of zeros
     let generation_signature: Vec<u8> = vec![0u8; 64];
     
-    // block_signature from Java NRCS genesis block
     let block_signature_hex = "47b1aa800d657ccad4aaa8c946b2b0d2a7337fd3ab8e8c9ed6a06a49b7756e04a3ff13b15f6471afdff30313e1c47c4c2ab0e209c78a0673a42c254b74cc0201";
     let block_signature = hex::decode(block_signature_hex)
         .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
     
-    // payload_hash from Java NRCS genesis block
     let payload_hash_hex = "8f58dc2f809613424e608586df83b42513056861a864dff3cd00d88baca681ce";
     let payload_hash = hex::decode(payload_hash_hex)
         .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
     
-    // generator_id from Java NRCS genesis block
-    // Note: This value exceeds i64::MAX, so we parse as u64 first
     let generator_id: i64 = 18365787021584764528u64 as i64;
     
-    // cumulative_difficulty: 0 as a single byte
     let cumulative_difficulty: Vec<u8> = vec![0u8; 1];
 
-    // Insert genesis block
-    // version = -1 表示创世区块
-    // base_target = INITIAL_BASE_TARGET (153722867)
     sqlx::query(
         r#"
         INSERT INTO block (
@@ -206,22 +198,22 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
         )
         "#
     )
-    .bind(block_id)                           // id
-    .bind(timestamp as i32)                   // timestamp
-    .bind(total_amount)                       // total_amount
-    .bind(256i32)                             // payload_length (2 transactions * 128 bytes each)
-    .bind(&cumulative_difficulty)             // cumulative_difficulty
-    .bind(INITIAL_BASE_TARGET as i64)         // base_target
-    .bind(height)                             // height
-    .bind(&generation_signature)              // generation_signature
-    .bind(&block_signature)                   // block_signature
-    .bind(&payload_hash)                      // payload_hash
-    .bind(generator_id)                       // generator_id
+    .bind(block_id)
+    .bind(timestamp)
+    .bind(total_amount)
+    .bind(256i32)
+    .bind(&cumulative_difficulty)
+    .bind(INITIAL_BASE_TARGET as i64)
+    .bind(height)
+    .bind(&generation_signature)
+    .bind(&block_signature)
+    .bind(&payload_hash)
+    .bind(generator_id)
     .execute(pool)
     .await?;
 
-    // Insert initial accounts
     for (account_id, balance) in accounts {
+        let balance_nqt = balance * one_nrcs_nqt;
         sqlx::query(
             r#"
             INSERT INTO account (
@@ -231,8 +223,8 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
             "#
         )
         .bind(account_id)
-        .bind(balance)
-        .bind(balance)
+        .bind(balance_nqt)
+        .bind(balance_nqt)
         .bind(height)
         .execute(pool)
         .await?;
@@ -246,11 +238,11 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
             "#
         )
         .bind(account_id)
-        .bind(balance)
-        .bind(balance)
+        .bind(balance_nqt)
+        .bind(balance_nqt)
         .bind(block_id)
         .bind(height)
-        .bind(timestamp as i32)
+        .bind(timestamp)
         .execute(pool)
         .await?;
     }
