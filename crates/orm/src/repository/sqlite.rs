@@ -277,7 +277,7 @@ impl SqliteTransactionRepository {
 impl TransactionRepository for SqliteTransactionRepository {
     async fn find_by_txid(&self, id: i64) -> RepositoryResult<Option<TransactionModel>> {
         let record = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE id = ?"
+            r#"SELECT * FROM "transaction" WHERE id = ?"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -288,7 +288,7 @@ impl TransactionRepository for SqliteTransactionRepository {
 
     async fn find_by_full_hash(&self, full_hash: &[u8]) -> RepositoryResult<Option<TransactionModel>> {
         let record = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE full_hash = ?"
+            r#"SELECT * FROM "transaction" WHERE full_hash = ?"#
         )
         .bind(full_hash)
         .fetch_optional(&self.pool)
@@ -299,7 +299,7 @@ impl TransactionRepository for SqliteTransactionRepository {
 
     async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
         let records = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE sender_id = ? ORDER BY timestamp DESC LIMIT ?"
+            r#"SELECT * FROM "transaction" WHERE sender_id = ? ORDER BY timestamp DESC LIMIT ?"#
         )
         .bind(sender_id)
         .bind(limit)
@@ -311,7 +311,7 @@ impl TransactionRepository for SqliteTransactionRepository {
 
     async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
         let records = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE recipient_id = ? ORDER BY timestamp DESC LIMIT ?"
+            r#"SELECT * FROM "transaction" WHERE recipient_id = ? ORDER BY timestamp DESC LIMIT ?"#
         )
         .bind(recipient_id)
         .bind(limit)
@@ -323,7 +323,7 @@ impl TransactionRepository for SqliteTransactionRepository {
 
     async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<TransactionModel>> {
         let records = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE block_id = ? ORDER BY transaction_index ASC"
+            r#"SELECT * FROM "transaction" WHERE block_id = ? ORDER BY transaction_index ASC"#
         )
         .bind(block_id)
         .fetch_all(&self.pool)
@@ -334,7 +334,7 @@ impl TransactionRepository for SqliteTransactionRepository {
 
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<TransactionModel>> {
         let records = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE height = ? ORDER BY transaction_index ASC"
+            r#"SELECT * FROM "transaction" WHERE height = ? ORDER BY transaction_index ASC"#
         )
         .bind(height)
         .fetch_all(&self.pool)
@@ -353,7 +353,7 @@ impl Repository<TransactionModel> for SqliteTransactionRepository {
     async fn insert(&self, tx: &TransactionModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO transaction (
+            INSERT INTO "transaction" (
                 id, deadline, recipient_id, amount, fee, full_hash,
                 height, block_id, signature, timestamp, type, subtype,
                 sender_id, block_timestamp, referenced_transaction_full_hash,
@@ -403,7 +403,7 @@ impl Repository<TransactionModel> for SqliteTransactionRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TransactionModel>> {
         let record = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE db_id = ?"
+            r#"SELECT * FROM "transaction" WHERE db_id = ?"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -425,7 +425,7 @@ impl Repository<TransactionModel> for SqliteTransactionRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM transaction")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM "transaction""#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;

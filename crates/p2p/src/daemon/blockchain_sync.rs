@@ -18,7 +18,7 @@ use blockchain_types::constants::GENESIS_BLOCK_ID;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use std::cmp::min;
 
 const SEGMENT_SIZE: usize = 36;
@@ -132,18 +132,21 @@ impl BlockchainSyncDaemon {
         let peer_cumulative_difficulty = cumulative_difficulty.unwrap();
         info!("Peer cumulative difficulty: {}", peer_cumulative_difficulty);
 
-        let common_block_id = if block_verifier.has_block(GENESIS_BLOCK_ID).await.unwrap_or(false) {
-            Self::get_common_milestone_block_id(peer_addr, block_verifier).await?
+        // Get the last local block ID to continue from there
+        let last_local_block_id = block_verifier.get_last_block_id().await
+            .ok()
+            .flatten()
+            .unwrap_or(0);
+        
+        let common_block_id = if last_local_block_id != 0 {
+            info!("Last local block ID: {}, continuing sync from there", last_local_block_id);
+            last_local_block_id
         } else {
             info!("No local blocks, starting from genesis block");
             GENESIS_BLOCK_ID
         };
-        
-        if common_block_id == 0 {
-            debug!("Could not find common milestone block, using genesis block");
-        }
 
-        info!("Common milestone block id: {}", common_block_id);
+        info!("Starting sync from block ID: {}", common_block_id);
 
         let common_block_height = block_verifier.get_block_height(common_block_id).await
             .ok()
@@ -367,20 +370,30 @@ impl BlockchainSyncDaemon {
         let mut download_futures = Vec::new();
         
         for &(start_idx, stop_idx) in &get_list {
-            let block_id = chain_block_ids.get(start_idx).copied().unwrap_or(0);
+            // chain_block_ids[0] 是公共区块 ID
+            // chain_block_ids[1..] 是需要下载的区块 ID 列表
+            // Java NRCS 期望:
+            // - blockId: 公共区块 ID (前一个区块)
+            // - blockIds: 需要下载的区块 ID 列表 (不包含公共区块)
+            let common_block_id = chain_block_ids.get(0).copied().unwrap_or(0);
+            
+            // 如果 start_idx == 0，blockId 应该是公共区块，blockIds 从 start_idx+1 开始
+            // 如果 start_idx > 0，blockId 是 start_idx-1 的区块，blockIds 从 start_idx 开始
+            let (prev_block_id, id_start_idx) = if start_idx == 0 {
+                (common_block_id, 1) // 跳过公共区块
+            } else {
+                (chain_block_ids.get(start_idx - 1).copied().unwrap_or(common_block_id), start_idx)
+            };
 
-            // blockIds 不能超过 36 个，所以最多请求 36 个区块
-            // start_idx 是公共区块，stop_idx 是最后一个需要下载的区块
-            // 我们需要下载 (stop_idx - start_idx) 个区块
-            // blockIds 应该包含从 start_idx 开始的区块 ID，最多 36 个
-            let id_list: Vec<serde_json::Value> = (start_idx..stop_idx)
+            // blockIds 应该包含从 id_start_idx 开始的区块 ID
+            let id_list: Vec<serde_json::Value> = (id_start_idx..stop_idx)
                 .filter_map(|i| chain_block_ids.get(i).copied())
                 .map(|id| serde_json::Value::String(id.to_string()))
                 .collect();
 
             let mut request = PeerRequest::new(RequestType::GetNextBlocks, 1);
             request.set("blockIds", &id_list);
-            request.set("blockId", &block_id.to_string());
+            request.set("blockId", &prev_block_id.to_string());
 
             let peer_addr_clone = peer_addr;
             download_futures.push(async move {
@@ -464,7 +477,7 @@ impl BlockchainSyncDaemon {
         for (block_idx, block_data) in all_blocks {
             let block_height = common_block_height + block_idx as u32 + 1;
             if let Err(e) = Self::process_downloaded_block(&block_data, block_height, block_verifier).await {
-                warn!("Failed to process downloaded block at height {}: {}", block_height, e);
+                error!("Failed to process downloaded block at height {}: {}", block_height, e);
             } else {
                 processed += 1;
             }
@@ -502,7 +515,7 @@ impl BlockchainSyncDaemon {
         let mut block: Block = match serde_json::from_value(block_json_no_tx) {
             Ok(b) => b,
             Err(e) => {
-                warn!("Failed to deserialize block at height {}: {}", block_height, e);
+                error!("Failed to deserialize block at height {}: {}", block_height, e);
                 debug!("Block JSON keys: {:?}", block_json.as_object().map(|m| m.keys().collect::<Vec<_>>()));
                 return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())) as Box<dyn std::error::Error + Send + Sync>);
             }

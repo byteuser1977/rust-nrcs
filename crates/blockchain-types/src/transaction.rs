@@ -426,6 +426,12 @@ impl Transaction {
             has_prunable_encrypted_message: false,
         };
 
+        if tx.full_hash.0 == [0u8; 32] {
+            if let Ok(calculated_hash) = tx.calculate_full_hash() {
+                tx.full_hash = calculated_hash;
+            }
+        }
+
         tx.id = tx.calculate_id();
 
         Ok(tx)

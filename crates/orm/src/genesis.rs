@@ -247,6 +247,74 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
         .await?;
     }
 
+    // Insert genesis transactions
+    // Genesis transactions from Java NRCS database
+    // Transaction 1: ID=-6309664432798542337, RECIPIENT=2794603741293765856, AMOUNT=99999999900000000, FEE=100000000
+    // Transaction 2: ID=2830446832482296829, RECIPIENT=-891382425467438890, AMOUNT=100000000, FEE=100000000
+    let genesis_tx_ids: Vec<i64> = vec![
+        -6309664432798542337i64,  // First transaction ID
+        2830446832482296829i64,   // Second transaction ID
+    ];
+    let genesis_recipients: Vec<i64> = vec![
+        2794603741293765856i64,    // First recipient
+        -891382425467438890i64,   // Second recipient
+    ];
+    let genesis_amounts: Vec<i64> = vec![
+        999999999i64 * one_nrcs_nqt, // 999999999 NRCS
+        1i64 * one_nrcs_nqt,        // 1 NRCS
+    ];
+    let genesis_fees: Vec<i64> = vec![
+        100000000i64,  // 1 NRCS fee
+        100000000i64,  // 1 NRCS fee
+    ];
+    let genesis_full_hashes: Vec<&str> = vec![
+        "ff5520dfa0916fa8d3dd275b4cde3b6175a8b7599bd9181baeb8d26d67a04b09",
+        "fda3bcd565c447276763a9de4a97e1da95949559e050ecfd72fa81a4fd62a9d8",
+    ];
+    let genesis_signatures: Vec<&str> = vec![
+        "182dd1a3abb456961ac0d7852a0892bfa57e306f727f00a7dce6c0ce7bd53d09f0a7be7bd5c25ff172e17133646f8afae51d",
+        "a8745bcf08a361a6baed9611df10bafd037051b26c9b8167bf1cbb3a357ddb072adfd1d43bf93bb9379446ed5aa7ecbb21ae",
+    ];
+
+    for idx in 0..genesis_tx_ids.len() {
+        let tx_id = genesis_tx_ids[idx];
+        let recipient_id = genesis_recipients[idx];
+        let amount = genesis_amounts[idx];
+        let fee = genesis_fees[idx];
+        let full_hash = hex::decode(genesis_full_hashes[idx])
+            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        let signature = hex::decode(genesis_signatures[idx])
+            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO "transaction" (
+                id, deadline, sender_id, recipient_id, amount, fee,
+                height, block_id, block_timestamp, transaction_index, timestamp,
+                full_hash, signature, type, subtype, version,
+                phased, has_message, has_encrypted_message,
+                has_public_key_announcement, ec_block_height, ec_block_id
+            ) VALUES (
+                ?, 1440, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            )
+            "#
+        )
+        .bind(tx_id)
+        .bind(generator_id)  // sender_id is the genesis block generator
+        .bind(recipient_id)
+        .bind(amount)
+        .bind(fee)
+        .bind(height)
+        .bind(block_id)
+        .bind(timestamp)
+        .bind(idx as i16)
+        .bind(timestamp)  // timestamp
+        .bind(&full_hash)
+        .bind(&signature)
+        .execute(pool)
+        .await?;
+    }
+
     Ok(())
 }
 
