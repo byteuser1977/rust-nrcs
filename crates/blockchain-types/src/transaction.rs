@@ -22,8 +22,9 @@ pub const SUBTYPE_PAYMENT_ORDINARY_PAYMENT: u8 = 0;
 pub const TRANSACTION_VERSION: u8 = 1;
 
 /// 交易类型枚举
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Default)]
 pub enum TransactionType {
+    #[default]
     Payment,
     Messaging,
     ColoredCoins,
@@ -38,6 +39,51 @@ pub enum TransactionType {
     CoinExchange,
     LightContract,
     Unknown,
+}
+
+impl<'de> Deserialize<'de> for TransactionType {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{self, Visitor};
+        
+        struct TransactionTypeVisitor;
+        
+        impl<'de> Visitor<'de> for TransactionTypeVisitor {
+            type Value = TransactionType;
+            
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a number or string representing transaction type")
+            }
+            
+            fn visit_u64<E>(self, value: u64) -> std::result::Result<TransactionType, E>
+            where
+                E: de::Error,
+            {
+                Ok(TransactionType::from_type(value as u8))
+            }
+            
+            fn visit_i64<E>(self, value: i64) -> std::result::Result<TransactionType, E>
+            where
+                E: de::Error,
+            {
+                Ok(TransactionType::from_type(value as u8))
+            }
+            
+            fn visit_str<E>(self, value: &str) -> std::result::Result<TransactionType, E>
+            where
+                E: de::Error,
+            {
+                match value.parse::<u8>() {
+                    Ok(type_byte) => Ok(TransactionType::from_type(type_byte)),
+                    Err(_) => Err(de::Error::invalid_value(de::Unexpected::Str(value), &self)),
+                }
+            }
+        }
+        
+        deserializer.deserialize_any(TransactionTypeVisitor)
+    }
 }
 
 impl TransactionType {
@@ -89,33 +135,60 @@ impl From<TransactionType> for u8 {
 /// 交易结构体
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Transaction {
+    #[serde(alias = "transaction", default)]
     pub id: u64,
+    #[serde(default)]
     pub version: u8,
+    #[serde(alias = "type", default)]
     pub type_id: TransactionType,
+    #[serde(default)]
     pub subtype: u8,
+    #[serde(default)]
     pub timestamp: Timestamp,
+    #[serde(default)]
     pub deadline: u16,
+    #[serde(alias = "senderPublicKey")]
     pub sender_public_key: Hash256,
+    #[serde(alias = "sender", default)]
     pub sender_id: AccountId,
+    #[serde(alias = "recipient", default, skip_serializing_if = "Option::is_none")]
     pub recipient_id: Option<AccountId>,
+    #[serde(alias = "amountNQT", deserialize_with = "deserialize_amount_string", default)]
     pub amount: Amount,
+    #[serde(alias = "feeNQT", deserialize_with = "deserialize_amount_string", default)]
     pub fee: Amount,
+    #[serde(default)]
     pub height: Height,
+    #[serde(alias = "block", default)]
     pub block_id: BlockId,
+    #[serde(alias = "blockTimestamp", default)]
     pub block_timestamp: Timestamp,
+    #[serde(alias = "transactionIndex", default)]
     pub transaction_index: u16,
     pub signature: Signature,
+    #[serde(alias = "fullHash", default)]
     pub full_hash: Hash256,
+    #[serde(alias = "referencedTransactionFullHash", default, skip_serializing_if = "Option::is_none")]
     pub referenced_transaction_full_hash: Option<Hash256>,
+    #[serde(default)]
     pub attachment_bytes: Vec<u8>,
+    #[serde(default)]
     pub phased: bool,
+    #[serde(default)]
     pub has_message: bool,
+    #[serde(default)]
     pub has_encrypted_message: bool,
+    #[serde(default)]
     pub has_public_key_announcement: bool,
+    #[serde(default)]
     pub has_prunable_attachment: bool,
+    #[serde(alias = "ecBlockHeight", default)]
     pub ec_block_height: Option<u32>,
+    #[serde(alias = "ecBlockId", default)]
     pub ec_block_id: Option<u64>,
+    #[serde(default)]
     pub has_encrypttoself_message: bool,
+    #[serde(default)]
     pub has_prunable_encrypted_message: bool,
 }
 
@@ -359,9 +432,7 @@ impl Transaction {
     }
 
     pub fn public_key_to_account_id(public_key: &[u8; 32]) -> AccountId {
-        let mut buf = [0u8; 8];
-        buf.copy_from_slice(&public_key[..8]);
-        u64::from_le_bytes(buf)
+        crate::block::account_id_from_public_key(public_key)
     }
 
     pub fn calculate_id(&self) -> u64 {
@@ -521,4 +592,48 @@ mod tests {
         assert_eq!(TransactionType::from_type(TYPE_MESSAGING), TransactionType::Messaging);
         assert_eq!(TransactionType::Payment.to_byte(), TYPE_PAYMENT);
     }
+}
+
+fn deserialize_amount_string<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    
+    struct AmountVisitor;
+    
+    impl<'de> Visitor<'de> for AmountVisitor {
+        type Value = u64;
+        
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a string or number")
+        }
+        
+        fn visit_str<E>(self, value: &str) -> std::result::Result<u64, E>
+        where
+            E: de::Error,
+        {
+            value.parse::<u64>().map_err(de::Error::custom)
+        }
+        
+        fn visit_u64<E>(self, value: u64) -> std::result::Result<u64, E>
+        where
+            E: de::Error,
+        {
+            Ok(value)
+        }
+        
+        fn visit_i64<E>(self, value: i64) -> std::result::Result<u64, E>
+        where
+            E: de::Error,
+        {
+            if value < 0 {
+                Ok(0)
+            } else {
+                Ok(value as u64)
+            }
+        }
+    }
+    
+    deserializer.deserialize_any(AmountVisitor)
 }

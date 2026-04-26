@@ -38,17 +38,15 @@ pub trait BlockVerifier: Send + Sync {
     async fn verify_and_process(&self, block: Block) -> Result<()>;
     async fn has_block(&self, block_id: u64) -> Result<bool>;
     
-    /// 获取本地最后一个区块的 ID
     async fn get_last_block_id(&self) -> Result<Option<u64>>;
     
-    /// 获取本地最后一个区块的累计难度
     async fn get_last_block_cumulative_difficulty(&self) -> Result<Vec<u8>>;
     
-    /// 检查区块是否可以连接到本地链（分叉检测）
     async fn can_connect_block(&self, previous_block_id: u64) -> Result<bool>;
     
-    /// 处理分叉区块（当区块无法连接到主链时）
     async fn process_fork_block(&self, block: Block) -> Result<()>;
+    
+    async fn get_block_height(&self, block_id: u64) -> Result<Option<u32>>;
 }
 
 pub struct Handler {

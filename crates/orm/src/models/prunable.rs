@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct PrunableMessageModel {
     pub db_id: i64,
     pub id: i64,

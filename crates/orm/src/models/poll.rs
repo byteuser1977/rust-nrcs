@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct PollModel {
     pub db_id: i64,
     pub id: i64,
@@ -25,6 +26,7 @@ pub struct PollModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct PollResultModel {
     pub db_id: i64,
     pub poll_id: i64,
@@ -34,6 +36,7 @@ pub struct PollResultModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct VoteModel {
     pub db_id: i64,
     pub id: i64,

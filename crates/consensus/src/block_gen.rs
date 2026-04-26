@@ -138,6 +138,7 @@ impl BlockGenerator {
         let payload_length = self.calculate_payload_length(&template.transactions);
         
         let mut block = Block {
+            id: None,
             version: template.version,
             timestamp: template.timestamp,
             height: template.height,

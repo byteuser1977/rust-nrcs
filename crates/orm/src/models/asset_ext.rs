@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AssetTransferModel {
     pub db_id: i64,
     pub id: i64,
@@ -16,6 +17,7 @@ pub struct AssetTransferModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AssetDeleteModel {
     pub db_id: i64,
     pub id: i64,
@@ -27,6 +29,7 @@ pub struct AssetDeleteModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AssetDividendModel {
     pub db_id: i64,
     pub id: i64,
@@ -40,6 +43,7 @@ pub struct AssetDividendModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AssetHistoryModel {
     pub db_id: i64,
     pub id: i64,
@@ -53,6 +57,7 @@ pub struct AssetHistoryModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AssetControlPhasingModel {
     pub db_id: i64,
     pub asset_id: i64,
@@ -74,6 +79,7 @@ pub struct AssetControlPhasingModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AssetPropertyModel {
     pub db_id: i64,
     pub id: i64,

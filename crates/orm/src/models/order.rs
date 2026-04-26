@@ -7,6 +7,7 @@ use blockchain_types::{AccountId, Amount, AssetId, Height, OrderId, Result};
 use blockchain_types::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AskOrderModel {
     pub db_id: i64,
     pub id: i64,
@@ -54,6 +55,7 @@ impl AskOrderModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct BidOrderModel {
     pub db_id: i64,
     pub id: i64,
@@ -101,6 +103,7 @@ impl BidOrderModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct TradeModel {
     pub db_id: i64,
     pub asset_id: i64,
@@ -119,6 +122,7 @@ pub struct TradeModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct CoinOrderFxtModel {
     pub db_id: i64,
     pub id: i64,
@@ -138,6 +142,7 @@ pub struct CoinOrderFxtModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct CoinTradeFxtModel {
     pub db_id: i64,
     pub chain_id: i32,

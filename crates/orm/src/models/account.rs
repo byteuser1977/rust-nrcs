@@ -7,6 +7,7 @@ use blockchain_types::{AccountId, Amount, Height, Result, Timestamp};
 use blockchain_types::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AccountModel {
     pub db_id: i64,
     pub id: i64,
@@ -58,6 +59,7 @@ impl AccountModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AccountAssetModel {
     pub db_id: i64,
     pub account_id: i64,

@@ -144,7 +144,7 @@ mod hex_serde {
 }
 
 /// 固定大小的 SHA-256 哈希（32 字节）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Hash256(pub [u8; 32]);
 
 impl Serialize for Hash256 {

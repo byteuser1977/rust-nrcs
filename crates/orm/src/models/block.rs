@@ -7,6 +7,7 @@ use blockchain_types::{AccountId, Amount, BlockchainError, Height, Result, Times
 use blockchain_types::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct BlockModel {
     pub db_id: i64,
     pub id: i64,
@@ -30,6 +31,7 @@ pub struct BlockModel {
 impl BlockModel {
     pub fn to_domain(&self) -> Result<Block> {
         let block = Block {
+            id: Some(self.id as u64),
             version: self.version,
             timestamp: self.timestamp as Timestamp,
             height: self.height as Height,
@@ -69,18 +71,28 @@ impl BlockModel {
     }
 
     pub fn from_domain(block: &Block) -> Result<Self> {
-        let id = block.calculate_id()?;
+        let id = block.get_id() as i64;
+        
+        let previous_block_id = block.previous_block_id
+            .filter(|&id| id != 0)
+            .map(|id| id as i64);
+        
+        let previous_block_hash = if block.previous_block_hash.0 == [0u8; 32] {
+            None
+        } else {
+            Some(block.previous_block_hash.0.to_vec())
+        };
         
         Ok(Self {
             db_id: 0,
-            id: id as i64,
+            id,
             version: block.version,
             timestamp: block.timestamp as i32,
-            previous_block_id: block.previous_block_id.map(|id| id as i64),
+            previous_block_id,
             total_amount: block.total_amount as i64,
             total_fee: block.total_fee as i64,
             payload_length: block.payload_length as i32,
-            previous_block_hash: Some(block.previous_block_hash.0.to_vec()),
+            previous_block_hash,
             cumulative_difficulty: block.cumulative_difficulty.clone(),
             base_target: block.base_target as i64,
             next_block_id: None,

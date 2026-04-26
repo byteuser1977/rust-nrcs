@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct TaggedDataModel {
     pub db_id: i64,
     pub id: i64,
@@ -24,6 +25,7 @@ pub struct TaggedDataModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct TaggedDataExtendModel {
     pub db_id: i64,
     pub id: i64,
@@ -33,6 +35,7 @@ pub struct TaggedDataExtendModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct TaggedDataTimestampModel {
     pub db_id: i64,
     pub id: i64,

@@ -13,6 +13,7 @@ use crate::protocol::{PeerRequest, RequestType};
 use crate::websocket::WebsocketClient;
 use crate::handlers::BlockVerifier;
 use blockchain_types::prelude::Block;
+use blockchain_types::prelude::Transaction;
 use blockchain_types::constants::GENESIS_BLOCK_ID;
 use std::sync::Arc;
 use std::time::Duration;
@@ -132,18 +133,22 @@ impl BlockchainSyncDaemon {
         info!("Peer cumulative difficulty: {}", peer_cumulative_difficulty);
 
         let common_block_id = if block_verifier.has_block(GENESIS_BLOCK_ID).await.unwrap_or(false) {
-            Self::get_common_milestone_block_id(peer_addr).await?
+            Self::get_common_milestone_block_id(peer_addr, block_verifier).await?
         } else {
             info!("No local blocks, starting from genesis block");
             GENESIS_BLOCK_ID
         };
         
         if common_block_id == 0 {
-            debug!("Could not find common milestone block");
-            return Ok(());
+            debug!("Could not find common milestone block, using genesis block");
         }
 
         info!("Common milestone block id: {}", common_block_id);
+
+        let common_block_height = block_verifier.get_block_height(common_block_id).await
+            .unwrap_or(0)
+            .unwrap_or(0);
+        info!("Common block height: {}", common_block_height);
 
         let chain_block_ids = Self::get_block_ids_after_common(peer_addr, common_block_id, block_verifier).await?;
         if chain_block_ids.len() < 2 {
@@ -158,7 +163,7 @@ impl BlockchainSyncDaemon {
             *is_downloading.write().await = true;
         }
 
-        Self::download_blocks(peer_addr, &chain_block_ids, block_verifier).await?;
+        Self::download_blocks(peer_addr, &chain_block_ids, common_block_height, block_verifier).await?;
 
         *is_downloading.write().await = false;
 
@@ -190,6 +195,7 @@ impl BlockchainSyncDaemon {
 
     async fn get_common_milestone_block_id(
         peer_addr: std::net::SocketAddr,
+        block_verifier: &Arc<dyn BlockVerifier>,
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         let mut last_milestone_block_id: Option<String> = None;
 
@@ -206,7 +212,7 @@ impl BlockchainSyncDaemon {
                 Ok(response) => {
                     if let Some(milestone_ids) = response.get("milestoneBlockIds").and_then(|v| v.as_array()) {
                         if milestone_ids.is_empty() {
-                            return Ok(1);
+                            return Ok(GENESIS_BLOCK_ID);
                         }
 
                         if milestone_ids.len() > 20 {
@@ -216,28 +222,29 @@ impl BlockchainSyncDaemon {
 
                         for milestone_id in milestone_ids {
                             if let Some(id_str) = milestone_id.as_str() {
-                                let block_id = Self::parse_block_id(id_str);
-                                if let Ok(block_id) = block_id {
-                                    last_milestone_block_id = Some(id_str.to_string());
-                                    if block_id == 1 {
+                                if let Ok(block_id) = Self::parse_block_id(id_str) {
+                                    info!("Checking milestone block ID: {}", block_id);
+                                    
+                                    if Self::has_block(block_id, block_verifier).await? {
+                                        info!("Found common milestone block: {}", block_id);
                                         return Ok(block_id);
                                     }
+                                    
+                                    last_milestone_block_id = Some(id_str.to_string());
                                 }
                             }
                         }
 
-                        if last_milestone_block_id.is_some() {
-                            let last_id_str = last_milestone_block_id.as_ref().unwrap();
-                            if let Ok(block_id) = Self::parse_block_id(last_id_str) {
-                                return Ok(block_id);
-                            }
+                        if last_milestone_block_id.is_none() {
+                            return Ok(GENESIS_BLOCK_ID);
                         }
+                    } else {
+                        return Ok(GENESIS_BLOCK_ID);
                     }
-                    return Ok(0);
                 }
                 Err(e) => {
                     debug!("Failed to get milestone block ids: {}", e);
-                    return Ok(0);
+                    return Ok(GENESIS_BLOCK_ID);
                 }
             }
         }
@@ -337,6 +344,7 @@ impl BlockchainSyncDaemon {
     async fn download_blocks(
         peer_addr: std::net::SocketAddr,
         chain_block_ids: &[u64],
+        common_block_height: u32,
         block_verifier: &Arc<dyn BlockVerifier>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if chain_block_ids.len() < 2 {
@@ -354,12 +362,17 @@ impl BlockchainSyncDaemon {
         }
 
         // 并发下载所有段（带重试机制）
+        // Java NRCS 限制 blockIds 数组长度不能超过 36
         let mut download_futures = Vec::new();
         
         for &(start_idx, stop_idx) in &get_list {
             let block_id = chain_block_ids.get(start_idx).copied().unwrap_or(0);
 
-            let id_list: Vec<serde_json::Value> = (start_idx..=stop_idx)
+            // blockIds 不能超过 36 个，所以最多请求 36 个区块
+            // start_idx 是公共区块，stop_idx 是最后一个需要下载的区块
+            // 我们需要下载 (stop_idx - start_idx) 个区块
+            // blockIds 应该包含从 start_idx 开始的区块 ID，最多 36 个
+            let id_list: Vec<serde_json::Value> = (start_idx..stop_idx)
                 .filter_map(|i| chain_block_ids.get(i).copied())
                 .map(|id| serde_json::Value::String(id.to_string()))
                 .collect();
@@ -375,14 +388,19 @@ impl BlockchainSyncDaemon {
                 for retry in 0..Self::MAX_RETRIES {
                     match WebsocketClient::send_request(peer_addr_clone, request.clone()).await {
                         Ok(response) => {
+                            // 调试：打印响应内容
+                            debug!("Response for segment {}: {:?}", start_idx, response);
+                            
                             // 验证响应
                             if let Some(next_blocks) = response.get("nextBlocks").and_then(|v| v.as_array()) {
+                                debug!("nextBlocks array length: {}", next_blocks.len());
                                 if !next_blocks.is_empty() {
                                     return (start_idx, stop_idx, Ok(response));
                                 }
                             }
                             // 空响应，重试
                             last_error = Some("Empty response".to_string());
+                            warn!("Empty nextBlocks in response for segment {}, keys: {:?}", start_idx, response.as_object().map(|m| m.keys().collect::<Vec<_>>()));
                             if retry < Self::MAX_RETRIES - 1 {
                                 tokio::time::sleep(tokio::time::Duration::from_millis(Self::RETRY_DELAY_MS)).await;
                             }
@@ -443,7 +461,7 @@ impl BlockchainSyncDaemon {
 
         // 处理所有下载的区块
         for (block_idx, block_data) in all_blocks {
-            let block_height = block_idx as u32 + 1;
+            let block_height = common_block_height + block_idx as u32 + 1;
             if let Err(e) = Self::process_downloaded_block(&block_data, block_height, block_verifier).await {
                 warn!("Failed to process downloaded block at height {}: {}", block_height, e);
             } else {
@@ -465,133 +483,72 @@ impl BlockchainSyncDaemon {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let block_json = match block_data.get("block") {
             Some(b) => b.clone(),
-            None => {
-                block_data.clone()
+            None => block_data.clone(),
+        };
+
+        info!("Raw block JSON at height {}: {}", block_height, serde_json::to_string(&block_json).unwrap_or_default());
+
+        let transactions_json = block_json.get("transactions")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        let mut block_json_no_tx = block_json.clone();
+        if let Some(obj) = block_json_no_tx.as_object_mut() {
+            obj.remove("transactions");
+        }
+
+        let mut block: Block = match serde_json::from_value(block_json_no_tx) {
+            Ok(b) => b,
+            Err(e) => {
+                warn!("Failed to deserialize block at height {}: {}", block_height, e);
+                debug!("Block JSON keys: {:?}", block_json.as_object().map(|m| m.keys().collect::<Vec<_>>()));
+                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())) as Box<dyn std::error::Error + Send + Sync>);
             }
         };
 
-        debug!("Raw block JSON: {}", serde_json::to_string(&block_json).unwrap_or_default());
+        info!("Deserialized block at height {}: version={}, timestamp={}, prev_block_id={:?}, total_amount={}, total_fee={}, payload_length={}, base_target={}, generator_id={:?}", 
+              block_height, block.version, block.timestamp, block.previous_block_id, 
+              block.total_amount, block.total_fee, block.payload_length, block.base_target, block.generator_id);
 
-        let mut normalized_json = Self::normalize_block_json(block_json);
+        block.height = block_height;
 
-        if let Some(obj) = normalized_json.as_object_mut() {
-            if !obj.contains_key("height") {
-                obj.insert("height".to_string(), serde_json::Value::Number(block_height.into()));
-            }
-            if !obj.contains_key("nonce") {
-                obj.insert("nonce".to_string(), serde_json::Value::Number(0.into()));
-            }
-            if !obj.contains_key("cumulative_difficulty") {
-                if let Some(cd_str) = obj.get("cumulative_difficulty").and_then(|v| v.as_str()) {
-                    if let Ok(cd) = cd_str.parse::<i64>() {
-                        obj.insert("cumulative_difficulty".to_string(), serde_json::Value::Number(cd.into()));
-                    }
-                } else {
-                    obj.insert("cumulative_difficulty".to_string(), serde_json::Value::Array(vec![]));
+        if block.generator_id.is_none() && block.generator_public_key.is_some() {
+            block.generator_id = Some(blockchain_types::block::account_id_from_public_key(
+                block.generator_public_key.as_ref().unwrap()
+            ));
+        }
+
+        if block.id.is_none() {
+            block.id = Some(block.calculate_id().unwrap_or(0));
+        }
+
+        let mut transactions = Vec::new();
+        for (tx_idx, tx_json) in transactions_json.iter().enumerate() {
+            match Transaction::from_json(tx_json) {
+                Ok(tx) => {
+                    info!("Transaction[{}] in block {}: id={}, type={:?}, sender={}, recipient={:?}, amount={}, fee={}", 
+                          tx_idx, block_height, tx.id, tx.type_id, tx.sender_id, tx.recipient_id, tx.amount, tx.fee);
+                    transactions.push(tx);
                 }
-            }
-            
-            if obj.contains_key("base_target") {
-                if let Some(bt_val) = obj.get("base_target").cloned() {
-                    match bt_val {
-                        serde_json::Value::String(s) => {
-                            if let Ok(bt) = s.parse::<i64>() {
-                                obj.insert("base_target".to_string(), serde_json::Value::Number(bt.into()));
-                                debug!("Parsed base_target from string: {} -> {}", s, bt);
-                            }
-                        }
-                        serde_json::Value::Number(n) => {
-                            debug!("base_target already a number: {:?}", n);
-                        }
-                        _ => {
-                            warn!("Unexpected base_target format: {:?}", bt_val);
-                        }
-                    }
-                }
-            }
-            
-            if !obj.contains_key("base_target") {
-                warn!("Missing base_target in block JSON, keys: {:?}", obj.keys().collect::<Vec<_>>());
-                obj.insert("base_target".to_string(), serde_json::Value::Number(153722867i64.into()));
-            }
-            
-            if !obj.contains_key("total_amount") && obj.contains_key("total_amount_n_q_t") {
-                let v = obj.get("total_amount_n_q_t").cloned().unwrap_or(serde_json::Value::Number(0.into()));
-                obj.insert("total_amount".to_string(), v);
-            }
-            if !obj.contains_key("total_fee") && obj.contains_key("total_fee_n_q_t") {
-                let v = obj.get("total_fee_n_q_t").cloned().unwrap_or(serde_json::Value::Number(0.into()));
-                obj.insert("total_fee".to_string(), v);
-            }
-            
-            if !obj.contains_key("id") {
-                if let Some(block_id) = obj.get("block").and_then(|v| v.as_str()) {
-                    if let Ok(id) = block_id.parse::<i64>() {
-                        obj.insert("id".to_string(), serde_json::Value::Number(id.into()));
-                    }
-                }
-            }
-            
-            if obj.contains_key("previous_block") {
-                if let Some(pb_val) = obj.get("previous_block").cloned() {
-                    match pb_val {
-                        serde_json::Value::String(s) => {
-                            if let Ok(pb) = s.parse::<i64>() {
-                                obj.insert("previous_block_id".to_string(), serde_json::Value::Number(pb.into()));
-                            }
-                        }
-                        serde_json::Value::Number(n) => {
-                            obj.insert("previous_block_id".to_string(), serde_json::Value::Number(n));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            
-            if obj.contains_key("generator") {
-                if let Some(gen_val) = obj.get("generator").cloned() {
-                    match gen_val {
-                        serde_json::Value::String(s) => {
-                            if let Ok(gen) = s.parse::<i64>() {
-                                obj.insert("generator_id".to_string(), serde_json::Value::Number(gen.into()));
-                            }
-                        }
-                        serde_json::Value::Number(n) => {
-                            obj.insert("generator_id".to_string(), serde_json::Value::Number(n));
-                        }
-                        _ => {}
-                    }
+                Err(e) => {
+                    warn!("Failed to deserialize transaction[{}] in block {}: {}", tx_idx, block_height, e);
+                    debug!("Transaction JSON: {:?}", tx_json);
                 }
             }
         }
+        block.transactions = transactions;
 
-        debug!("Normalized block JSON keys: {:?}", normalized_json.as_object().map(|m| {
-            m.iter().map(|(k, v)| {
-                let len = match v {
-                    serde_json::Value::Array(arr) => arr.len(),
-                    _ => 0
-                };
-                format!("{}:{}", k, len)
-            }).collect::<Vec<_>>()
-        }));
-
-        let block: Block = match serde_json::from_value(normalized_json) {
-            Ok(b) => b,
-            Err(e) => {
-                debug!("Failed to deserialize block: {}", e);
-                return Ok(());
-            }
-        };
-
-        debug!("Processing downloaded block: height={}", block.height);
+        info!("Processing downloaded block: height={}, id={}, version={}, timestamp={}, generator={}, base_target={}, txs={}", 
+               block.height, block.get_id(), block.version, block.timestamp, block.get_generator_id(), block.base_target, block.transactions.len());
 
         match block_verifier.verify_and_process(block).await {
             Ok(_) => {
-                info!("Block verified and processed successfully");
+                info!("Block verified and processed successfully at height {}", block_height);
                 Ok(())
             }
             Err(e) => {
-                warn!("Block verification/processing failed: {}", e);
+                warn!("Block verification/processing failed at height {}: {}", block_height, e);
                 Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error + Send + Sync>)
             }
         }
@@ -599,131 +556,5 @@ impl BlockchainSyncDaemon {
 
     fn parse_block_id(id_str: &str) -> Result<u64, std::num::ParseIntError> {
         id_str.parse::<u64>()
-    }
-
-    fn camel_to_snake(s: &str) -> String {
-        let mut result = String::new();
-        for (i, c) in s.chars().enumerate() {
-            if c.is_uppercase() && i > 0 {
-                result.push('_');
-            }
-            result.push(c.to_lowercase().next().unwrap_or(c));
-        }
-        result
-    }
-
-    fn convert_json_key(value: serde_json::Value) -> serde_json::Value {
-        match value {
-            serde_json::Value::Object(map) => {
-                let converted: serde_json::Map<String, serde_json::Value> = map
-                    .into_iter()
-                    .map(|(k, v)| {
-                        let new_key = Self::camel_to_snake(&k);
-                        (new_key, Self::convert_json_key(v))
-                    })
-                    .collect();
-                serde_json::Value::Object(converted)
-            }
-            serde_json::Value::Array(arr) => {
-                serde_json::Value::Array(arr.into_iter().map(Self::convert_json_key).collect())
-            }
-            other => other,
-        }
-    }
-
-    fn normalize_block_json(json: serde_json::Value) -> serde_json::Value {
-        let account_id_fields = ["generator_id"];
-
-        fn convert_transaction(tx_json: serde_json::Value) -> serde_json::Value {
-            match tx_json {
-                serde_json::Value::Object(mut map) => {
-                    let converted: serde_json::Map<String, serde_json::Value> = map
-                        .into_iter()
-                        .map(|(k, v)| {
-                            let new_key = BlockchainSyncDaemon::camel_to_snake(&k);
-                            (new_key, v)
-                        })
-                        .collect();
-                    serde_json::Value::Object(converted)
-                }
-                other => other
-            }
-        }
-
-        fn convert_value(value: serde_json::Value, account_id_fields: &[&str]) -> serde_json::Value {
-            match value {
-                serde_json::Value::Object(map) => {
-                    let converted: serde_json::Map<String, serde_json::Value> = map
-                        .into_iter()
-                        .map(|(k, v)| {
-                            let mut new_key = BlockchainSyncDaemon::camel_to_snake(&k);
-                            let converted_v = if new_key == "transactions" {
-                                match v {
-                                    serde_json::Value::Array(txs) => {
-                                        serde_json::Value::Array(
-                                            txs.into_iter().map(convert_transaction).collect()
-                                        )
-                                    }
-                                    other => other
-                                }
-                            } else if account_id_fields.contains(&new_key.as_str()) {
-                                match &v {
-                                    serde_json::Value::String(s) => {
-                                        debug!("Converting account_id field: {} = {}", new_key, s);
-                                        match hex::decode(s) {
-                                            Ok(bytes) if bytes.len() == 32 => {
-                                                let mut buf = [0u8; 8];
-                                                buf.copy_from_slice(&bytes[..8]);
-                                                let account_id = u64::from_le_bytes(buf);
-                                                debug!("Converted {} to account_id: {}", new_key, account_id);
-                                                serde_json::Value::Number(serde_json::Number::from(account_id))
-                                            }
-                                            Ok(bytes) => {
-                                                debug!("Invalid length for {}: {}", new_key, bytes.len());
-                                                v
-                                            }
-                                            Err(e) => {
-                                                debug!("Hex decode error for {}: {}", new_key, e);
-                                                v
-                                            }
-                                        }
-                                    }
-                                    _ => {
-                                        debug!("Non-string value for {}: {:?}", new_key, v);
-                                        v
-                                    }
-                                }
-                            } else if new_key == "previous_block" {
-                                match &v {
-                                    serde_json::Value::String(s) => {
-                                        match s.parse::<u64>() {
-                                            Ok(num) => {
-                                                debug!("Converted {} to u64: {}", new_key, num);
-                                                serde_json::Value::Number(serde_json::Number::from(num))
-                                            }
-                                            Err(e) => {
-                                                debug!("Failed to parse {} as u64: {}", new_key, e);
-                                                v
-                                            }
-                                        }
-                                    }
-                                    _ => v
-                                }
-                            } else {
-                                convert_value(v, account_id_fields)
-                            };
-                            (new_key, converted_v)
-                        })
-                        .collect();
-                    serde_json::Value::Object(converted)
-                }
-                serde_json::Value::Array(arr) => {
-                    serde_json::Value::Array(arr.into_iter().map(|v| convert_value(v, account_id_fields)).collect())
-                }
-                other => other,
-            }
-        }
-
-        convert_value(json, &account_id_fields)
     }
 }

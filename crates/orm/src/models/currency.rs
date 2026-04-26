@@ -7,6 +7,7 @@ use blockchain_types::{AccountId, Amount, CurrencyId, Height, Result, Timestamp,
 use blockchain_types::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct CurrencyModel {
     pub db_id: i64,
     pub id: i64,
@@ -84,6 +85,7 @@ impl CurrencyModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AccountCurrencyModel {
     pub db_id: i64,
     pub account_id: i64,
@@ -119,6 +121,7 @@ impl AccountCurrencyModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct CurrencyFounderModel {
     pub db_id: i64,
     pub currency_id: i64,
@@ -151,6 +154,7 @@ impl CurrencyFounderModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct CurrencyMintModel {
     pub db_id: i64,
     pub currency_id: i64,
@@ -161,6 +165,7 @@ pub struct CurrencyMintModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct CurrencySupplyModel {
     pub db_id: i64,
     pub id: i64,
@@ -171,6 +176,7 @@ pub struct CurrencySupplyModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct CurrencyTransferModel {
     pub db_id: i64,
     pub id: i64,
@@ -210,6 +216,7 @@ impl CurrencyTransferModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct BuyOfferModel {
     pub db_id: i64,
     pub id: i64,
@@ -227,6 +234,7 @@ pub struct BuyOfferModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct SellOfferModel {
     pub db_id: i64,
     pub id: i64,
@@ -244,6 +252,7 @@ pub struct SellOfferModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct ExchangeModel {
     pub db_id: i64,
     pub transaction_id: i64,
@@ -259,6 +268,7 @@ pub struct ExchangeModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct ExchangeRequestModel {
     pub db_id: i64,
     pub id: i64,

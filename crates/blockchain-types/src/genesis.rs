@@ -103,6 +103,7 @@ pub fn create_genesis_block() -> Result<Block, Box<dyn std::error::Error>> {
     let payload_hash = hasher.finalize();
     
     let block = Block {
+        id: Some(GENESIS_BLOCK_ID),
         version: -1,
         timestamp: 0,
         height: 0,

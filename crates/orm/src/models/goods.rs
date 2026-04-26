@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct GoodsModel {
     pub db_id: i64,
     pub id: i64,
@@ -22,6 +23,7 @@ pub struct GoodsModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct PurchaseModel {
     pub db_id: i64,
     pub id: i64,
@@ -49,6 +51,7 @@ pub struct PurchaseModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct PurchaseFeedbackModel {
     pub db_id: i64,
     pub id: i64,
@@ -59,6 +62,7 @@ pub struct PurchaseFeedbackModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct PurchasePublicFeedbackModel {
     pub db_id: i64,
     pub id: i64,
@@ -68,6 +72,7 @@ pub struct PurchasePublicFeedbackModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct TagModel {
     pub db_id: i64,
     pub tag: String,
@@ -78,6 +83,7 @@ pub struct TagModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct DataTagModel {
     pub db_id: i64,
     pub tag: String,

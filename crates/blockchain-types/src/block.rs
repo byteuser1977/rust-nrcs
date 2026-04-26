@@ -17,59 +17,38 @@ use ed25519_dalek::{Verifier, Signature as EdSignature};
 /// 参考 Java: `BaseBlock`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Block {
-    /// 区块版本
+    #[serde(alias = "block", default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<u64>,
     pub version: i32,
-    /// 区块时间戳（Unix 秒）
     pub timestamp: Timestamp,
-    /// 区块高度（从 0 开始）
+    #[serde(default)]
     pub height: Height,
-    /// 前序区块的ID（用于链式连接，创世区块为None）
     #[serde(alias = "previousBlock", alias = "previous_block", deserialize_with = "deserialize_optional_block_id")]
     pub previous_block_id: Option<u64>,
-    /// 前序区块的哈希（SHA-256，32 字节）
-    #[serde(alias = "previousBlockHash")]
+    #[serde(alias = "previousBlockHash", default)]
     pub previous_block_hash: Hash256,
-    /// 交易 Payload 的哈希（Merkle Root）
     #[serde(alias = "payloadHash")]
     pub payload_hash: Hash256,
-    /// 出块者账户 ID（Generator ID）
-    /// 从 generator_public_key 计算得出，JSON 中可能不存在此字段
-    #[serde(alias = "generatorId", default, skip_serializing_if = "Option::is_none")]
+    #[serde(alias = "generatorId", alias = "generator", default, skip_serializing_if = "Option::is_none")]
     pub generator_id: Option<AccountId>,
-    /// 出块者公钥（32字节）
     #[serde(alias = "generatorPublicKey", deserialize_with = "deserialize_public_key")]
     pub generator_public_key: Option<[u8; 32]>,
-    /// 随机数（Nonce）
-    /// - PoW 场景为挖矿随机数
-    /// - PoS 场景为 0
+    #[serde(default)]
     pub nonce: u64,
-    /// 基础难度目标值（Base Target）
-    /// 用于计算区块是否满足难度要求：`hash < base_target`
-    /// 越小难度越大
     #[serde(alias = "baseTarget", default)]
     pub base_target: u64,
-    /// 累计难度（从创世区块到当前区块总难度）
-    /// 使用变长字节数组存储（BigInteger 格式），Rust 中使用 `num-bigint`
-    #[serde(alias = "cumulativeDifficulty", default)]
+    #[serde(alias = "cumulativeDifficulty", default, deserialize_with = "deserialize_cumulative_difficulty")]
     pub cumulative_difficulty: Vec<u8>,
-    /// 总金额（包含在区块中的所有交易金额总和）
-    /// 单位：NQT（10^-8）
-    #[serde(alias = "totalAmountNQT")]
+    #[serde(alias = "totalAmountNQT", deserialize_with = "deserialize_amount_string")]
     pub total_amount: Amount,
-    /// 总手续费
-    #[serde(alias = "totalFeeNQT")]
+    #[serde(alias = "totalFeeNQT", deserialize_with = "deserialize_amount_string")]
     pub total_fee: Amount,
-    /// Payload 长度（交易列表的字节数）
     #[serde(alias = "payloadLength")]
     pub payload_length: u32,
-    /// 生成签名
-    /// PoS 中出块者使用私钥生成，用于下一个出块者选择
     #[serde(alias = "generationSignature")]
     pub generation_signature: Hash256,
-    /// 区块签名（出块者对区块头签名）
     #[serde(alias = "blockSignature")]
     pub block_signature: Hash512,
-    /// 交易列表
     #[serde(default)]
     pub transactions: Vec<Transaction>,
 }
@@ -84,6 +63,14 @@ impl Block {
         }
         0
     }
+    
+    pub fn get_id(&self) -> u64 {
+        if let Some(id) = self.id {
+            return id;
+        }
+        // 如果没有设置 ID，尝试计算
+        self.calculate_id().unwrap_or(0)
+    }
 }
 
 pub fn account_id_from_public_key(public_key: &[u8; 32]) -> AccountId {
@@ -92,6 +79,109 @@ pub fn account_id_from_public_key(public_key: &[u8; 32]) -> AccountId {
     let mut buf = [0u8; 8];
     buf.copy_from_slice(&hash[..8]);
     u64::from_le_bytes(buf)
+}
+
+pub const INITIAL_BASE_TARGET: u64 = 153722867;
+pub const GENESIS_BLOCK_ID: u64 = 3488276486778630462;
+pub const BLOCK_TIME: u64 = 60;
+pub const MIN_BLOCKTIME_LIMIT: u64 = 53;
+pub const MAX_BLOCKTIME_LIMIT: u64 = 67;
+pub const BASE_TARGET_GAMMA: u64 = 64;
+pub const MAX_BASE_TARGET_2: u64 = 7686143350;
+pub const MIN_BASE_TARGET: u64 = 138350580;
+pub const MAX_BASE_TARGET: u64 = 153722867000000000;
+
+pub struct PreviousBlockData {
+    pub base_target: u64,
+    pub cumulative_difficulty: Vec<u8>,
+    pub timestamp: u32,
+    pub height: i32,
+    pub id: u64,
+}
+
+pub fn calculate_base_target_and_cumulative_difficulty(
+    current_timestamp: u32,
+    current_height: i32,
+    previous_block: &PreviousBlockData,
+    block_at_height_minus_2: Option<&PreviousBlockData>,
+) -> (u64, Vec<u8>) {
+    let base_target = if previous_block.height < -1 || previous_block.id == GENESIS_BLOCK_ID {
+        let prev_base_target = previous_block.base_target;
+        let time_diff = if current_timestamp > previous_block.timestamp {
+            (current_timestamp - previous_block.timestamp) as u64
+        } else {
+            1
+        };
+        
+        let mut bt = prev_base_target * time_diff / BLOCK_TIME;
+        
+        if bt > MAX_BASE_TARGET {
+            bt = MAX_BASE_TARGET;
+        }
+        if bt < prev_base_target / 2 {
+            bt = prev_base_target / 2;
+        }
+        if bt == 0 {
+            bt = 1;
+        }
+        let twofold = if prev_base_target > i64::MAX as u64 / 2 {
+            MAX_BASE_TARGET
+        } else {
+            prev_base_target * 2
+        };
+        if bt > twofold {
+            bt = twofold;
+        }
+        bt
+    } else if previous_block.height % 2 == 0 {
+        let prev_base_target = previous_block.base_target;
+        
+        if let Some(block_hm2) = block_at_height_minus_2 {
+            let blocktime_average = if current_timestamp > block_hm2.timestamp {
+                (current_timestamp - block_hm2.timestamp) as u64 / 3
+            } else {
+                BLOCK_TIME
+            };
+            
+            let bt = if blocktime_average > BLOCK_TIME {
+                let capped = std::cmp::min(blocktime_average, MAX_BLOCKTIME_LIMIT);
+                prev_base_target * capped / BLOCK_TIME
+            } else {
+                let capped = std::cmp::max(blocktime_average, MIN_BLOCKTIME_LIMIT);
+                prev_base_target - prev_base_target * BASE_TARGET_GAMMA
+                    * (BLOCK_TIME - capped) / 6000
+            };
+            
+            let bt = if bt > MAX_BASE_TARGET_2 {
+                MAX_BASE_TARGET_2
+            } else {
+                bt
+            };
+            let bt = std::cmp::max(bt, MIN_BASE_TARGET);
+            bt
+        } else {
+            prev_base_target
+        }
+    } else {
+        previous_block.base_target
+    };
+    
+    let prev_cum_diff = if previous_block.cumulative_difficulty.is_empty() {
+        num_bigint::BigUint::from(0u64)
+    } else {
+        num_bigint::BigUint::from_bytes_be(&previous_block.cumulative_difficulty)
+    };
+    let two64 = num_bigint::BigUint::from(u128::MAX) + 1u128;
+    let base_target_big = num_bigint::BigUint::from(base_target);
+    let diff_add = two64 / base_target_big;
+    let new_cum_diff = prev_cum_diff + diff_add;
+    let cumulative_difficulty = if new_cum_diff == num_bigint::BigUint::from(0u64) {
+        vec![0u8]
+    } else {
+        new_cum_diff.to_bytes_be()
+    };
+    
+    (base_target, cumulative_difficulty)
 }
 
 fn deserialize_optional_block_id<'de, D>(deserializer: D) -> std::result::Result<Option<u64>, D::Error>
@@ -209,6 +299,114 @@ where
     deserializer.deserialize_any(PublicKeyVisitor)
 }
 
+fn deserialize_cumulative_difficulty<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    
+    struct CumulativeDifficultyVisitor;
+    
+    impl<'de> Visitor<'de> for CumulativeDifficultyVisitor {
+        type Value = Vec<u8>;
+        
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a string number or array")
+        }
+        
+        fn visit_str<E>(self, value: &str) -> std::result::Result<Vec<u8>, E>
+        where
+            E: de::Error,
+        {
+            if value.is_empty() {
+                return Ok(vec![]);
+            }
+            match num_bigint::BigUint::parse_bytes(value.as_bytes(), 10) {
+                Some(biguint) => {
+                    let bytes = biguint.to_bytes_be();
+                    if bytes.is_empty() {
+                        Ok(vec![0u8])
+                    } else {
+                        Ok(bytes)
+                    }
+                }
+                None => Ok(vec![])
+            }
+        }
+        
+        fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Vec<u8>, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            let mut bytes = Vec::new();
+            while let Some(byte) = seq.next_element::<u8>()? {
+                bytes.push(byte);
+            }
+            Ok(bytes)
+        }
+        
+        fn visit_none<E>(self) -> std::result::Result<Vec<u8>, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![])
+        }
+        
+        fn visit_unit<E>(self) -> std::result::Result<Vec<u8>, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![])
+        }
+    }
+    
+    deserializer.deserialize_any(CumulativeDifficultyVisitor)
+}
+
+fn deserialize_amount_string<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    
+    struct AmountVisitor;
+    
+    impl<'de> Visitor<'de> for AmountVisitor {
+        type Value = u64;
+        
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a string or number")
+        }
+        
+        fn visit_str<E>(self, value: &str) -> std::result::Result<u64, E>
+        where
+            E: de::Error,
+        {
+            value.parse::<u64>().map_err(de::Error::custom)
+        }
+        
+        fn visit_u64<E>(self, value: u64) -> std::result::Result<u64, E>
+        where
+            E: de::Error,
+        {
+            Ok(value)
+        }
+        
+        fn visit_i64<E>(self, value: i64) -> std::result::Result<u64, E>
+        where
+            E: de::Error,
+        {
+            if value < 0 {
+                Ok(0)
+            } else {
+                Ok(value as u64)
+            }
+        }
+    }
+    
+    deserializer.deserialize_any(AmountVisitor)
+}
+
 impl Block {
     /// 创建新区块的便捷构造函数
     pub fn new(
@@ -217,6 +415,7 @@ impl Block {
         generator_id: AccountId,
     ) -> Self {
         Self {
+            id: None,
             version: BLOCK_VERSION as i32,
             timestamp: 0,
             height,

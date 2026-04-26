@@ -7,6 +7,7 @@ use blockchain_types::{AccountId, Height, Result};
 use blockchain_types::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AccountInfoModel {
     pub db_id: i64,
     pub account_id: i64,
@@ -39,6 +40,7 @@ impl AccountInfoModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AccountLeaseModel {
     pub db_id: i64,
     pub lessor_id: i64,
@@ -53,6 +55,7 @@ pub struct AccountLeaseModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct PublicKeyModel {
     pub db_id: i64,
     pub account_id: i64,
@@ -68,8 +71,7 @@ impl PublicKeyModel {
             public_key: self
                 .public_key
                 .clone()
-                .map(|pk| pk.as_slice().try_into().ok())
-                .flatten()
+                .and_then(|pk| pk.as_slice().try_into().ok())
                 .unwrap_or([0u8; 32]),
             height: self.height as Height,
         })
@@ -87,6 +89,7 @@ impl PublicKeyModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AccountControlPhasingModel {
     pub db_id: i64,
     pub account_id: i64,
@@ -104,6 +107,7 @@ pub struct AccountControlPhasingModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AccountGuaranteedBalanceModel {
     pub db_id: i64,
     pub account_id: i64,
@@ -112,6 +116,7 @@ pub struct AccountGuaranteedBalanceModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AccountLedgerModel {
     pub db_id: i64,
     pub account_id: i64,
@@ -127,6 +132,7 @@ pub struct AccountLedgerModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct AccountPropertyModel {
     pub db_id: i64,
     pub id: i64,
@@ -165,6 +171,7 @@ impl AccountPropertyModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct BalanceModel {
     pub db_id: i64,
     pub account_id: i64,
