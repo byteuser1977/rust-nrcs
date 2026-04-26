@@ -769,4 +769,175 @@ mod tests {
         let root = Block::compute_merkle_root(&[tx1, tx2]).unwrap();
         assert_ne!(*root, [0u8; 32]); // non-zero
     }
+
+    fn create_genesis_block_for_test() -> Block {
+        Block {
+            id: None,
+            version: -1,
+            timestamp: 0,
+            height: 0,
+            previous_block_id: None,
+            previous_block_hash: Hash256([0u8; 32]),
+            payload_hash: Hash256(hex::decode("8f58dc2f809613424e608586df83b42513056861a864dff3cd00d88baca681ce").unwrap().try_into().unwrap()),
+            generator_id: Some(18365787021584764528),
+            generator_public_key: Some(hex::decode("b7f2232ddae77544690e1497f1b58e274039c3b0f99d9b6078f2520926230b26").unwrap().try_into().unwrap()),
+            nonce: 0,
+            base_target: INITIAL_BASE_TARGET,
+            cumulative_difficulty: vec![0u8],
+            total_amount: 100000000000000000,
+            total_fee: 0,
+            payload_length: 256,
+            generation_signature: vec![0u8; 64],
+            block_signature: Hash512(hex::decode("47b1aa800d657ccad4aaa8c946b2b0d2a7337fd3ab8e8c9ed6a06a49b7756e04a3ff13b15f6471afdff30313e1c47c4c2ab0e209c78a0673a42c254b74cc0201").unwrap().try_into().unwrap()),
+            transactions: vec![
+                Transaction::default(),
+                Transaction::default(),
+            ],
+        }
+    }
+
+    #[test]
+    fn test_genesis_block_id() {
+        let block = create_genesis_block_for_test();
+        let serialized = block.serialize_for_id();
+        
+        println!("Genesis block serialized length: {}", serialized.len());
+        println!("Genesis block serialized (first 40 bytes): {:02x?}", &serialized[..40.min(serialized.len())]);
+        
+        // For version=-1:
+        // version (4) + timestamp (4) + previousBlockId (8) + txCount (4) + 
+        // amount (4, v<3) + fee (4, v<3) + payloadLength (4) + payloadHash (32) + 
+        // generatorPublicKey (32) + generationSignature (64, v=-1) + blockSignature (64)
+        // = 4+4+8+4+4+4+4+32+32+64+64 = 224 bytes
+        // Note: v=-1 is NOT > 1, so no previousBlockHash
+        
+        let block_id = block.get_id();
+        let expected_id: u64 = 3488276486778630462;
+        
+        println!("Calculated genesis block ID: {}", block_id);
+        println!("Expected genesis block ID: {}", expected_id);
+        
+        assert_eq!(serialized.len(), 224, "Genesis block serialization should be 224 bytes");
+        assert_eq!(block_id, expected_id, "Genesis block ID should match Java NRCS");
+    }
+
+    #[test]
+    fn test_genesis_block_serialization_matches_java() {
+        let block = create_genesis_block_for_test();
+        let serialized = block.serialize_for_id();
+        
+        // Java NRCS uses:
+        // version (4) + timestamp (4) + previousBlockId (8) + txCount (4) + 
+        // amount (4, v<3) + fee (4, v<3) + payloadLength (4) + payloadHash (32) + 
+        // generatorPublicKey (32) + generationSignature (64, v=-1) + blockSignature (64)
+        // = 4+4+8+4+4+4+4+32+32+64+64 = 224 bytes
+        
+        // But wait, for version=-1, there's no previousBlockHash
+        // Let me recalculate:
+        // version=-1 < 3, so amount/fee are int (4 bytes each)
+        // version=-1 is NOT > 1, so no previousBlockHash
+        // generationSignature for genesis is 64 bytes
+        
+        // Expected: 4+4+8+4+4+4+4+32+32+64+64 = 224 bytes
+        
+        println!("Serialized length: {}", serialized.len());
+        
+        // Check version field (first 4 bytes, little-endian)
+        let version_bytes = &serialized[0..4];
+        let version = i32::from_le_bytes(version_bytes.try_into().unwrap());
+        assert_eq!(version, -1, "Version should be -1");
+        
+        // Check timestamp (next 4 bytes)
+        let timestamp_bytes = &serialized[4..8];
+        let timestamp = u32::from_le_bytes(timestamp_bytes.try_into().unwrap());
+        assert_eq!(timestamp, 0, "Timestamp should be 0");
+        
+        // Check previousBlockId (next 8 bytes)
+        let prev_id_bytes = &serialized[8..16];
+        let prev_id = u64::from_le_bytes(prev_id_bytes.try_into().unwrap());
+        assert_eq!(prev_id, 0, "Previous block ID should be 0");
+    }
+
+    fn create_block_1_for_test() -> Block {
+        Block {
+            id: None,
+            version: 3,
+            timestamp: 38,
+            height: 1,
+            previous_block_id: Some(3488276486778630462),
+            previous_block_hash: Hash256(hex::decode("3eb1c9a8fbd868309bf9b0d908c20ce948efcc552ec9ee2213f95ee6b0161f4b").unwrap().try_into().unwrap()),
+            payload_hash: Hash256(hex::decode("3886d44573dd9c266e0cdc22f9329efb92022fbf4ff570747d6839f0d0cf28dd").unwrap().try_into().unwrap()),
+            generator_id: Some(2794603741293765856),
+            generator_public_key: Some(hex::decode("21a908b060ca909e4f4f665aa31243f51817e9cbd32ddbb751fcef2373aeba1f").unwrap().try_into().unwrap()),
+            nonce: 0,
+            base_target: 97357815,
+            cumulative_difficulty: vec![0u8],
+            total_amount: 100000000,
+            total_fee: 100000000,
+            payload_length: 176,
+            generation_signature: hex::decode("950f9aec2d1f094f0c2b11b4d91dc2479774d168c9a85a28e7568842616d9ab2").unwrap(),
+            block_signature: Hash512(hex::decode("94be72fe9ba361fe385921597ed58f6600f5a05dfe0eb0f6441476f6368fde05255c1f691dc1c41003f5e5d684bd81ffb9efe71bbbd260f2fa64f648916cdd4b").unwrap().try_into().unwrap()),
+            transactions: vec![Transaction::default()],
+        }
+    }
+
+    #[test]
+    fn test_block_1_id() {
+        let block = create_block_1_for_test();
+        let serialized = block.serialize_for_id();
+        
+        println!("Block 1 serialized length: {}", serialized.len());
+        println!("Block 1 serialized (first 60 bytes): {:02x?}", &serialized[..60.min(serialized.len())]);
+        
+        let block_id = block.get_id();
+        let expected_id: u64 = 3985281431710898053;
+        
+        println!("Calculated block 1 ID: {}", block_id);
+        println!("Expected block 1 ID: {}", expected_id);
+        
+        assert_eq!(serialized.len(), 232, "Block 1 serialization should be 232 bytes");
+        assert_eq!(block_id, expected_id, "Block 1 ID should match Java NRCS");
+    }
+
+    #[test]
+    fn test_block_1_serialization_fields() {
+        let block = create_block_1_for_test();
+        let serialized = block.serialize_for_id();
+        
+        // For version 3:
+        // version (4) + timestamp (4) + previousBlockId (8) + txCount (4) + 
+        // amount (8, v>=3) + fee (8, v>=3) + payloadLength (4) + payloadHash (32) + 
+        // generatorPublicKey (32) + generationSignature (32, v>=2) + previousBlockHash (32, v>1) + blockSignature (64)
+        // = 4+4+8+4+8+8+4+32+32+32+32+64 = 232 bytes
+        
+        assert_eq!(serialized.len(), 232, "Block 1 should serialize to 232 bytes");
+        
+        // Verify version
+        let version = i32::from_le_bytes(serialized[0..4].try_into().unwrap());
+        assert_eq!(version, 3);
+        
+        // Verify timestamp
+        let timestamp = u32::from_le_bytes(serialized[4..8].try_into().unwrap());
+        assert_eq!(timestamp, 38);
+        
+        // Verify previousBlockId
+        let prev_id = u64::from_le_bytes(serialized[8..16].try_into().unwrap());
+        assert_eq!(prev_id, 3488276486778630462);
+        
+        // Verify txCount
+        let tx_count = i32::from_le_bytes(serialized[16..20].try_into().unwrap());
+        assert_eq!(tx_count, 0); // block has empty transactions in test
+        
+        // Verify totalAmount (8 bytes for v>=3)
+        let amount = u64::from_le_bytes(serialized[20..28].try_into().unwrap());
+        assert_eq!(amount, 100000000);
+        
+        // Verify totalFee (8 bytes for v>=3)
+        let fee = u64::from_le_bytes(serialized[28..36].try_into().unwrap());
+        assert_eq!(fee, 100000000);
+        
+        // Verify payloadLength
+        let payload_len = u32::from_le_bytes(serialized[36..40].try_into().unwrap());
+        assert_eq!(payload_len, 176);
+    }
 }

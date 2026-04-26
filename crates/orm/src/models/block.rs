@@ -99,3 +99,90 @@ impl BlockModel {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use blockchain_types::{Hash256, Hash512, INITIAL_BASE_TARGET};
+    use blockchain_types::prelude::Transaction;
+
+    #[test]
+    fn test_generator_id_conversion() {
+        let unsigned_id: u64 = 18365787021584764528;
+        let signed_id: i64 = unsigned_id as i64;
+        
+        assert_eq!(signed_id, -80957052124787088, "Generator ID should convert to signed value");
+        
+        let back_to_unsigned: u64 = signed_id as u64;
+        assert_eq!(back_to_unsigned, unsigned_id, "Conversion back should be lossless");
+    }
+
+    #[test]
+    fn test_block_model_from_domain_genesis() {
+        let block = Block {
+            id: None,
+            version: -1,
+            timestamp: 0,
+            height: 0,
+            previous_block_id: None,
+            previous_block_hash: Hash256([0u8; 32]),
+            payload_hash: Hash256(hex::decode("8f58dc2f809613424e608586df83b42513056861a864dff3cd00d88baca681ce").unwrap().try_into().unwrap()),
+            generator_id: Some(18365787021584764528),
+            generator_public_key: Some(hex::decode("b7f2232ddae77544690e1497f1b58e274039c3b0f99d9b6078f2520926230b26").unwrap().try_into().unwrap()),
+            nonce: 0,
+            base_target: INITIAL_BASE_TARGET,
+            cumulative_difficulty: vec![0u8],
+            total_amount: 100000000000000000,
+            total_fee: 0,
+            payload_length: 256,
+            generation_signature: vec![0u8; 64],
+            block_signature: Hash512(hex::decode("47b1aa800d657ccad4aaa8c946b2b0d2a7337fd3ab8e8c9ed6a06a49b7756e04a3ff13b15f6471afdff30313e1c47c4c2ab0e209c78a0673a42c254b74cc0201").unwrap().try_into().unwrap()),
+            transactions: vec![Transaction::default(), Transaction::default()],
+        };
+
+        let model = BlockModel::from_domain(&block).unwrap();
+        
+        assert_eq!(model.id, 3488276486778630462_i64, "Block ID should match");
+        assert_eq!(model.generator_id, -80957052124787088_i64, "Generator ID should be signed value");
+        assert_eq!(model.version, -1);
+        assert_eq!(model.timestamp, 0);
+        assert_eq!(model.height, 0);
+        assert_eq!(model.total_amount, 100000000000000000_i64);
+        assert_eq!(model.base_target, 153722867_i64);
+    }
+
+    #[test]
+    fn test_block_model_roundtrip() {
+        let original = Block {
+            id: Some(3985281431710898053),
+            version: 3,
+            timestamp: 38,
+            height: 1,
+            previous_block_id: Some(3488276486778630462),
+            previous_block_hash: Hash256(hex::decode("3eb1c9a8fbd868309bf9b0d908c20ce948efcc552ec9ee2213f95ee6b0161f4b").unwrap().try_into().unwrap()),
+            payload_hash: Hash256(hex::decode("3886d44573dd9c266e0cdc22f9329efb92022fbf4ff570747d6839f0d0cf28dd").unwrap().try_into().unwrap()),
+            generator_id: Some(2794603741293765856),
+            generator_public_key: Some(hex::decode("21a908b060ca909e4f4f665aa31243f51817e9cbd32ddbb751fcef2373aeba1f").unwrap().try_into().unwrap()),
+            nonce: 0,
+            base_target: 97357815,
+            cumulative_difficulty: vec![0u8],
+            total_amount: 100000000,
+            total_fee: 100000000,
+            payload_length: 176,
+            generation_signature: hex::decode("950f9aec2d1f094f0c2b11b4d91dc2479774d168c9a85a28e7568842616d9ab2").unwrap(),
+            block_signature: Hash512(hex::decode("94be72fe9ba361fe385921597ed58f6600f5a05dfe0eb0f6441476f6368fde05255c1f691dc1c41003f5e5d684bd81ffb9efe71bbbd260f2fa64f648916cdd4b").unwrap().try_into().unwrap()),
+            transactions: vec![],
+        };
+
+        let model = BlockModel::from_domain(&original).unwrap();
+        let restored = model.to_domain().unwrap();
+
+        assert_eq!(restored.get_id(), original.get_id());
+        assert_eq!(restored.get_generator_id(), original.get_generator_id());
+        assert_eq!(restored.version, original.version);
+        assert_eq!(restored.timestamp, original.timestamp);
+        assert_eq!(restored.height, original.height);
+        assert_eq!(restored.total_amount, original.total_amount);
+        assert_eq!(restored.base_target, original.base_target);
+    }
+}

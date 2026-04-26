@@ -65,6 +65,7 @@ fn test_account_asset_model_conversion() {
 #[test]
 fn test_block_model_conversion() {
     let block = Block {
+        id: None,
         version: BLOCK_VERSION,
         timestamp: 1_700_000_000,
         height: 100,
@@ -79,7 +80,7 @@ fn test_block_model_conversion() {
         total_amount: 10_000,
         total_fee: 100,
         payload_length: 0,
-        generation_signature: Hash256([0x33; 32]),
+        generation_signature: vec![0x33; 32],
         block_signature: Hash512([0x44; 64]),
         transactions: vec![],
     };

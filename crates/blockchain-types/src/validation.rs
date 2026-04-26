@@ -343,6 +343,7 @@ mod tests {
 
     fn create_test_block(version: i32, height: u32) -> Block {
         Block {
+            id: None,
             version,
             timestamp: 0,
             height,
@@ -357,7 +358,7 @@ mod tests {
             total_amount: 0,
             total_fee: 0,
             payload_length: 0,
-            generation_signature: Hash256([0u8; 32]),
+            generation_signature: vec![0u8; 32],
             block_signature: Hash512([0u8; 64]),
             transactions: vec![],
         }

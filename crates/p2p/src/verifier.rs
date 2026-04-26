@@ -102,12 +102,19 @@ impl BlockchainVerifier {
 #[async_trait]
 impl BlockVerifier for BlockchainVerifier {
     async fn verify_and_process(&self, mut block: Block) -> anyhow::Result<()> {
-        self.validate_basic(&block)?;
-
         let block_height = block.height;
         let block_id = block.get_id();
         
-        debug!("Verifying block: height={}, id={}, version={}", block_height, block_id, block.version);
+        if block_height <= 2 {
+            let serialized = block.serialize_for_id();
+            info!("Block {} serialized bytes (first 40): {:02x?}", block_height, &serialized[..40.min(serialized.len())]);
+            info!("Block {} gen_pub_key: {:?}", block_height, block.generator_public_key.as_ref().map(|k| hex::encode(k)));
+            info!("Block {} prev_block_hash: {:02x?}", block_height, block.previous_block_hash.0.iter().take(8).collect::<Vec<_>>());
+            info!("Block {} generation_signature: {:02x?}", block_height, block.generation_signature.iter().take(8).collect::<Vec<_>>());
+            info!("Block {} block_signature: {:02x?}", block_height, block.block_signature.0.iter().take(8).collect::<Vec<_>>());
+        }
+
+        self.validate_basic(&block)?;
 
         if let Ok(Some(_)) = self.block_repo.find_by_height(block_height as i32).await {
             debug!("Block at height {} already exists, skipping", block_height);

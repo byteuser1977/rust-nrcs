@@ -520,10 +520,6 @@ impl BlockchainSyncDaemon {
             ));
         }
 
-        if block.id.is_none() {
-            block.id = Some(block.calculate_id().unwrap_or(0));
-        }
-
         let mut transactions = Vec::new();
         for (tx_idx, tx_json) in transactions_json.iter().enumerate() {
             match Transaction::from_json(tx_json) {
@@ -539,6 +535,11 @@ impl BlockchainSyncDaemon {
             }
         }
         block.transactions = transactions;
+
+        // Calculate block ID AFTER transactions are added
+        if block.id.is_none() {
+            block.id = Some(block.calculate_id().unwrap_or(0));
+        }
 
         info!("Processing downloaded block: height={}, id={}, version={}, timestamp={}, generator={}, base_target={}, txs={}", 
                block.height, block.get_id(), block.version, block.timestamp, block.get_generator_id(), block.base_target, block.transactions.len());
