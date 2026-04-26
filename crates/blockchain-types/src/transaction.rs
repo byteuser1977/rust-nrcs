@@ -294,6 +294,24 @@ impl Transaction {
             Ok(get_u64(key)? as u32)
         };
 
+        let get_i32 = |key: &str| -> Result<i32> {
+            match obj.get(key) {
+                Some(serde_json::Value::Number(n)) => {
+                    n.as_i64()
+                        .map(|v| v as i32)
+                        .ok_or_else(|| {
+                            BlockchainError::InvalidTransaction(format!("invalid {} value", key))
+                        })
+                }
+                Some(serde_json::Value::String(s)) => {
+                    s.parse::<i32>().map_err(|_| {
+                        BlockchainError::InvalidTransaction(format!("invalid {} string", key))
+                    })
+                }
+                _ => Ok(0),
+            }
+        };
+
         let get_u16 = |key: &str| -> Result<u16> {
             Ok(get_u64(key)? as u16)
         };
@@ -364,7 +382,7 @@ impl Transaction {
 
         let amount = get_u64("amountNQT")?;
         let fee = get_u64("feeNQT")?;
-        let timestamp = get_u32("timestamp")?;
+        let timestamp = get_i32("timestamp")? as Timestamp;
         let deadline = get_u16("deadline")?;
 
         let signature = get_signature("signature")?;
@@ -378,11 +396,22 @@ impl Transaction {
             .and_then(|v| v.as_str())
             .and_then(|s| s.parse::<u64>().ok());
 
-        let attachment_bytes = match obj.get("attachment") {
-            Some(serde_json::Value::Object(att)) => {
-                serde_json::to_vec(att).unwrap_or_default()
-            }
-            _ => vec![],
+        let attachment_bytes: Vec<u8> = match type_byte {
+            0 => match subtype {
+                0 => vec![],
+                _ => match obj.get("attachment") {
+                    Some(serde_json::Value::Object(att)) => {
+                        serde_json::to_vec(att).unwrap_or_default()
+                    }
+                    _ => vec![],
+                },
+            },
+            _ => match obj.get("attachment") {
+                Some(serde_json::Value::Object(att)) => {
+                    serde_json::to_vec(att).unwrap_or_default()
+                }
+                _ => vec![],
+            },
         };
 
         let has_message = obj.get("attachment")
@@ -467,7 +496,7 @@ impl Transaction {
     pub fn calculate_full_hash(&self) -> Result<Hash256> {
         use sha2::{Digest, Sha256};
         
-        let data = self.serialize_for_signing();
+        let data = self.serialize_for_full_hash();
         
         let mut hasher = Sha256::new();
         hasher.update(&self.signature.0);
@@ -498,30 +527,58 @@ impl Transaction {
     }
 
     pub fn serialize_for_signing(&self) -> Vec<u8> {
+        const GENESIS_CREATOR_ID: i64 = -80957052124787088i64;
+        
         let mut buf = Vec::new();
         buf.extend_from_slice(&self.type_id.to_byte().to_le_bytes());
         buf.extend_from_slice(&((self.subtype & 0x0f) | (self.version << 4)).to_le_bytes());
         buf.extend_from_slice(&self.timestamp.to_le_bytes());
-        buf.extend_from_slice(&self.deadline.to_le_bytes());
+        buf.extend_from_slice(&(self.deadline as i16).to_le_bytes());
         buf.extend_from_slice(&self.sender_public_key.0);
 
         if let Some(recipient) = self.recipient_id {
             buf.extend_from_slice(&recipient.to_le_bytes());
         } else {
-            buf.extend_from_slice(&[0u8; 8]);
+            buf.extend_from_slice(&GENESIS_CREATOR_ID.to_le_bytes());
         }
 
         buf.extend_from_slice(&self.amount.to_le_bytes());
         buf.extend_from_slice(&self.fee.to_le_bytes());
-
         if let Some(ref hash) = self.referenced_transaction_full_hash {
             buf.extend_from_slice(&hash.0);
         } else {
             buf.extend_from_slice(&[0u8; 32]);
         }
 
-        buf.extend_from_slice(&self.attachment_bytes);
         buf
+    }
+
+    pub fn serialize_for_full_hash(&self) -> Vec<u8> {
+        let mut buf = self.serialize_for_signing();
+
+        buf.extend_from_slice(&[0u8; 64]);
+
+        if self.version > 0 {
+            let flags = self.get_flags();
+            buf.extend_from_slice(&flags.to_le_bytes());
+            buf.extend_from_slice(&self.ec_block_height.unwrap_or(0).to_le_bytes());
+            buf.extend_from_slice(&self.ec_block_id.unwrap_or(0).to_le_bytes());
+        }
+
+        buf.extend_from_slice(&self.attachment_bytes);
+
+        buf
+    }
+
+    fn get_flags(&self) -> u32 {
+        let mut flags: u32 = 0;
+        if self.has_message { flags |= 1; }
+        if self.has_encrypted_message { flags |= 2; }
+        if self.has_public_key_announcement { flags |= 4; }
+        if self.has_prunable_attachment { flags |= 8; }
+        if self.has_prunable_encrypted_message { flags |= 32; }
+        if self.has_encrypttoself_message { flags |= 64; }
+        flags
     }
 
     pub fn verify_signature(&self) -> bool {
