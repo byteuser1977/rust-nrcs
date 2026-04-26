@@ -42,4 +42,8 @@ impl BlockVerifier for NoOpBlockVerifier {
     async fn process_fork_block(&self, _block: Block) -> Result<()> {
         Ok(())
     }
+
+    async fn get_block_height(&self, _block_id: u64) -> Result<Option<u32>> {
+        Ok(None)
+    }
 }

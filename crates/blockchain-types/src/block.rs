@@ -45,8 +45,8 @@ pub struct Block {
     pub total_fee: Amount,
     #[serde(alias = "payloadLength")]
     pub payload_length: u32,
-    #[serde(alias = "generationSignature")]
-    pub generation_signature: Hash256,
+    #[serde(alias = "generationSignature", deserialize_with = "deserialize_generation_signature")]
+    pub generation_signature: Vec<u8>,
     #[serde(alias = "blockSignature")]
     pub block_signature: Hash512,
     #[serde(default)]
@@ -83,6 +83,33 @@ pub fn account_id_from_public_key(public_key: &[u8; 32]) -> AccountId {
 
 pub const INITIAL_BASE_TARGET: u64 = 153722867;
 pub const GENESIS_BLOCK_ID: u64 = 3488276486778630462;
+
+pub fn biguint_to_signed_bytes_be(value: num_bigint::BigUint) -> Vec<u8> {
+    if value == num_bigint::BigUint::from(0u64) {
+        return vec![0u8];
+    }
+    let bytes = value.to_bytes_be();
+    if bytes[0] & 0x80 != 0 {
+        let mut signed_bytes = vec![0u8];
+        signed_bytes.extend_from_slice(&bytes);
+        signed_bytes
+    } else {
+        bytes
+    }
+}
+
+pub fn signed_bytes_be_to_biguint(bytes: &[u8]) -> num_bigint::BigUint {
+    if bytes.is_empty() {
+        return num_bigint::BigUint::from(0u64);
+    }
+    if bytes[0] & 0x80 != 0 {
+        let mut v = vec![0u8];
+        v.extend_from_slice(bytes);
+        num_bigint::BigUint::from_bytes_be(&v)
+    } else {
+        num_bigint::BigUint::from_bytes_be(bytes)
+    }
+}
 pub const BLOCK_TIME: u64 = 60;
 pub const MIN_BLOCKTIME_LIMIT: u64 = 53;
 pub const MAX_BLOCKTIME_LIMIT: u64 = 67;
@@ -166,20 +193,12 @@ pub fn calculate_base_target_and_cumulative_difficulty(
         previous_block.base_target
     };
     
-    let prev_cum_diff = if previous_block.cumulative_difficulty.is_empty() {
-        num_bigint::BigUint::from(0u64)
-    } else {
-        num_bigint::BigUint::from_bytes_be(&previous_block.cumulative_difficulty)
-    };
+    let prev_cum_diff = signed_bytes_be_to_biguint(&previous_block.cumulative_difficulty);
     let two64 = num_bigint::BigUint::from(u128::MAX) + 1u128;
     let base_target_big = num_bigint::BigUint::from(base_target);
     let diff_add = two64 / base_target_big;
     let new_cum_diff = prev_cum_diff + diff_add;
-    let cumulative_difficulty = if new_cum_diff == num_bigint::BigUint::from(0u64) {
-        vec![0u8]
-    } else {
-        new_cum_diff.to_bytes_be()
-    };
+    let cumulative_difficulty = biguint_to_signed_bytes_be(new_cum_diff);
     
     (base_target, cumulative_difficulty)
 }
@@ -363,6 +382,50 @@ where
     deserializer.deserialize_any(CumulativeDifficultyVisitor)
 }
 
+fn deserialize_generation_signature<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    
+    struct GenerationSignatureVisitor;
+    
+    impl<'de> Visitor<'de> for GenerationSignatureVisitor {
+        type Value = Vec<u8>;
+        
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a hex string (32 or 64 bytes)")
+        }
+        
+        fn visit_str<E>(self, value: &str) -> std::result::Result<Vec<u8>, E>
+        where
+            E: de::Error,
+        {
+            if value.is_empty() {
+                return Ok(vec![0u8; 32]);
+            }
+            let bytes = hex::decode(value).map_err(|e| de::Error::custom(format!("invalid hex: {}", e)))?;
+            Ok(bytes)
+        }
+        
+        fn visit_none<E>(self) -> std::result::Result<Vec<u8>, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![0u8; 32])
+        }
+        
+        fn visit_unit<E>(self) -> std::result::Result<Vec<u8>, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![0u8; 32])
+        }
+    }
+    
+    deserializer.deserialize_any(GenerationSignatureVisitor)
+}
+
 fn deserialize_amount_string<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -430,7 +493,7 @@ impl Block {
             total_amount: 0,
             total_fee: 0,
             payload_length: 0,
-            generation_signature: Hash256([0u8; 32]),
+            generation_signature: vec![0u8; 32],
             block_signature: Hash512([0u8; 64]),
             transactions: vec![],
         }
@@ -484,7 +547,7 @@ impl Block {
             buf.extend_from_slice(&[0u8; 32]);
         }
         
-        buf.extend_from_slice(&self.generation_signature.0);
+        buf.extend_from_slice(&self.generation_signature);
         
         if self.version > 1 {
             buf.extend_from_slice(&self.previous_block_hash.0);
@@ -544,7 +607,7 @@ impl Block {
         buf.extend_from_slice(&self.total_amount.to_be_bytes());
         buf.extend_from_slice(&self.total_fee.to_be_bytes());
         buf.extend_from_slice(&self.payload_length.to_be_bytes());
-        buf.extend_from_slice(&self.generation_signature.0);
+        buf.extend_from_slice(&self.generation_signature);
         // block_signature 不包含在 hash 中（签名部分单独计算）
         buf
     }

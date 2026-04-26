@@ -276,7 +276,7 @@ impl BlockValidator {
         buf.extend_from_slice(&block.total_amount.to_be_bytes());
         buf.extend_from_slice(&block.total_fee.to_be_bytes());
         buf.extend_from_slice(&block.payload_length.to_be_bytes());
-        buf.extend_from_slice(&block.generation_signature.0);
+        buf.extend_from_slice(&block.generation_signature);
         buf
     }
 }

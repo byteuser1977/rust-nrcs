@@ -90,7 +90,7 @@ impl BlockchainProcessor {
     async fn insert_block(&self, block: &Block) -> Result<()> {
         let previous_block_hash = Some(block.previous_block_hash.0.to_vec());
         let cumulative_difficulty = block.cumulative_difficulty.clone();
-        let generation_signature = block.generation_signature.0.to_vec();
+        let generation_signature = block.generation_signature.clone();
         let block_signature = block.block_signature.0.to_vec();
         let payload_hash = block.payload_hash.0.to_vec();
         

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tracing::{info, debug, warn};
 
 use blockchain_types::prelude::*;
-use blockchain_types::block::{Block, PreviousBlockData, calculate_base_target_and_cumulative_difficulty, INITIAL_BASE_TARGET};
+use blockchain_types::block::{Block, PreviousBlockData, calculate_base_target_and_cumulative_difficulty, INITIAL_BASE_TARGET, biguint_to_signed_bytes_be};
 use blockchain_types::transaction::Transaction;
 
 use crate::handlers::BlockVerifier;
@@ -67,6 +67,12 @@ impl BlockchainVerifier {
             .map_err(|e| BlockchainError::Database(e.to_string()))?;
 
         let block_id = block.get_id() as i64;
+        
+        if let Some(prev_id) = block.previous_block_id.filter(|&id| id != 0) {
+            if let Err(e) = self.block_repo.update_next_block_id(prev_id as i64, block_id).await {
+                warn!("Failed to update next_block_id for block {}: {}", prev_id, e);
+            }
+        }
         
         for (idx, tx) in block.transactions.iter().enumerate() {
             let mut tx_model = TransactionModel::from_domain(tx)?;
@@ -147,21 +153,21 @@ impl BlockVerifier for BlockchainVerifier {
                     block.base_target = INITIAL_BASE_TARGET;
                     let two64 = num_bigint::BigUint::from(u128::MAX) + 1u128;
                     let diff_add = two64 / num_bigint::BigUint::from(INITIAL_BASE_TARGET);
-                    block.cumulative_difficulty = diff_add.to_bytes_be();
+                    block.cumulative_difficulty = biguint_to_signed_bytes_be(diff_add);
                 }
                 Err(e) => {
                     warn!("Error finding previous block at height {}: {}", prev_height, e);
                     block.base_target = INITIAL_BASE_TARGET;
                     let two64 = num_bigint::BigUint::from(u128::MAX) + 1u128;
                     let diff_add = two64 / num_bigint::BigUint::from(INITIAL_BASE_TARGET);
-                    block.cumulative_difficulty = diff_add.to_bytes_be();
+                    block.cumulative_difficulty = biguint_to_signed_bytes_be(diff_add);
                 }
             }
         } else {
             block.base_target = INITIAL_BASE_TARGET;
             let two64 = num_bigint::BigUint::from(u128::MAX) + 1u128;
             let diff_add = two64 / num_bigint::BigUint::from(INITIAL_BASE_TARGET);
-            block.cumulative_difficulty = diff_add.to_bytes_be();
+            block.cumulative_difficulty = biguint_to_signed_bytes_be(diff_add);
         }
 
         self.insert_block(&block).await?;

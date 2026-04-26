@@ -23,7 +23,7 @@ pub struct BlockTemplate {
     pub generator_id: AccountId,
     pub base_target: u64,
     pub cumulative_difficulty: Vec<u8>,
-    pub generation_signature: Hash256,
+    pub generation_signature: Vec<u8>,
     pub transactions: Vec<Transaction>,
 }
 
@@ -41,7 +41,7 @@ impl BlockTemplate {
             generator_id,
             base_target: INITIAL_BASE_TARGET,
             cumulative_difficulty: vec![],
-            generation_signature: Hash256([0u8; 32]),
+            generation_signature: vec![0u8; 32],
             transactions: Vec::new(),
         }
     }
@@ -75,7 +75,7 @@ impl BlockGenerator {
         );
         
         let generation_signature = calculate_generation_signature(
-            &prev_block.generation_signature.0,
+            &prev_block.generation_signature,
             generator_id,
         );
         
@@ -219,7 +219,7 @@ impl BlockGenerator {
         buf.extend_from_slice(&block.total_amount.to_be_bytes());
         buf.extend_from_slice(&block.total_fee.to_be_bytes());
         buf.extend_from_slice(&block.payload_length.to_be_bytes());
-        buf.extend_from_slice(&block.generation_signature.0);
+        buf.extend_from_slice(&block.generation_signature);
         buf
     }
     

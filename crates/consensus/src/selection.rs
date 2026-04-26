@@ -37,7 +37,7 @@ pub struct ForgerSelection {
     pub hit_time: u64,
     pub deadline: u64,
     pub effective_balance: u64,
-    pub generation_signature: Hash256,
+    pub generation_signature: Vec<u8>,
 }
 
 impl ForgerSelection {
@@ -46,7 +46,7 @@ impl ForgerSelection {
         hit_time: u64,
         deadline: u64,
         effective_balance: u64,
-        generation_signature: Hash256,
+        generation_signature: Vec<u8>,
     ) -> Self {
         Self {
             forger_id,
@@ -93,7 +93,7 @@ impl ForgerSelector {
         
         let mut forgers: Vec<_> = valid_candidates.into_iter()
             .map(|c| {
-                let hit = calculate_hit(&c.public_key, &block.generation_signature.0);
+                let hit = calculate_hit(&c.public_key, &block.generation_signature);
                 let deadline = calculate_deadline(&hit, c.effective_balance, block.base_target);
                 let hit_time = block.timestamp as u64 + deadline;
                 
@@ -109,7 +109,7 @@ impl ForgerSelector {
                 f.hit_time,
                 f.deadline,
                 f.effective_balance,
-                block.generation_signature,
+                block.generation_signature.clone(),
             )
         })
     }
@@ -130,7 +130,7 @@ impl ForgerSelector {
         
         let mut forgers: Vec<_> = valid_candidates.into_iter()
             .map(|c| {
-                let hit = calculate_hit(&c.public_key, &block.generation_signature.0);
+                let hit = calculate_hit(&c.public_key, &block.generation_signature);
                 let deadline = calculate_deadline(&hit, c.effective_balance, block.base_target);
                 let hit_time = block.timestamp as u64 + deadline;
                 
@@ -154,7 +154,7 @@ impl ForgerSelector {
             return false;
         }
         
-        let hit = calculate_hit(public_key, &block.generation_signature.0);
+        let hit = calculate_hit(public_key, &block.generation_signature);
         let elapsed_time = timestamp as u64 - block.timestamp as u64;
         
         if elapsed_time == 0 {
@@ -174,7 +174,7 @@ impl ForgerSelector {
             return u64::MAX;
         }
         
-        let hit = calculate_hit(public_key, &block.generation_signature.0);
+        let hit = calculate_hit(public_key, &block.generation_signature);
         calculate_deadline(&hit, effective_balance, block.base_target)
     }
 }
@@ -275,7 +275,7 @@ impl ActiveGeneratorList {
             }
             
             if let Some(pk) = &entry.public_key {
-                let hit = calculate_hit(pk, &block.generation_signature.0);
+                let hit = calculate_hit(pk, &block.generation_signature);
                 let deadline = calculate_deadline(&hit, entry.effective_balance, block.base_target);
                 entry.hit_time = block.timestamp as u64 + deadline;
             }

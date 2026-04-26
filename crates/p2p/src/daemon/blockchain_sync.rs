@@ -146,7 +146,8 @@ impl BlockchainSyncDaemon {
         info!("Common milestone block id: {}", common_block_id);
 
         let common_block_height = block_verifier.get_block_height(common_block_id).await
-            .unwrap_or(0)
+            .ok()
+            .flatten()
             .unwrap_or(0);
         info!("Common block height: {}", common_block_height);
 

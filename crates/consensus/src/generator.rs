@@ -133,7 +133,7 @@ impl Generator {
     
     pub fn calculate_hit(public_key: &[u8], block: &Block) -> BigUint {
         let mut hasher = Sha256::new();
-        hasher.update(&block.generation_signature.0);
+        hasher.update(&block.generation_signature);
         hasher.update(public_key);
         let hash = hasher.finalize();
         

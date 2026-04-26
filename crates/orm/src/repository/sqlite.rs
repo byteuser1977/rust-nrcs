@@ -136,6 +136,16 @@ impl BlockRepository for SqliteBlockRepository {
         
         Ok(records.into_iter().map(|b| b.id).collect())
     }
+
+    async fn update_next_block_id(&self, previous_block_id: i64, next_block_id: i64) -> RepositoryResult<()> {
+        sqlx::query("UPDATE block SET next_block_id = ? WHERE id = ?")
+            .bind(next_block_id)
+            .bind(previous_block_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
 }
 
 #[async_trait]

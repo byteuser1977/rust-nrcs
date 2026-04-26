@@ -53,12 +53,7 @@ impl BlockModel {
             total_amount: self.total_amount as Amount,
             total_fee: self.total_fee as Amount,
             payload_length: self.payload_length as u32,
-            generation_signature: self
-                .generation_signature
-                .as_slice()
-                .try_into()
-                .map(Hash256)
-                .unwrap_or(Hash256([0u8; 32])),
+            generation_signature: self.generation_signature.clone(),
             block_signature: self
                 .block_signature
                 .as_slice()
@@ -97,7 +92,7 @@ impl BlockModel {
             base_target: block.base_target as i64,
             next_block_id: None,
             height: block.height as i32,
-            generation_signature: block.generation_signature.0.to_vec(),
+            generation_signature: block.generation_signature.clone(),
             block_signature: block.block_signature.0.to_vec(),
             payload_hash: block.payload_hash.0.to_vec(),
             generator_id: block.get_generator_id() as i64,

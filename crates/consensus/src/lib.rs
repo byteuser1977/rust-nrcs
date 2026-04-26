@@ -97,7 +97,7 @@ pub trait PoSEngine: ConsensusEngine {
         &self,
         blockchain: &BlockchainState,
         timestamp: Timestamp,
-    ) -> ConsensusResult<(AccountId, Hash512)>;
+    ) -> ConsensusResult<(AccountId, Vec<u8>)>;
 
     /// 计算指定账户的 deadline（距离可出块的时间）
     /// 返回：deadline（秒），0 表示可立即出块
@@ -105,7 +105,7 @@ pub trait PoSEngine: ConsensusEngine {
 
     /// 生成出块签名（用于区块头部）
     /// 输入：上一区块的 generation_signature，当前账户私钥
-    fn generate_signature(&self, account_id: AccountId, prev_gen_sig: &Hash512) -> Hash512;
+    fn generate_signature(&self, account_id: AccountId, prev_gen_sig: &[u8]) -> Vec<u8>;
 }
 
 /// 区块链状态只读视图（供共识引擎使用）
@@ -121,7 +121,7 @@ pub struct BlockchainState {
     /// 累计难度
     pub cumulative_difficulty: Vec<u8>,
     /// 出块者签名
-    pub last_generation_signature: Hash512,
+    pub last_generation_signature: Vec<u8>,
     /// 时间戳
     pub last_timestamp: Timestamp,
     /// 账户快照（仅包含余额和租赁信息，用于选块）
@@ -142,7 +142,7 @@ impl BlockchainState {
         last_block_hash: Hash256,
         last_base_target: u64,
         cumulative_difficulty: Vec<u8>,
-        last_generation_signature: Hash512,
+        last_generation_signature: Vec<u8>,
         last_timestamp: Timestamp,
         accounts: Vec<AccountSnapshot>,
     ) -> Self {

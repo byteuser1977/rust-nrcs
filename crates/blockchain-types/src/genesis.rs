@@ -118,7 +118,7 @@ pub fn create_genesis_block() -> Result<Block, Box<dyn std::error::Error>> {
         total_amount: MAX_BALANCE_NQT,
         total_fee: 0,
         payload_length: (transactions.len() * 128) as u32,
-        generation_signature: Hash256([0u8; 32]),
+        generation_signature: vec![0u8; 32],
         block_signature: Hash512(GENESIS_BLOCK_SIGNATURE),
         transactions,
     };

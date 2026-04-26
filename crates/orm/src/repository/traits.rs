@@ -48,6 +48,7 @@ pub trait BlockRepository: Repository<BlockModel> {
     async fn get_block_id_at_height(&self, height: i32) -> RepositoryResult<Option<i64>>;
     async fn has_block(&self, id: i64) -> RepositoryResult<bool>;
     async fn get_ids_after(&self, block_id: i64, limit: i32) -> RepositoryResult<Vec<i64>>;
+    async fn update_next_block_id(&self, previous_block_id: i64, next_block_id: i64) -> RepositoryResult<()>;
 }
 
 #[async_trait]

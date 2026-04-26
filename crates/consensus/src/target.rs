@@ -175,7 +175,7 @@ pub fn bytes_to_biguint(bytes: &[u8]) -> BigUint {
     }
 }
 
-pub fn calculate_hit(public_key: &[u8], generation_signature: &[u8; 32]) -> BigUint {
+pub fn calculate_hit(public_key: &[u8], generation_signature: &[u8]) -> BigUint {
     use sha2::{Sha256, Digest};
     
     let mut hasher = Sha256::new();
