@@ -363,7 +363,7 @@ impl Repository<TransactionModel> for SqliteTransactionRepository {
                 ec_block_id, has_encrypttoself_message, has_prunable_encrypted_message
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
             )
             "#,
         )
