@@ -562,6 +562,96 @@ impl TxTypeHandler for AccountControlHandler {
     }
 }
 
+pub struct ShufflingHandler;
+
+impl ShufflingHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for ShufflingHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TxTypeHandler for ShufflingHandler {
+    fn tx_type(&self) -> TransactionType {
+        TransactionType::Shuffling
+    }
+    
+    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
+        match tx.subtype {
+            blockchain_types::transaction::SUBTYPE_SHUFFLING_CREATION |
+            blockchain_types::transaction::SUBTYPE_SHUFFLING_REGISTRATION |
+            blockchain_types::transaction::SUBTYPE_SHUFFLING_PROCESSING |
+            blockchain_types::transaction::SUBTYPE_SHUFFLING_RECIPIENTS |
+            blockchain_types::transaction::SUBTYPE_SHUFFLING_VERIFICATION |
+            blockchain_types::transaction::SUBTYPE_SHUFFLING_CANCELLATION => Ok(()),
+            _ => Err(TxTypeError::InvalidAttachment(format!("invalid shuffling subtype: {}", tx.subtype))),
+        }
+    }
+    
+    fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        if state.sender_balance < tx.fee {
+            return Err(TxTypeError::InvalidAmount(state.sender_balance));
+        }
+        
+        state.sender_balance -= tx.fee;
+        
+        Ok(())
+    }
+    
+    fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        state.sender_balance += tx.fee;
+        Ok(())
+    }
+}
+
+pub struct CoinExchangeHandler;
+
+impl CoinExchangeHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for CoinExchangeHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TxTypeHandler for CoinExchangeHandler {
+    fn tx_type(&self) -> TransactionType {
+        TransactionType::CoinExchange
+    }
+    
+    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
+        match tx.subtype {
+            blockchain_types::transaction::SUBTYPE_COIN_EXCHANGE_ORDER_ISSUE |
+            blockchain_types::transaction::SUBTYPE_COIN_EXCHANGE_ORDER_CANCEL => Ok(()),
+            _ => Err(TxTypeError::InvalidAttachment(format!("invalid coin exchange subtype: {}", tx.subtype))),
+        }
+    }
+    
+    fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        if state.sender_balance < tx.fee {
+            return Err(TxTypeError::InvalidAmount(state.sender_balance));
+        }
+        
+        state.sender_balance -= tx.fee;
+        
+        Ok(())
+    }
+    
+    fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        state.sender_balance += tx.fee;
+        Ok(())
+    }
+}
+
 pub struct TxTypeRegistry {
     handlers: std::collections::HashMap<TransactionType, Box<dyn TxTypeHandler>>,
 }
@@ -580,6 +670,8 @@ impl TxTypeRegistry {
         handlers.insert(TransactionType::MonetarySystem, Box::new(MonetaryHandler::new()));
         handlers.insert(TransactionType::Voting, Box::new(VotingHandler::new()));
         handlers.insert(TransactionType::AccountControl, Box::new(AccountControlHandler::new()));
+        handlers.insert(TransactionType::Shuffling, Box::new(ShufflingHandler::new()));
+        handlers.insert(TransactionType::CoinExchange, Box::new(CoinExchangeHandler::new()));
         
         Self { handlers }
     }

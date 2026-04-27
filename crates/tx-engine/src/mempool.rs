@@ -54,6 +54,10 @@ pub struct Mempool {
     config: MempoolConfig,
     /// 当前内存占用（字节，估算值）
     memory_usage: RwLock<usize>,
+    /// 等待队列（延迟处理的交易）
+    waiting_transactions: RwLock<Vec<(Transaction, Instant)>>,
+    /// 已广播交易缓存
+    broadcasted_transactions: DashMap<Hash256, Transaction>,
 }
 
 impl Mempool {
@@ -63,6 +67,8 @@ impl Mempool {
             nonce_tracker: DashMap::new(),
             config,
             memory_usage: RwLock::new(0),
+            waiting_transactions: RwLock::new(Vec::new()),
+            broadcasted_transactions: DashMap::new(),
         }
     }
 
@@ -230,6 +236,115 @@ impl Mempool {
             memory_usage_bytes: memory,
             senders_count: self.nonce_tracker.len(),
         }
+    }
+
+    /// 重新排队所有未确认交易
+    /// 对应 Java: requeueAllUnconfirmedTransactions()
+    pub fn requeue_all(&self) {
+        let mut waiting = self.waiting_transactions.write();
+        for entry in self.pool.iter() {
+            let (tx, _priority, time) = entry.value();
+            waiting.push((tx.clone(), *time));
+        }
+        self.pool.clear();
+        *self.memory_usage.write() = 0;
+        debug!("Requeued all unconfirmed transactions to waiting queue");
+    }
+
+    /// 添加交易到等待队列
+    /// 对应 Java: processLater()
+    pub fn process_later(&self, transactions: Vec<Transaction>) {
+        let mut waiting = self.waiting_transactions.write();
+        let now = Instant::now();
+        let count = transactions.len();
+        for tx in transactions {
+            waiting.push((tx, now));
+        }
+        debug!("Added {} transactions to waiting queue", count);
+    }
+
+    /// 处理等待队列中的交易
+    /// 对应 Java: processWaitingTransactions()
+    pub fn process_waiting(&self) -> Vec<Transaction> {
+        let mut waiting = self.waiting_transactions.write();
+        let mut processed = Vec::new();
+        let now = Instant::now();
+        
+        waiting.retain(|(tx, time)| {
+            let elapsed = now.duration_since(*time).as_secs();
+            if elapsed > self.config.tx_ttl_seconds {
+                debug!("Expired waiting transaction removed");
+                return false;
+            }
+            
+            match self.add(tx.clone()) {
+                Ok(()) => {
+                    processed.push(tx.clone());
+                    false
+                }
+                Err(MempoolError::DuplicateTransaction) => false,
+                Err(_) => true,
+            }
+        });
+        
+        debug!("Processed {} waiting transactions", processed.len());
+        processed
+    }
+
+    /// 获取等待队列中的交易
+    pub fn get_waiting(&self) -> Vec<Transaction> {
+        self.waiting_transactions.read()
+            .iter()
+            .map(|(tx, _)| tx.clone())
+            .collect()
+    }
+
+    /// 获取等待队列大小
+    pub fn waiting_len(&self) -> usize {
+        self.waiting_transactions.read().len()
+    }
+
+    /// 添加到已广播缓存
+    pub fn add_broadcasted(&self, tx: &Transaction) {
+        self.broadcasted_transactions.insert(tx.full_hash, tx.clone());
+    }
+
+    /// 检查是否已广播
+    pub fn is_broadcasted(&self, hash: &Hash256) -> bool {
+        self.broadcasted_transactions.contains_key(hash)
+    }
+
+    /// 从已广播缓存移除
+    pub fn remove_broadcasted(&self, hash: &Hash256) -> Option<Transaction> {
+        self.broadcasted_transactions.remove(hash).map(|(_, tx)| tx)
+    }
+
+    /// 获取所有已广播交易
+    pub fn get_all_broadcasted(&self) -> Vec<Transaction> {
+        self.broadcasted_transactions.iter()
+            .map(|entry| entry.value().clone())
+            .collect()
+    }
+
+    /// 获取缓存的未确认交易（排除指定列表）
+    /// 对应 Java: getCachedUnconfirmedTransactions(exclude)
+    pub fn get_cached(&self, exclude: &[Hash256]) -> Vec<Transaction> {
+        self.pool.iter()
+            .filter(|entry| !exclude.contains(entry.key()))
+            .map(|entry| entry.value().0.clone())
+            .collect()
+    }
+
+    /// 获取所有未确认交易ID
+    pub fn get_all_ids(&self) -> Vec<Hash256> {
+        self.pool.iter().map(|entry| *entry.key()).collect()
+    }
+
+    /// 根据ID获取交易
+    pub fn get_by_id(&self, id: u64) -> Option<Transaction> {
+        self.pool.iter()
+            .find(|entry| entry.value().0.id == id)
+            .map(|entry| entry.value().0.clone())
     }
 }
 

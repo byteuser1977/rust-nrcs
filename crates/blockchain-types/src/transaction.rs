@@ -712,6 +712,70 @@ impl Transaction {
     pub fn size(&self) -> usize {
         200 + self.attachment_bytes.len()
     }
+
+    /// 获取附加数据列表
+    /// 对应 Java: getAppendages()
+    pub fn get_appendages(&self) -> Vec<Appendage> {
+        let mut appendages = Vec::new();
+        
+        if self.has_message {
+            appendages.push(Appendage::Message);
+        }
+        if self.has_encrypted_message {
+            appendages.push(Appendage::EncryptedMessage);
+        }
+        if self.has_public_key_announcement {
+            appendages.push(Appendage::PublicKeyAnnouncement);
+        }
+        if self.has_prunable_attachment {
+            appendages.push(Appendage::PrunableAttachment);
+        }
+        if self.has_encrypttoself_message {
+            appendages.push(Appendage::EncryptToSelfMessage);
+        }
+        if self.has_prunable_encrypted_message {
+            appendages.push(Appendage::PrunableEncryptedMessage);
+        }
+        
+        appendages
+    }
+
+    /// 获取引用交易完整哈希
+    /// 对应 Java: getReferencedTransactionFullHash()
+    pub fn get_referenced_transaction_full_hash(&self) -> Option<Hash256> {
+        self.referenced_transaction_full_hash
+    }
+
+    /// 设置引用交易完整哈希
+    pub fn set_referenced_transaction_full_hash(&mut self, hash: Option<Hash256>) {
+        self.referenced_transaction_full_hash = hash;
+    }
+
+    /// 取消区块关联
+    /// 对应 Java: unsetBlock()
+    pub fn unset_block(&mut self) {
+        self.block_id = 0;
+        self.block_timestamp = 0;
+        self.height = 0;
+        self.transaction_index = 0;
+    }
+
+    /// 检查是否为未确认重复交易
+    /// 对应 Java: isUnconfirmedDuplicate()
+    pub fn is_unconfirmed_duplicate(&self, known_tx_ids: &[u64]) -> bool {
+        known_tx_ids.contains(&self.id)
+    }
+}
+
+/// 附加数据类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Appendage {
+    Message,
+    EncryptedMessage,
+    PublicKeyAnnouncement,
+    PrunableAttachment,
+    EncryptToSelfMessage,
+    PrunableEncryptedMessage,
 }
 
 #[cfg(test)]
