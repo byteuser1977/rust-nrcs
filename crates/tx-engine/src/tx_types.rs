@@ -376,6 +376,192 @@ impl TxTypeHandler for AliasHandler {
     }
 }
 
+pub struct DigitalGoodsHandler;
+
+impl DigitalGoodsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for DigitalGoodsHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TxTypeHandler for DigitalGoodsHandler {
+    fn tx_type(&self) -> TransactionType {
+        TransactionType::DigitalGoods
+    }
+    
+    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
+        match tx.subtype {
+            blockchain_types::transaction::SUBTYPE_DIGITAL_GOODS_LISTING |
+            blockchain_types::transaction::SUBTYPE_DIGITAL_GOODS_DELISTING |
+            blockchain_types::transaction::SUBTYPE_DIGITAL_GOODS_PRICE_CHANGE |
+            blockchain_types::transaction::SUBTYPE_DIGITAL_GOODS_QUANTITY_CHANGE |
+            blockchain_types::transaction::SUBTYPE_DIGITAL_GOODS_PURCHASE |
+            blockchain_types::transaction::SUBTYPE_DIGITAL_GOODS_DELIVERY |
+            blockchain_types::transaction::SUBTYPE_DIGITAL_GOODS_FEEDBACK |
+            blockchain_types::transaction::SUBTYPE_DIGITAL_GOODS_REFUND => Ok(()),
+            _ => Err(TxTypeError::InvalidAttachment(format!("invalid digital goods subtype: {}", tx.subtype))),
+        }
+    }
+    
+    fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        if state.sender_balance < tx.fee {
+            return Err(TxTypeError::InvalidAmount(state.sender_balance));
+        }
+        
+        state.sender_balance -= tx.fee;
+        
+        Ok(())
+    }
+    
+    fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        state.sender_balance += tx.fee;
+        Ok(())
+    }
+}
+
+pub struct MonetaryHandler;
+
+impl MonetaryHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for MonetaryHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TxTypeHandler for MonetaryHandler {
+    fn tx_type(&self) -> TransactionType {
+        TransactionType::MonetarySystem
+    }
+    
+    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
+        match tx.subtype {
+            blockchain_types::transaction::SUBTYPE_MONETARY_SYSTEM_CURRENCY_ISSUANCE |
+            blockchain_types::transaction::SUBTYPE_MONETARY_SYSTEM_RESERVE_INCREASE |
+            blockchain_types::transaction::SUBTYPE_MONETARY_SYSTEM_RESERVE_CLAIM |
+            blockchain_types::transaction::SUBTYPE_MONETARY_SYSTEM_CURRENCY_TRANSFER |
+            blockchain_types::transaction::SUBTYPE_MONETARY_SYSTEM_PUBLISH_EXCHANGE_OFFER |
+            blockchain_types::transaction::SUBTYPE_MONETARY_SYSTEM_EXCHANGE_BUY |
+            blockchain_types::transaction::SUBTYPE_MONETARY_SYSTEM_EXCHANGE_SELL |
+            blockchain_types::transaction::SUBTYPE_MONETARY_SYSTEM_CURRENCY_MINTING |
+            blockchain_types::transaction::SUBTYPE_MONETARY_SYSTEM_CURRENCY_DELETION => Ok(()),
+            _ => Err(TxTypeError::InvalidAttachment(format!("invalid monetary subtype: {}", tx.subtype))),
+        }
+    }
+    
+    fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        if state.sender_balance < tx.fee {
+            return Err(TxTypeError::InvalidAmount(state.sender_balance));
+        }
+        
+        state.sender_balance -= tx.fee;
+        
+        Ok(())
+    }
+    
+    fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        state.sender_balance += tx.fee;
+        Ok(())
+    }
+}
+
+pub struct VotingHandler;
+
+impl VotingHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for VotingHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TxTypeHandler for VotingHandler {
+    fn tx_type(&self) -> TransactionType {
+        TransactionType::Voting
+    }
+    
+    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
+        match tx.subtype {
+            blockchain_types::transaction::SUBTYPE_VOTING_POLL_CREATION |
+            blockchain_types::transaction::SUBTYPE_VOTING_VOTE_CASTING |
+            blockchain_types::transaction::SUBTYPE_VOTING_PHASING_VOTE_CASTING => Ok(()),
+            _ => Err(TxTypeError::InvalidAttachment(format!("invalid voting subtype: {}", tx.subtype))),
+        }
+    }
+    
+    fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        if state.sender_balance < tx.fee {
+            return Err(TxTypeError::InvalidAmount(state.sender_balance));
+        }
+        
+        state.sender_balance -= tx.fee;
+        
+        Ok(())
+    }
+    
+    fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        state.sender_balance += tx.fee;
+        Ok(())
+    }
+}
+
+pub struct AccountControlHandler;
+
+impl AccountControlHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for AccountControlHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TxTypeHandler for AccountControlHandler {
+    fn tx_type(&self) -> TransactionType {
+        TransactionType::AccountControl
+    }
+    
+    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
+        match tx.subtype {
+            blockchain_types::transaction::SUBTYPE_ACCOUNT_CONTROL_EFFECTIVE_BALANCE_LEASING |
+            blockchain_types::transaction::SUBTYPE_ACCOUNT_CONTROL_PHASING_ONLY => Ok(()),
+            _ => Err(TxTypeError::InvalidAttachment(format!("invalid account control subtype: {}", tx.subtype))),
+        }
+    }
+    
+    fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        if state.sender_balance < tx.fee {
+            return Err(TxTypeError::InvalidAmount(state.sender_balance));
+        }
+        
+        state.sender_balance -= tx.fee;
+        
+        Ok(())
+    }
+    
+    fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        state.sender_balance += tx.fee;
+        Ok(())
+    }
+}
+
 pub struct TxTypeRegistry {
     handlers: std::collections::HashMap<TransactionType, Box<dyn TxTypeHandler>>,
 }
@@ -390,6 +576,10 @@ impl TxTypeRegistry {
         handlers.insert(TransactionType::LightContract, Box::new(LightContractHandler::new()));
         handlers.insert(TransactionType::Messaging, Box::new(MessagingHandler::new()));
         handlers.insert(TransactionType::Data, Box::new(DataHandler::new()));
+        handlers.insert(TransactionType::DigitalGoods, Box::new(DigitalGoodsHandler::new()));
+        handlers.insert(TransactionType::MonetarySystem, Box::new(MonetaryHandler::new()));
+        handlers.insert(TransactionType::Voting, Box::new(VotingHandler::new()));
+        handlers.insert(TransactionType::AccountControl, Box::new(AccountControlHandler::new()));
         
         Self { handlers }
     }
