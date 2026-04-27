@@ -1,0 +1,171 @@
+//! Block reward application logic
+//!
+//! Implements Block.apply() from Java NRCS:
+//! - Distribute block rewards to generator
+//! - Handle back fees distribution
+//! - Update forged_balance
+
+use std::sync::Arc;
+
+use blockchain_types::prelude::{Block, AccountId};
+use orm::{AccountRepository, BlockRepository, PublicKeyRepository};
+use tracing::{debug, info};
+
+/// Block reward applicator (corresponds to Java's Block.apply())
+pub struct BlockRewardApplicator {
+    account_repo: Arc<dyn AccountRepository>,
+    block_repo: Arc<dyn BlockRepository>,
+    public_key_repo: Arc<dyn PublicKeyRepository>,
+}
+
+impl BlockRewardApplicator {
+    pub fn new(
+        account_repo: Arc<dyn AccountRepository>,
+        block_repo: Arc<dyn BlockRepository>,
+        public_key_repo: Arc<dyn PublicKeyRepository>,
+    ) -> Self {
+        Self { account_repo, block_repo, public_key_repo }
+    }
+
+    /// Apply block rewards (Java: Block.apply())
+    ///
+    /// Core logic:
+    /// 1. Get or create generator account
+    /// 2. Bind public key if first appearance
+    /// 3. Calculate and distribute Back Fees
+    /// 4. Distribute net fees to current generator
+    /// 5. Update forged_balance
+    pub async fn apply_block_rewards(&self, block: &Block) -> anyhow::Result<()> {
+        let generator_id = block.get_generator_id();
+
+        debug!("Applying block rewards for height={}, generator={}", block.height, generator_id);
+
+        // Step 1: Ensure generator account exists
+        self.ensure_generator_account(generator_id).await?;
+
+        // Step 2: Bind public key (first-time accounts)
+        if let Some(ref pk) = block.generator_public_key {
+            self.bind_public_key(generator_id, pk).await?;
+        }
+
+        // Step 3: Calculate and distribute Back Fees
+        let total_back_fees = self.calculate_and_distribute_back_fees(block).await?;
+
+        // Step 4: Distribute net fees to current generator
+        let total_fee = block.total_fee as i64;
+        let net_fee = total_fee.checked_sub(total_back_fees)
+            .ok_or_else(|| anyhow::anyhow!("fee underflow: {} - {}", total_fee, total_back_fees))?;
+
+        self.account_repo.add_to_balance_and_unconfirmed(
+            generator_id as i64,
+            net_fee
+        ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+        // Step 5: Update forged_balance
+        self.account_repo.add_to_forged_balance(
+            generator_id as i64,
+            net_fee
+        ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+        info!(
+            "Block reward applied: height={}, generator={}, net_fee={}, back_fees={}",
+            block.height, generator_id, net_fee, total_back_fees
+        );
+
+        Ok(())
+    }
+
+    /// Ensure generator account exists (create if not)
+    async fn ensure_generator_account(&self, account_id: AccountId) -> anyhow::Result<()> {
+        match self.account_repo.find_by_account_id(account_id as i64).await {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => {
+                debug!("Creating new generator account: {}", account_id);
+                let _ = self.account_repo.get_or_create(account_id as i64).await
+                    .map_err(|e| anyhow::anyhow!("failed to create account: {}", e))?;
+                Ok(())
+            }
+            Err(e) => Err(anyhow::anyhow!("database error: {}", e))
+        }
+    }
+
+    /// Bind public key to account (for first-time appearing accounts)
+    async fn bind_public_key(&self, account_id: AccountId, public_key: &[u8; 32]) -> anyhow::Result<()> {
+        use blockchain_types::account_ext::AccountPublicKey;
+
+        // Check if public key already exists
+        match self.public_key_repo.find_latest_by_account_id(account_id as i64).await {
+            Ok(Some(existing_pk)) => {
+                if existing_pk.public_key.is_empty() || existing_pk.public_key == *public_key {
+                    return Ok(());
+                }
+                debug!("Public key already bound for account {}", account_id);
+                Ok(())
+            }
+            Ok(None) => {
+                debug!("Binding public key to account {}", account_id);
+                let pk_model = AccountPublicKey {
+                    account_id: account_id as AccountId,
+                    public_key: *public_key,
+                    height: 0,
+                };
+                self.public_key_repo.insert(&pk_model).await
+                    .map_err(|e| anyhow::anyhow!("failed to bind public key: {}", e))
+            }
+            Err(e) => Err(anyhow::anyhow!("database error: {}", e))
+        }
+    }
+
+    /// Calculate and distribute Back Fees to previous 3 blocks' generators
+    ///
+    /// Reference: Java Transaction.getBackFees()
+    /// - Returns [long_3] array of back fees for previous 1-3 blocks
+    /// - Only active after SHUFFLING_BLOCK (300000)
+    async fn calculate_and_distribute_back_fees(&self, block: &Block) -> anyhow::Result<i64> {
+        const SHUFFLING_BLOCK: u32 = 300_000;  // Reference: Java Constant.SHUFFLING_BLOCK
+
+        if block.height <= SHUFFLING_BLOCK {
+            return Ok(0);
+        }
+
+        // TODO: Extract actual back fees from transaction attachments
+        // For now, simplified version returns 0
+        // Future implementation should call transaction.getBackFees()
+        let back_fees = [0i64; 3];
+        let mut total_back_fees = 0i64;
+
+        for (i, &fee) in back_fees.iter().enumerate() {
+            if fee == 0 { break; }
+
+            total_back_fees += fee;
+
+            let target_height = (block.height as i32) - (i as i32) - 1;
+
+            if let Some(prev_block) = self.block_repo
+                .find_by_height(target_height).await
+                .map_err(|e| anyhow::anyhow!("db error: {}", e))?
+            {
+                let prev_generator_id = prev_block.generator_id as u64;
+
+                debug!(
+                    "Back fees {} to generator at height {}: {}",
+                    fee, target_height, prev_generator_id
+                );
+
+                self.account_repo.add_to_balance_and_unconfirmed(
+                    prev_generator_id as i64,
+                    fee
+                ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                self.account_repo.add_to_forged_balance(
+                    prev_generator_id as i64,
+                    fee
+                ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
+            } else {
+                debug!("Previous block not found at height {}", target_height);
+            }
+        }
+
+        Ok(total_back_fees)
+    }
+}

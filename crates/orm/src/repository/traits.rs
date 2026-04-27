@@ -72,11 +72,12 @@ pub trait AccountRepository: Repository<AccountModel> {
     async fn find_latest_by_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>>;
     async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<AccountModel>>;
     async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()>;
-    
+
     async fn get_or_create(&self, account_id: i64) -> RepositoryResult<AccountModel>;
     async fn add_to_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
     async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
     async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
+    async fn add_to_forged_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
     async fn get_account_count(&self) -> RepositoryResult<i64>;
 }
 

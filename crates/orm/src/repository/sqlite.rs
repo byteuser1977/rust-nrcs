@@ -657,6 +657,38 @@ impl AccountRepository for SqliteAccountRepository {
             .map_err(RepositoryError::DbError)?;
         Ok(count)
     }
+
+    async fn add_to_forged_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+        let result = sqlx::query(
+            r#"
+            UPDATE account
+            SET forged_balance = forged_balance + ?
+            WHERE id = ? AND latest = 1
+            "#,
+        )
+        .bind(amount)
+        .bind(account_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+
+        if result.rows_affected() == 0 {
+            let _account = self.get_or_create(account_id).await?;
+            sqlx::query(
+                r#"
+                UPDATE account
+                SET forged_balance = forged_balance + ?
+                WHERE id = ? AND latest = 1
+                "#,
+            )
+            .bind(amount)
+            .bind(account_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -1085,6 +1117,22 @@ impl PublicKeyRepository for SqlitePublicKeyRepository {
             }
         }
         Ok(None)
+    }
+
+    async fn insert(&self, pk: &AccountPublicKey) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO public_key (account_id, public_key, height)
+            VALUES (?, ?, ?)
+            "#,
+        )
+        .bind(pk.account_id as i64)
+        .bind(pk.public_key.to_vec())
+        .bind(pk.height as i64)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 }
 

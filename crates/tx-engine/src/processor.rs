@@ -11,7 +11,7 @@ use std::sync::Arc;
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
 use blockchain_types::prelude::Account;
-use orm::{AccountRepository, AccountAssetRepository, TransactionRepository, PublicKeyRepository, RepositoryError, TransactionModel};
+use orm::{AccountRepository, AccountAssetRepository, TransactionRepository, RepositoryError, TransactionModel};
 use thiserror::Error;
 
 use crate::types::{TxReceiptInfo, TxStatus};
@@ -42,6 +42,15 @@ pub type ProcessorResult<T> = std::result::Result<T, ProcessorError>;
 #[async_trait]
 pub trait TransactionProcessor: Send + Sync {
     async fn validate(&self, tx: &Transaction) -> ProcessorResult<()>;
+
+    /// Phase 1: Pre-deduct (double-spend detection)
+    /// Returns false if double-spending detected (insufficient unconfirmed balance)
+    async fn apply_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<bool>;
+
+    /// Rollback pre-deduction
+    async fn rollback_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<()>;
+
+    /// Phase 2: Execute transaction officially
     async fn apply(&self, tx: &Transaction) -> ProcessorResult<()>;
     async fn execute(&self, tx: &Transaction) -> ProcessorResult<TxReceiptInfo>;
 
@@ -67,8 +76,6 @@ pub struct DatabaseTransactionProcessor {
     #[allow(dead_code)]
     account_asset_repo: Arc<dyn AccountAssetRepository>,
     tx_repo: Arc<dyn TransactionRepository>,
-    #[allow(dead_code)]
-    public_key_repo: Arc<dyn PublicKeyRepository>,
 }
 
 impl DatabaseTransactionProcessor {
@@ -76,13 +83,11 @@ impl DatabaseTransactionProcessor {
         account_repo: Arc<dyn AccountRepository>,
         account_asset_repo: Arc<dyn AccountAssetRepository>,
         tx_repo: Arc<dyn TransactionRepository>,
-        public_key_repo: Arc<dyn PublicKeyRepository>,
     ) -> Self {
         Self {
             account_repo,
             account_asset_repo,
             tx_repo,
-            public_key_repo,
         }
     }
 
@@ -107,6 +112,7 @@ impl DatabaseTransactionProcessor {
         })
     }
 
+    #[allow(dead_code)]
     async fn get_or_create_account(&self, account_id: AccountId) -> ProcessorResult<Account> {
         match self.get_account(account_id).await {
             Ok(account) => Ok(account),
@@ -130,6 +136,7 @@ impl DatabaseTransactionProcessor {
         }
     }
 
+    #[allow(dead_code)]
     async fn update_account_balance(&self, account_id: AccountId, balance: Amount, unconfirmed: Amount) -> ProcessorResult<()> {
         self.account_repo
             .update_balance(account_id as i64, balance as i64, unconfirmed as i64)
@@ -140,6 +147,63 @@ impl DatabaseTransactionProcessor {
 
 #[async_trait]
 impl TransactionProcessor for DatabaseTransactionProcessor {
+    /// Phase 1: Pre-deduct unconfirmed balance (double-spend detection)
+    ///
+    /// Reference: Java TransactionType.applyUnconfirmed()
+    /// - Checks UNCONFIRMED balance (not confirmed balance)
+    /// - Deducts amount + fee from unconfirmed_balance
+    /// - Returns false if insufficient funds (double-spend detected!)
+    async fn apply_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<bool> {
+        let sender_id = tx.sender_id;
+
+        let total = tx.amount.checked_add(tx.fee)
+            .ok_or_else(|| ProcessorError::Validation("amount+fee overflow".to_string()))?;
+
+        let account = self.get_account(sender_id).await?;
+
+        // ✅ Core double-spend check: verify UNCONFIRMED balance
+        // Java uses: senderAccount.getUnconfirmedBalance() < totalAmountNQT
+        if account.unconfirmed_balance < total {
+            tracing::warn!(
+                "Double-spend detected! tx={}, sender={}, have={}, need={}",
+                tx.id, sender_id, account.unconfirmed_balance, total
+            );
+            return Ok(false);  // Double-spend!
+        }
+
+        // Deduct from unconfirmed_balance only
+        let delta = -(total as i64);
+        self.account_repo.add_to_unconfirmed_balance(sender_id as i64, delta).await?;
+
+        tracing::debug!(
+            "Pre-deducted tx={} from sender={}, amount={}",
+            tx.id, sender_id, total
+        );
+
+        Ok(true)
+    }
+
+    /// Rollback pre-deduction (restore unconfirmed balance)
+    async fn rollback_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id;
+
+        let total = tx.amount.checked_add(tx.fee)
+            .ok_or_else(|| ProcessorError::Validation("amount+fee overflow".to_string()))?;
+
+        // Restore unconfirmed balance
+        self.account_repo.add_to_unconfirmed_balance(
+            sender_id as i64,
+            total as i64  // Positive value to restore
+        ).await?;
+
+        tracing::debug!(
+            "Rolled back pre-deduction for tx={}, sender={}",
+            tx.id, sender_id
+        );
+
+        Ok(())
+    }
+
     async fn validate(&self, tx: &Transaction) -> ProcessorResult<()> {
         tx.validate_basic()?;
 
@@ -182,48 +246,61 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         Ok(())
     }
 
+    /// Phase 2: Execute transaction officially (after pre-deduction succeeded)
+    ///
+    /// Reference: Java TransactionType.apply()
+    /// - Deducts from CONFIRMED balance (balance field)
+    /// - unconfirmed_balance already deducted in apply_unconfirmed phase
+    /// - Uses INCREMENTAL updates (not direct value setting)
+    /// - Uses CHECKED arithmetic to prevent silent overflow/underflow
     async fn apply(&self, tx: &Transaction) -> ProcessorResult<()> {
         match tx.type_id {
             TransactionType::Payment => {
                 let sender_id = tx.sender_id;
                 let recipient_id = tx.recipient_id.unwrap_or(0);
 
-                let sender = self.get_account(sender_id).await?;
-                let total = tx.amount + tx.fee;
+                // Calculate total deduction (amount + fee)
+                let total = tx.amount.checked_add(tx.fee)
+                    .ok_or_else(|| ProcessorError::Validation("amount+fee overflow".to_string()))?;
 
-                if sender.balance < total {
-                    return Err(ProcessorError::InsufficientBalance {
-                        have: sender.balance,
-                        need: total,
-                    });
-                }
-
-                let new_balance = sender.balance.saturating_sub(total);
-                let new_unconfirmed = sender.unconfirmed_balance.saturating_sub(total);
-                self.update_account_balance(sender_id, new_balance, new_unconfirmed).await?;
+                // Sender: deduct from BALANCE only
+                // Note: unconfirmed_balance already deducted in apply_unconfirmed()
+                self.account_repo.add_to_balance(
+                    sender_id as i64,
+                    -(total as i64)
+                ).await?;
 
                 if recipient_id != 0 {
-                    let recipient = self.get_or_create_account(recipient_id).await?;
-                    let new_balance = recipient.balance.saturating_add(tx.amount);
-                    let new_unconfirmed = recipient.unconfirmed_balance.saturating_add(tx.amount);
-                    self.update_account_balance(recipient_id, new_balance, new_unconfirmed).await?;
+                    // Ensure recipient account exists
+                    self.account_repo.get_or_create(recipient_id as i64).await?;
+
+                    // Recipient: add to both balance and unconfirmed_balance
+                    self.account_repo.add_to_balance_and_unconfirmed(
+                        recipient_id as i64,
+                        tx.amount as i64
+                    ).await?;
                 }
+
+                tracing::debug!(
+                    "Applied payment tx={}, sender={}, recipient={}, amount={}",
+                    tx.id, sender_id, recipient_id, tx.amount
+                );
             }
 
             TransactionType::ColoredCoins => {
                 let sender_id = tx.sender_id;
-                let account = self.get_account(sender_id).await?;
-                let new_balance = account.balance.saturating_sub(tx.fee);
-                let new_unconfirmed = account.unconfirmed_balance.saturating_sub(tx.fee);
-                self.update_account_balance(sender_id, new_balance, new_unconfirmed).await?;
+
+                // Only deduct fee for colored coins
+                self.account_repo.add_to_balance(sender_id as i64, -(tx.fee as i64)).await?;
+                self.account_repo.add_to_unconfirmed_balance(sender_id as i64, -(tx.fee as i64)).await?;
             }
 
             TransactionType::LightContract => {
                 let sender_id = tx.sender_id;
-                let account = self.get_account(sender_id).await?;
-                let new_balance = account.balance.saturating_sub(tx.fee);
-                let new_unconfirmed = account.unconfirmed_balance.saturating_sub(tx.fee);
-                self.update_account_balance(sender_id, new_balance, new_unconfirmed).await?;
+
+                // Only deduct fee for smart contract
+                self.account_repo.add_to_balance(sender_id as i64, -(tx.fee as i64)).await?;
+                self.account_repo.add_to_unconfirmed_balance(sender_id as i64, -(tx.fee as i64)).await?;
             }
 
             _ => {}

@@ -21,6 +21,7 @@ use p2p::{
     Handler,
     daemon::BlockchainSyncDaemon,
     config::P2PConfig as GlobalP2PConfig,
+    block_apply::BlockRewardApplicator,
 };
 
 use config::{Config, File, Environment};
@@ -197,12 +198,8 @@ async fn main() -> Result<()> {
                 &*ledger_repo,
             ).await.context("Failed to create genesis block")?;
             info!("Genesis block ensured");
-            
-            let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(
-                BlockchainVerifier::new(Arc::clone(&block_repo), Arc::clone(&tx_repo))
-            );
-            
-            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, account_repo, public_key_repo, block_verifier).await
+
+            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, account_repo, public_key_repo).await
         }
     }
 }
@@ -216,15 +213,30 @@ async fn start_node(
     account_asset_repo: Arc<dyn AccountAssetRepository>,
     account_repo: Arc<dyn AccountRepository>,
     public_key_repo: Arc<dyn PublicKeyRepository>,
-    block_verifier: Arc<dyn p2p::handlers::BlockVerifier>,
 ) -> Result<()> {
     // 创建交易处理器
     let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
         Arc::clone(&account_repo),
         Arc::clone(&account_asset_repo),
         Arc::clone(&tx_repo),
+    ));
+
+    // 创建区块奖励应用器
+    let block_reward_applicator = Arc::new(BlockRewardApplicator::new(
+        Arc::clone(&account_repo),
+        Arc::clone(&block_repo),
         Arc::clone(&public_key_repo),
     ));
+
+    // 创建区块验证器（包含完整的两阶段提交逻辑）
+    let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(
+        BlockchainVerifier::new(
+            Arc::clone(&block_repo),
+            Arc::clone(&tx_repo),
+            Arc::clone(&tx_processor),
+            Arc::clone(&block_reward_applicator),
+        )
+    );
 
     // 解析本机 P2P 地址
     let listen_addr: SocketAddr = cfg.p2p_listen_addr()?;
@@ -307,7 +319,10 @@ async fn start_node(
 
     // 启动 HTTP API 服务器
     // 创建账户存储
-    let account_store: Arc<dyn AccountStore> = Arc::new(PgAccountStore::new(Arc::clone(&account_repo)));
+    let account_store: Arc<dyn AccountStore> = Arc::new(PgAccountStore::new(
+        Arc::clone(&account_repo),
+        Arc::clone(&public_key_repo),
+    ));
     
     // 创建账户管理器
     let account_config = AccountConfig::default();

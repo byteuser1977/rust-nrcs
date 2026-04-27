@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use sqlx::PgPool;
 
-use crate::RepositoryResult;
+use crate::{RepositoryResult, RepositoryError};
 use blockchain_types::account_ext::AccountPublicKey;
 use blockchain_types::prelude::*;
 
@@ -12,6 +12,9 @@ use blockchain_types::prelude::*;
 pub trait PublicKeyRepository: Send + Sync {
     /// Get the latest public key for an account.
     async fn find_latest_by_account_id(&self, account_id: i64) -> RepositoryResult<Option<AccountPublicKey>>;
+
+    /// Insert a new public key record.
+    async fn insert(&self, pk: &AccountPublicKey) -> RepositoryResult<()>;
 }
 
 /// PostgreSQL implementation of PublicKeyRepository.
@@ -50,5 +53,18 @@ impl PublicKeyRepository for PgPublicKeyRepository {
             }
         }
         Ok(None)
+    }
+
+    async fn insert(&self, pk: &AccountPublicKey) -> RepositoryResult<()> {
+        sqlx::query(
+            "INSERT INTO public_key (account_id, public_key, height) VALUES ($1, $2, $3)"
+        )
+        .bind(pk.account_id as i64)
+        .bind(pk.public_key.to_vec())
+        .bind(pk.height as i64)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 }

@@ -13,6 +13,7 @@ pub mod manager;
 pub mod blacklist;
 pub mod verifier;
 pub mod noop_verifier;
+pub mod block_apply;
 
 #[cfg(test)]
 mod protocol_test;

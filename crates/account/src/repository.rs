@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use std::sync::Arc;
 
 use blockchain_types::*;
-use orm::{AccountModel, AccountRepository, RepositoryResult};
-use blockchain_types::prelude::Account;
+use orm::{AccountModel, AccountRepository, PublicKeyRepository, RepositoryResult};
+use blockchain_types::account_ext::AccountPublicKey;
 
 /// 账户存储 trait（用于 AccountManager 依赖注入）
 #[async_trait]
@@ -22,36 +22,39 @@ pub trait AccountStore: Send + Sync {
 /// 基于数据库的账户存储实现
 pub struct PgAccountStore {
     account_repo: Arc<dyn AccountRepository>,
+    public_key_repo: Arc<dyn PublicKeyRepository>,
 }
 
 impl PgAccountStore {
-    pub fn new(account_repo: Arc<dyn AccountRepository>) -> Self {
-        Self { account_repo }
+    pub fn new(account_repo: Arc<dyn AccountRepository>, public_key_repo: Arc<dyn PublicKeyRepository>) -> Self {
+        Self { account_repo, public_key_repo }
     }
 }
 
 #[async_trait]
 impl AccountStore for PgAccountStore {
     async fn get_or_create_account(&self, account_id: AccountId, public_key: Vec<u8>) -> RepositoryResult<AccountModel> {
-        // 尝试查询
         if let Some(account) = self.account_repo.find_by_account_id(account_id as i64).await? {
-            // 如果已有公钥，直接返回
-            // 注意：AccountModel 中没有 public_key 字段，这里暂时跳过更新
             if !public_key.is_empty() {
-                // TODO: 考虑添加 public_key 字段到 AccountModel
+                if let Ok(None) = self.public_key_repo.find_latest_by_account_id(account_id as i64).await {
+                    let mut pk_bytes = [0u8; 32];
+                    pk_bytes.copy_from_slice(&public_key[..32.min(public_key.len())]);
+                    let pk_model = AccountPublicKey {
+                        account_id: account_id as AccountId,
+                        public_key: pk_bytes,
+                        height: 0,
+                    };
+                    let _ = self.public_key_repo.insert(&pk_model).await;
+                }
             }
             return Ok(account);
         }
 
-        // 创建新账户
-        let account = Account::new(account_id, 0);
-        // 注意：AccountModel 中没有 public_key 字段，这里暂时跳过设置
-        // 直接创建 AccountModel 实例
         let model = AccountModel {
             db_id: 0,
-            id: account.id as i64,
-            balance: account.balance as i64,
-            unconfirmed_balance: account.unconfirmed_balance as i64,
+            id: account_id as i64,
+            balance: 0,
+            unconfirmed_balance: 0,
             forged_balance: 0,
             active_lessee_id: None,
             has_control_phasing: false,
@@ -60,6 +63,25 @@ impl AccountStore for PgAccountStore {
         };
 
         self.account_repo.insert(&model).await?;
+
+        if !public_key.is_empty() {
+            let mut pk_bytes = [0u8; 32];
+            pk_bytes.copy_from_slice(&public_key[..32.min(public_key.len())]);
+            let pk_model = AccountPublicKey {
+                account_id: account_id as AccountId,
+                public_key: pk_bytes,
+                height: 0,
+            };
+            let _ = self.public_key_repo.insert(&pk_model).await;
+        } else {
+            let pk_model = AccountPublicKey {
+                account_id: account_id as AccountId,
+                public_key: [0u8; 32],
+                height: 0,
+            };
+            let _ = self.public_key_repo.insert(&pk_model).await;
+        }
+
         Ok(model)
     }
 
