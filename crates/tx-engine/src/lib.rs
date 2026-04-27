@@ -23,6 +23,8 @@ pub mod restrictions;
 pub mod phasing;
 pub mod shuffler;
 pub mod scheduler;
+pub mod bundler;
+pub mod monitor;
 
 pub use types::{TxPriority, TxReceiptInfo, TxStatus};
 pub use attachment::{
@@ -67,6 +69,15 @@ pub use shuffler::{
 };
 pub use scheduler::{
     TransactionScheduler, SchedulerError, ScheduledTransaction,
+};
+pub use bundler::{
+    Bundler, BundlerError, BundlerRate, BundlerRule,
+    FeeCalculator, MinFeeCalculator, ProportionalFeeCalculator,
+    BundlerFilter,
+};
+pub use monitor::{
+    FundingMonitor, FundingMonitorService, HoldingType,
+    MonitoredAccount,
 };
 
 pub mod prelude {

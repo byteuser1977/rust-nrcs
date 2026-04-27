@@ -7,9 +7,11 @@ pub mod referenced;
 pub mod feedback;
 pub mod hub;
 pub mod listener;
+pub mod restore_prunable;
 
 pub use prunable::PrunableTransaction;
 pub use referenced::ReferencedTransaction;
 pub use feedback::PurchaseFeedback;
 pub use hub::Hub;
 pub use listener::{TransactionEvent, TransactionListener};
+pub use restore_prunable::{RestorePrunableDataTask, PrunableDataService, PrunableTransactionInfo};
