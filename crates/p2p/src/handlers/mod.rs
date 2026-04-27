@@ -50,7 +50,7 @@ pub trait BlockVerifier: Send + Sync {
     
     async fn get_height(&self) -> Result<u32>;
     
-    async fn get_cumulative_difficulty(&self) -> Result<u128>;
+    async fn get_cumulative_difficulty(&self) -> Result<String>;
 }
 
 pub struct Handler {

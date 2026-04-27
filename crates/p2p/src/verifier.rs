@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tracing::{info, debug, warn};
 
 use blockchain_types::prelude::*;
-use blockchain_types::block::{Block, PreviousBlockData, calculate_base_target_and_cumulative_difficulty, INITIAL_BASE_TARGET, biguint_to_signed_bytes_be};
+use blockchain_types::block::{Block, PreviousBlockData, calculate_base_target_and_cumulative_difficulty, INITIAL_BASE_TARGET, biguint_to_signed_bytes_be, signed_bytes_be_to_biguint};
 use blockchain_types::transaction::Transaction;
 
 use crate::handlers::BlockVerifier;
@@ -159,21 +159,21 @@ impl BlockVerifier for BlockchainVerifier {
                 Ok(None) => {
                     warn!("Previous block at height {} not found, using default base_target", prev_height);
                     block.base_target = INITIAL_BASE_TARGET;
-                    let two64 = num_bigint::BigUint::from(u128::MAX) + 1u128;
+                    let two64 = num_bigint::BigUint::from(18446744073709551616u128);
                     let diff_add = two64 / num_bigint::BigUint::from(INITIAL_BASE_TARGET);
                     block.cumulative_difficulty = biguint_to_signed_bytes_be(diff_add);
                 }
                 Err(e) => {
                     warn!("Error finding previous block at height {}: {}", prev_height, e);
                     block.base_target = INITIAL_BASE_TARGET;
-                    let two64 = num_bigint::BigUint::from(u128::MAX) + 1u128;
+                    let two64 = num_bigint::BigUint::from(18446744073709551616u128);
                     let diff_add = two64 / num_bigint::BigUint::from(INITIAL_BASE_TARGET);
                     block.cumulative_difficulty = biguint_to_signed_bytes_be(diff_add);
                 }
             }
         } else {
             block.base_target = INITIAL_BASE_TARGET;
-            let two64 = num_bigint::BigUint::from(u128::MAX) + 1u128;
+            let two64 = num_bigint::BigUint::from(18446744073709551616u128);
             let diff_add = two64 / num_bigint::BigUint::from(INITIAL_BASE_TARGET);
             block.cumulative_difficulty = biguint_to_signed_bytes_be(diff_add);
         }
@@ -222,7 +222,7 @@ impl BlockVerifier for BlockchainVerifier {
     }
 
     async fn get_block_height(&self, block_id: u64) -> anyhow::Result<Option<u32>> {
-        match self.block_repo.find_by_id(block_id as i64).await {
+        match self.block_repo.find_by_id_column(block_id as i64).await {
             Ok(Some(block)) => Ok(Some(block.height as u32)),
             Ok(None) => Ok(None),
             Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
@@ -237,23 +237,14 @@ impl BlockVerifier for BlockchainVerifier {
         }
     }
 
-    async fn get_cumulative_difficulty(&self) -> anyhow::Result<u128> {
+    async fn get_cumulative_difficulty(&self) -> anyhow::Result<String> {
         match self.block_repo.find_latest().await {
             Ok(Some(block)) => {
                 let bytes = &block.cumulative_difficulty;
-                if bytes.len() >= 16 {
-                    let mut arr = [0u8; 16];
-                    arr.copy_from_slice(&bytes[bytes.len()-16..]);
-                    Ok(u128::from_be_bytes(arr))
-                } else if bytes.is_empty() {
-                    Ok(0)
-                } else {
-                    let mut arr = [0u8; 16];
-                    arr[16-bytes.len()..].copy_from_slice(bytes);
-                    Ok(u128::from_be_bytes(arr))
-                }
+                let biguint = signed_bytes_be_to_biguint(bytes);
+                Ok(biguint.to_string())
             }
-            Ok(None) => Ok(0),
+            Ok(None) => Ok("0".to_string()),
             Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
         }
     }
@@ -307,7 +298,7 @@ impl BlockVerifier for NoOpBlockVerifier {
         Ok(0)
     }
 
-    async fn get_cumulative_difficulty(&self) -> anyhow::Result<u128> {
-        Ok(0)
+    async fn get_cumulative_difficulty(&self) -> anyhow::Result<String> {
+        Ok("0".to_string())
     }
 }

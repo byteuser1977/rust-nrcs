@@ -194,7 +194,7 @@ pub fn calculate_base_target_and_cumulative_difficulty(
     };
     
     let prev_cum_diff = signed_bytes_be_to_biguint(&previous_block.cumulative_difficulty);
-    let two64 = num_bigint::BigUint::from(u128::MAX) + 1u128;
+    let two64 = num_bigint::BigUint::from(18446744073709551616u128);
     let base_target_big = num_bigint::BigUint::from(base_target);
     let diff_add = two64 / base_target_big;
     let new_cum_diff = prev_cum_diff + diff_add;

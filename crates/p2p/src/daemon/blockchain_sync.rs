@@ -292,11 +292,33 @@ impl BlockchainSyncDaemon {
         let peer_cumulative_difficulty = cumulative_difficulty.unwrap();
 
         let local_cumulative_difficulty = block_verifier.get_cumulative_difficulty().await
-            .unwrap_or_default();
+            .unwrap_or_else(|_| "0".to_string());
         
-        if peer_cumulative_difficulty <= local_cumulative_difficulty {
+        debug!("Comparing difficulties: peer={} (len={}) vs local={} (len={})", 
+               peer_cumulative_difficulty, peer_cumulative_difficulty.len(),
+               local_cumulative_difficulty, local_cumulative_difficulty.len());
+        
+        // 使用字符串长度和字典序比较 BigInteger 值
+        fn compare_bigint_strings(a: &str, b: &str) -> std::cmp::Ordering {
+            let a_len = a.len();
+            let b_len = b.len();
+            if a_len != b_len {
+                a_len.cmp(&b_len)
+            } else {
+                a.cmp(b)
+            }
+        }
+
+        let cmp_result = compare_bigint_strings(&peer_cumulative_difficulty, &local_cumulative_difficulty);
+        debug!("Compare result: {:?}", cmp_result);
+        
+        if cmp_result != std::cmp::Ordering::Greater {
             debug!("Peer cumulative difficulty ({}) not higher than local ({})", 
                    peer_cumulative_difficulty, local_cumulative_difficulty);
+            return Ok(0);
+        }
+
+        if peer_cumulative_difficulty == local_cumulative_difficulty {
             return Ok(0);
         }
 
@@ -363,16 +385,13 @@ impl BlockchainSyncDaemon {
 
     async fn get_cumulative_difficulty(
         peer_addr: std::net::SocketAddr,
-    ) -> Result<Option<u128>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
         let request = PeerRequest::new(RequestType::GetCumulativeDifficulty, 1);
 
         match WebsocketClient::send_request(peer_addr, request).await {
             Ok(response) => {
                 if let Some(cumulative_diff) = response.get("cumulativeDifficulty").and_then(|v| v.as_str()) {
-                    match cumulative_diff.parse::<u128>() {
-                        Ok(diff) => Ok(Some(diff)),
-                        Err(_) => Ok(None),
-                    }
+                    Ok(Some(cumulative_diff.to_string()))
                 } else {
                     Ok(None)
                 }
@@ -450,58 +469,65 @@ impl BlockchainSyncDaemon {
         let mut block_list = Vec::new();
         let mut match_id = start_block_id;
 
-        let mut request = PeerRequest::new(RequestType::GetNextBlockIds, 1);
-        request.set("blockId", start_block_id.to_string());
-        request.set("limit", MAX_BLOCKS_LIMIT as i32);
-
         debug!("Requesting block IDs after {} from peer", start_block_id);
 
-        match WebsocketClient::send_request(peer_addr, request).await {
-            Ok(response) => {
-                if let Some(next_block_ids) = response.get("nextBlockIds").and_then(|v| v.as_array()) {
-                    debug!("Received {} block IDs from peer", next_block_ids.len());
-                    
-                    if next_block_ids.is_empty() {
-                        block_list.push(match_id);
-                        return Ok(block_list);
-                    }
+        loop {
+            let mut request = PeerRequest::new(RequestType::GetNextBlockIds, 1);
+            request.set("blockId", match_id.to_string());
+            request.set("limit", MAX_BLOCKS_LIMIT as i32);
 
-                    if next_block_ids.len() > MAX_BLOCKS_LIMIT {
-                        warn!("Peer {} sends too many nextBlockIds ({})", peer_addr, next_block_ids.len());
-                        return Ok(Vec::new());
-                    }
+            match WebsocketClient::send_request(peer_addr, request).await {
+                Ok(response) => {
+                    if let Some(next_block_ids) = response.get("nextBlockIds").and_then(|v| v.as_array()) {
+                        debug!("Received {} block IDs from peer (match_id={})", next_block_ids.len(), match_id);
 
-                    let mut matching = true;
-                    for next_block_id in next_block_ids.iter() {
-                        if let Some(id_str) = next_block_id.as_str() {
-                            if let Ok(block_id) = Self::parse_block_id(id_str) {
-                                if matching {
-                                    if Self::has_block(block_id, block_verifier).await? {
-                                        match_id = block_id;
+                        if next_block_ids.is_empty() {
+                            break;
+                        }
+
+                        if next_block_ids.len() > MAX_BLOCKS_LIMIT {
+                            warn!("Peer {} sends too many nextBlockIds ({})", peer_addr, next_block_ids.len());
+                            return Ok(Vec::new());
+                        }
+
+                        let mut matching = true;
+                        for next_block_id in next_block_ids.iter() {
+                            if let Some(id_str) = next_block_id.as_str() {
+                                if let Ok(block_id) = Self::parse_block_id(id_str) {
+                                    if matching {
+                                        if Self::has_block(block_id, block_verifier).await? {
+                                            match_id = block_id;
+                                        } else {
+                                            block_list.push(match_id);
+                                            block_list.push(block_id);
+                                            matching = false;
+                                        }
                                     } else {
-                                        block_list.push(match_id);
                                         block_list.push(block_id);
-                                        matching = false;
                                     }
-                                } else {
-                                    block_list.push(block_id);
-                                }
-                                if block_list.len() >= MAX_BLOCKS_BATCH {
-                                    break;
+                                    if block_list.len() >= MAX_BLOCKS_BATCH {
+                                        return Ok(block_list);
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if block_list.is_empty() {
-                        block_list.push(match_id);
+                        if !matching {
+                            break;
+                        }
+                    } else {
+                        break;
                     }
                 }
+                Err(e) => {
+                    debug!("Failed to get next block ids: {}", e);
+                    break;
+                }
             }
-            Err(e) => {
-                debug!("Failed to get next block ids: {}", e);
-                block_list.push(match_id);
-            }
+        }
+
+        if block_list.is_empty() {
+            block_list.push(match_id);
         }
 
         Ok(block_list)

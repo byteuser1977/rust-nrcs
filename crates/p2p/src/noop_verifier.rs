@@ -57,7 +57,7 @@ impl BlockVerifier for NoOpBlockVerifier {
         Ok(0)
     }
 
-    async fn get_cumulative_difficulty(&self) -> Result<u128> {
-        Ok(0)
+    async fn get_cumulative_difficulty(&self) -> Result<String> {
+        Ok("0".to_string())
     }
 }
