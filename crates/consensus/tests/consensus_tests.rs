@@ -76,7 +76,7 @@ fn test_forger_selection() {
         Hash256([0u8; 32]),
         1_000_000,
         vec![0u8; 32],
-        Hash512([0u8; 64]),
+        Hash512([0u8; 64]).to_vec(),
         1000,
         accounts,
     );
@@ -116,10 +116,10 @@ fn test_blockchain_state_total_effective_balance() {
         Hash256([0u8; 32]),
         1_000_000,
         vec![0u8; 32],
-        Hash512([0u8; 64]),
+        Hash512([0u8; 64]).to_vec(),
         1000,
         accounts,
     );
-    
+
     assert_eq!(state.total_effective_balance(), 600);
 }

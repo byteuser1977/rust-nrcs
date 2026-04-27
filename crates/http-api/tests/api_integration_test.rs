@@ -94,7 +94,15 @@ impl TransactionProcessor for MockTxProcessor {
     async fn validate(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
         Ok(())
     }
-    
+
+    async fn apply_unconfirmed(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<bool> {
+        Ok(true)
+    }
+
+    async fn rollback_unconfirmed(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
+        Ok(())
+    }
+
     async fn apply(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
         Ok(())
     }
@@ -181,6 +189,18 @@ impl BlockRepository for MockBlockRepository {
     }
 
     async fn get_ids_after(&self, _block_id: i64, _limit: i32) -> RepositoryResult<Vec<i64>> {
+        Ok(vec![])
+    }
+
+    async fn update_next_block_id(&self, _previous_block_id: i64, _next_block_id: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn delete_after_height(&self, _height: i32) -> RepositoryResult<Vec<BlockModel>> {
+        Ok(vec![])
+    }
+
+    async fn find_blocks_after_height(&self, _height: i32) -> RepositoryResult<Vec<BlockModel>> {
         Ok(vec![])
     }
 }
