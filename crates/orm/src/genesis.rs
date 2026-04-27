@@ -1,71 +1,56 @@
 //! Genesis block creation aligned with Java GenesisGenerator.
 
-use sqlx::AnyPool;
 use serde_json::Value;
 use std::fs;
 use chrono::{NaiveDate, FixedOffset, TimeZone};
 use blockchain_types::constants::{GENESIS_BLOCK_ID, INITIAL_BASE_TARGET};
+use crate::models::*;
+use crate::repository::*;
+use crate::RepositoryResult;
 
 /// Load genesis configuration from config/genesis.json.
 /// Returns (timestamp, Vec<(account_id, balance)>)
-fn load_genesis_config() -> sqlx::Result<(i64, Vec<(i64, i64)>)> {
+fn load_genesis_config() -> RepositoryResult<(i64, Vec<(i64, i64)>)> {
     let content = fs::read_to_string("config/genesis.json")
-        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        .map_err(|e| crate::RepositoryError::Io(e))?;
     let json: Value = serde_json::from_str(&content)
-        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        .map_err(|e| crate::RepositoryError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            e.to_string(),
+        )))?;
 
     let time_str = json["genesis_time"].as_str()
-        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "missing genesis_time",
-        ))))?;
+        .ok_or_else(|| crate::RepositoryError::Validation("missing genesis_time".to_string()))?;
 
-    // secret_phrase is optional (Java may prompt separately). Ignored here.
     let _ = json.get("secret_phrase");
 
     let transactions = json["transactions"].as_array()
-        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "missing transactions array",
-        ))))?;
+        .ok_or_else(|| crate::RepositoryError::Validation("missing transactions array".to_string()))?;
 
     // Parse time in GMT+8, format: "yyyy-M-d HH:mm:ss.SSS"
     let timestamp = parse_genesis_time(time_str)?;
 
-    // Parse transactions
-    // Note: Java uses Long.parseUnsignedLong for recipient IDs
-    // We need to handle potentially large unsigned values
     let mut accounts = Vec::new();
     for tx in transactions {
         let recipient = tx["recipient"].as_str()
-            .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "recipient not a string",
-            ))))?;
+            .ok_or_else(|| crate::RepositoryError::Validation("recipient not a string".to_string()))?;
         
-        // Parse as unsigned first, then convert to signed (for database storage)
         let recipient_id: i64 = if recipient.starts_with('-') {
-            // Handle negative string representation of unsigned values
             let unsigned_val: u64 = recipient.parse()
-                .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+                .map_err(|e| crate::RepositoryError::Validation(format!("invalid recipient: {}", e)))?;
             unsigned_val as i64
         } else {
-            // Try parsing as unsigned first (for values > i64::MAX)
             match recipient.parse::<u64>() {
                 Ok(unsigned_val) => unsigned_val as i64,
                 Err(_) => {
-                    // Fall back to signed parsing
                     recipient.parse()
-                        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?
+                        .map_err(|e| crate::RepositoryError::Validation(format!("invalid recipient: {}", e)))?
                 }
             }
         };
         
         let amount = tx["amount"].as_i64()
-            .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "invalid amount",
-            ))))?;
+            .ok_or_else(|| crate::RepositoryError::Validation("invalid amount".to_string()))?;
         accounts.push((recipient_id, amount));
     }
 
@@ -73,94 +58,68 @@ fn load_genesis_config() -> sqlx::Result<(i64, Vec<(i64, i64)>)> {
 }
 
 /// Parse genesis_time string in GMT+8, format "yyyy-M-d HH:mm:ss.SSS"
-fn parse_genesis_time(s: &str) -> sqlx::Result<i64> {
-    // Split date and time
+fn parse_genesis_time(s: &str) -> RepositoryResult<i64> {
     let parts: Vec<&str> = s.split_whitespace().collect();
     if parts.len() != 2 {
-        return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "expected date and time parts",
-        ))));
+        return Err(crate::RepositoryError::Validation("expected date and time parts".to_string()));
     }
 
-    // Date: yyyy-M-d
     let date_fields: Vec<&str> = parts[0].split('-').collect();
     if date_fields.len() != 3 {
-        return Err(sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid date format",
-        ))));
+        return Err(crate::RepositoryError::Validation("invalid date format".to_string()));
     }
     let year = date_fields[0].parse::<i32>()
-        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        .map_err(|e| crate::RepositoryError::Validation(format!("invalid year: {}", e)))?;
     let month = date_fields[1].parse::<u32>()
-        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        .map_err(|e| crate::RepositoryError::Validation(format!("invalid month: {}", e)))?;
     let day = date_fields[2].parse::<u32>()
-        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        .map_err(|e| crate::RepositoryError::Validation(format!("invalid day: {}", e)))?;
 
-    // Time: HH:mm:ss.SSS
     let time_str = parts[1];
     let mut time_parts = time_str.split(':');
     let hour = time_parts.next()
         .and_then(|s| s.parse::<u32>().ok())
-        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid hour",
-        ))))?;
+        .ok_or_else(|| crate::RepositoryError::Validation("invalid hour".to_string()))?;
     let minute = time_parts.next()
         .and_then(|s| s.parse::<u32>().ok())
-        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid minute",
-        ))))?;
+        .ok_or_else(|| crate::RepositoryError::Validation("invalid minute".to_string()))?;
     let sec_ms = time_parts.next()
-        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "missing seconds",
-        ))))?;
+        .ok_or_else(|| crate::RepositoryError::Validation("missing seconds".to_string()))?;
 
     let (second, millisecond) = if let Some((sec, ms)) = sec_ms.split_once('.') {
         let sec = sec.parse::<u32>()
-            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+            .map_err(|e| crate::RepositoryError::Validation(format!("invalid seconds: {}", e)))?;
         let ms = ms.parse::<u32>()
-            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+            .map_err(|e| crate::RepositoryError::Validation(format!("invalid milliseconds: {}", e)))?;
         (sec, ms)
     } else {
         let sec = sec_ms.parse::<u32>()
-            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+            .map_err(|e| crate::RepositoryError::Validation(format!("invalid seconds: {}", e)))?;
         (sec, 0)
     };
 
-    // Build NaiveDateTime
     let ndt = NaiveDate::from_ymd_opt(year, month, day)
         .and_then(|d| d.and_hms_milli_opt(hour, minute, second, millisecond))
-        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid date/time values",
-        ))))?;
+        .ok_or_else(|| crate::RepositoryError::Validation("invalid date/time values".to_string()))?;
 
-    // Convert to GMT+8 timestamp (seconds since epoch)
     let tz = FixedOffset::east_opt(8 * 3600)
-        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid timezone offset",
-        ))))?;
+        .ok_or_else(|| crate::RepositoryError::Validation("invalid timezone offset".to_string()))?;
     let dt = tz.from_local_datetime(&ndt)
         .single()
-        .ok_or_else(|| sqlx::Error::Decode(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "datetime ambiguity or out-of-range",
-        ))))?;
+        .ok_or_else(|| crate::RepositoryError::Validation("datetime ambiguity or out-of-range".to_string()))?;
     Ok(dt.timestamp())
 }
 
 /// Create and insert the genesis block if none exists.
 /// Mirrors Java GenesisGenerator logic but without secret phrase requirement.
-pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM block")
-        .fetch_one(pool)
-        .await?;
-    if count.0 > 0 {
+pub async fn ensure_genesis(
+    block_repo: &dyn BlockRepository,
+    account_repo: &dyn AccountRepository,
+    tx_repo: &dyn TransactionRepository,
+    ledger_repo: &dyn AccountLedgerRepository,
+) -> RepositoryResult<()> {
+    let count = block_repo.count().await?;
+    if count > 0 {
         return Ok(());
     }
 
@@ -176,96 +135,85 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
     
     let block_signature_hex = "47b1aa800d657ccad4aaa8c946b2b0d2a7337fd3ab8e8c9ed6a06a49b7756e04a3ff13b15f6471afdff30313e1c47c4c2ab0e209c78a0673a42c254b74cc0201";
     let block_signature = hex::decode(block_signature_hex)
-        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        .map_err(|e| crate::RepositoryError::Validation(format!("invalid block signature: {}", e)))?;
     
     let payload_hash_hex = "8f58dc2f809613424e608586df83b42513056861a864dff3cd00d88baca681ce";
     let payload_hash = hex::decode(payload_hash_hex)
-        .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+        .map_err(|e| crate::RepositoryError::Validation(format!("invalid payload hash: {}", e)))?;
     
     let generator_id: i64 = 18365787021584764528u64 as i64;
     
     let cumulative_difficulty: Vec<u8> = vec![0u8; 1];
 
-    sqlx::query(
-        r#"
-        INSERT INTO block (
-            id, version, timestamp, previous_block_id, total_amount,
-            total_fee, payload_length, previous_block_hash, cumulative_difficulty,
-            base_target, next_block_id, height, generation_signature,
-            block_signature, payload_hash, generator_id
-        ) VALUES (
-            ?, -1, ?, NULL, ?, 0, ?, NULL, ?, ?, NULL, ?, ?, ?, ?, ?
-        )
-        "#
-    )
-    .bind(block_id)
-    .bind(timestamp)
-    .bind(total_amount)
-    .bind(256i32)
-    .bind(&cumulative_difficulty)
-    .bind(INITIAL_BASE_TARGET as i64)
-    .bind(height)
-    .bind(&generation_signature)
-    .bind(&block_signature)
-    .bind(&payload_hash)
-    .bind(generator_id)
-    .execute(pool)
-    .await?;
+    let block_model = BlockModel {
+        db_id: 0,
+        id: block_id,
+        version: -1,
+        timestamp,
+        previous_block_id: None,
+        total_amount,
+        total_fee: 0,
+        payload_length: 256,
+        previous_block_hash: None,
+        cumulative_difficulty,
+        base_target: INITIAL_BASE_TARGET as i64,
+        next_block_id: None,
+        height,
+        generation_signature,
+        block_signature,
+        payload_hash,
+        generator_id,
+    };
+
+    block_repo.insert(&block_model).await?;
 
     for (account_id, balance) in accounts {
         let balance_nqt = balance * one_nrcs_nqt;
-        sqlx::query(
-            r#"
-            INSERT INTO account (
-                id, balance, unconfirmed_balance, forged_balance,
-                active_lessee_id, has_control_phasing, height, latest
-            ) VALUES (?, ?, ?, 0, NULL, 0, ?, 1)
-            "#
-        )
-        .bind(account_id)
-        .bind(balance_nqt)
-        .bind(balance_nqt)
-        .bind(height)
-        .execute(pool)
-        .await?;
+        
+        let account_model = AccountModel {
+            db_id: 0,
+            id: account_id,
+            balance: balance_nqt,
+            unconfirmed_balance: balance_nqt,
+            forged_balance: 0,
+            active_lessee_id: None,
+            has_control_phasing: false,
+            height,
+            latest: true,
+        };
+        account_repo.insert(&account_model).await?;
 
-        sqlx::query(
-            r#"
-            INSERT INTO account_ledger (
-                account_id, event_type, event_id, holding_type, holding_id,
-                "CHANGE", balance, block_id, height, timestamp
-            ) VALUES (?, 0, 1, 0, NULL, ?, ?, ?, ?, ?)
-            "#
-        )
-        .bind(account_id)
-        .bind(balance_nqt)
-        .bind(balance_nqt)
-        .bind(block_id)
-        .bind(height)
-        .bind(timestamp)
-        .execute(pool)
-        .await?;
+        let ledger_model = AccountLedgerModel {
+            db_id: 0,
+            account_id,
+            event_type: 0,
+            event_id: 1,
+            holding_type: 0,
+            holding_id: None,
+            change: balance_nqt,
+            balance: balance_nqt,
+            block_id,
+            height,
+            timestamp,
+        };
+        ledger_repo.insert(&ledger_model).await?;
     }
 
-    // Insert genesis transactions
-    // Genesis transactions from Java NRCS database
-    // Transaction 1: ID=-6309664432798542337, RECIPIENT=2794603741293765856, AMOUNT=99999999900000000, FEE=100000000
-    // Transaction 2: ID=2830446832482296829, RECIPIENT=-891382425467438890, AMOUNT=100000000, FEE=100000000
     let genesis_tx_ids: Vec<i64> = vec![
-        -6309664432798542337i64,  // First transaction ID
-        2830446832482296829i64,   // Second transaction ID
+        -6309664432798542337i64,
+        2830446832482296829i64,
     ];
     let genesis_recipients: Vec<i64> = vec![
-        2794603741293765856i64,    // First recipient
-        -891382425467438890i64,   // Second recipient
+        2794603741293765856i64,
+        -891382425467438890i64,
     ];
     let genesis_amounts: Vec<i64> = vec![
-        999999999i64 * one_nrcs_nqt, // 999999999 NRCS
-        1i64 * one_nrcs_nqt,        // 1 NRCS
+        999999999i64 * one_nrcs_nqt,
+        1i64 * one_nrcs_nqt,
     ];
     let genesis_fees: Vec<i64> = vec![
-        100000000i64,  // 1 NRCS fee
-        100000000i64,  // 1 NRCS fee
+        100000000i64,
+        100000000i64,
     ];
     let genesis_full_hashes: Vec<&str> = vec![
         "ff5520dfa0916fa8d3dd275b4cde3b6175a8b7599bd9181baeb8d26d67a04b09",
@@ -282,37 +230,43 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
         let amount = genesis_amounts[idx];
         let fee = genesis_fees[idx];
         let full_hash = hex::decode(genesis_full_hashes[idx])
-            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+            .map_err(|e| crate::RepositoryError::Validation(format!("invalid full hash: {}", e)))?;
         let signature = hex::decode(genesis_signatures[idx])
-            .map_err(|e| sqlx::Error::Decode(Box::new(e)))?;
+            .map_err(|e| crate::RepositoryError::Validation(format!("invalid signature: {}", e)))?;
 
-        sqlx::query(
-            r#"
-            INSERT INTO "transaction" (
-                id, deadline, sender_id, recipient_id, amount, fee,
-                height, block_id, block_timestamp, transaction_index, timestamp,
-                full_hash, signature, type, subtype, version,
-                phased, has_message, has_encrypted_message,
-                has_public_key_announcement, ec_block_height, ec_block_id
-            ) VALUES (
-                ?, 1440, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0
-            )
-            "#
-        )
-        .bind(tx_id)
-        .bind(generator_id)  // sender_id is the genesis block generator
-        .bind(recipient_id)
-        .bind(amount)
-        .bind(fee)
-        .bind(height)
-        .bind(block_id)
-        .bind(timestamp)
-        .bind(idx as i16)
-        .bind(timestamp)  // timestamp
-        .bind(&full_hash)
-        .bind(&signature)
-        .execute(pool)
-        .await?;
+        let tx_model = TransactionModel {
+            db_id: 0,
+            id: tx_id,
+            deadline: 1440,
+            recipient_id: Some(recipient_id),
+            amount,
+            fee,
+            full_hash,
+            height,
+            block_id,
+            signature,
+            timestamp,
+            r#type: 0,
+            subtype: 0,
+            sender_id: generator_id,
+            block_timestamp: timestamp,
+            referenced_transaction_full_hash: None,
+            transaction_index: idx as i16,
+            phased: false,
+            attachment_bytes: None,
+            version: 0,
+            has_message: false,
+            has_encrypted_message: false,
+            has_public_key_announcement: false,
+            has_prunable_message: false,
+            has_prunable_attachment: false,
+            ec_block_height: Some(0),
+            ec_block_id: Some(0),
+            has_encrypttoself_message: false,
+            has_prunable_encrypted_message: false,
+        };
+
+        tx_repo.insert(&tx_model).await?;
     }
 
     Ok(())
@@ -321,77 +275,129 @@ pub async fn ensure_genesis(pool: &AnyPool) -> sqlx::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::any::AnyPoolOptions;
+    use sqlx::SqlitePool;
+    use crate::repository::{SqliteBlockRepository, SqliteAccountRepository, SqliteTransactionRepository, SqliteAccountLedgerRepository};
 
-    async fn setup_sqlite_pool() -> sqlx::Result<AnyPool> {
-        let pool = AnyPoolOptions::new()
-            .connect("sqlite::memory:")
-            .await?;
+    async fn setup_repos() -> (
+        SqliteBlockRepository,
+        SqliteAccountRepository,
+        SqliteTransactionRepository,
+        SqliteAccountLedgerRepository,
+    ) {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("Failed to create pool");
         
-        // 创建表结构
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS block (
-                id INTEGER PRIMARY KEY,
-                version INTEGER NOT NULL,
-                timestamp INTEGER NOT NULL,
-                previous_block_id INTEGER,
-                total_amount INTEGER NOT NULL,
-                total_fee INTEGER NOT NULL,
-                payload_length INTEGER NOT NULL,
-                previous_block_hash BLOB,
-                cumulative_difficulty BLOB NOT NULL,
-                base_target INTEGER NOT NULL,
-                next_block_id INTEGER,
-                height INTEGER NOT NULL,
-                generation_signature BLOB,
-                block_signature BLOB,
-                payload_hash BLOB,
-                generator_id INTEGER NOT NULL
+                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                ID INTEGER NOT NULL,
+                VERSION INTEGER NOT NULL,
+                TIMESTAMP INTEGER NOT NULL,
+                PREVIOUS_BLOCK_ID INTEGER,
+                TOTAL_AMOUNT INTEGER NOT NULL,
+                TOTAL_FEE INTEGER NOT NULL,
+                PAYLOAD_LENGTH INTEGER NOT NULL,
+                PREVIOUS_BLOCK_HASH BLOB,
+                CUMULATIVE_DIFFICULTY BLOB NOT NULL,
+                BASE_TARGET INTEGER NOT NULL,
+                NEXT_BLOCK_ID INTEGER,
+                HEIGHT INTEGER NOT NULL,
+                GENERATION_SIGNATURE BLOB,
+                BLOCK_SIGNATURE BLOB,
+                PAYLOAD_HASH BLOB,
+                GENERATOR_ID INTEGER NOT NULL
             )
         "#)
         .execute(&pool)
-        .await?;
+        .await
+        .expect("Failed to create block table");
 
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS account (
-                id INTEGER PRIMARY KEY,
-                balance INTEGER NOT NULL,
-                unconfirmed_balance INTEGER NOT NULL,
-                forged_balance INTEGER NOT NULL,
-                active_lessee_id INTEGER,
-                has_control_phasing INTEGER NOT NULL DEFAULT 0,
-                height INTEGER NOT NULL,
-                latest INTEGER NOT NULL DEFAULT 1
+                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                ID INTEGER NOT NULL,
+                BALANCE INTEGER NOT NULL,
+                UNCONFIRMED_BALANCE INTEGER NOT NULL,
+                FORGED_BALANCE INTEGER NOT NULL,
+                ACTIVE_LESSEE_ID INTEGER,
+                HAS_CONTROL_PHASING INTEGER NOT NULL DEFAULT 0,
+                HEIGHT INTEGER NOT NULL,
+                LATEST INTEGER NOT NULL DEFAULT 1
             )
         "#)
         .execute(&pool)
-        .await?;
+        .await
+        .expect("Failed to create account table");
 
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS account_ledger (
-                account_id INTEGER NOT NULL,
-                event_type INTEGER NOT NULL,
-                event_id INTEGER NOT NULL,
-                holding_type INTEGER NOT NULL,
-                holding_id INTEGER,
+                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                ACCOUNT_ID INTEGER NOT NULL,
+                EVENT_TYPE INTEGER NOT NULL,
+                EVENT_ID INTEGER NOT NULL,
+                HOLDING_TYPE INTEGER NOT NULL,
+                HOLDING_ID INTEGER,
                 "CHANGE" INTEGER NOT NULL,
-                balance INTEGER NOT NULL,
-                block_id INTEGER NOT NULL,
-                height INTEGER NOT NULL,
-                timestamp INTEGER NOT NULL
+                BALANCE INTEGER NOT NULL,
+                BLOCK_ID INTEGER NOT NULL,
+                HEIGHT INTEGER NOT NULL,
+                TIMESTAMP INTEGER NOT NULL
             )
         "#)
         .execute(&pool)
-        .await?;
+        .await
+        .expect("Failed to create account_ledger table");
 
-        Ok(pool)
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS "transaction" (
+                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                ID INTEGER NOT NULL,
+                DEADLINE INTEGER NOT NULL,
+                RECIPIENT_ID INTEGER,
+                AMOUNT INTEGER NOT NULL,
+                FEE INTEGER NOT NULL,
+                FULL_HASH BLOB NOT NULL,
+                HEIGHT INTEGER NOT NULL,
+                BLOCK_ID INTEGER NOT NULL,
+                SIGNATURE BLOB NOT NULL,
+                TIMESTAMP INTEGER NOT NULL,
+                TYPE INTEGER NOT NULL,
+                SUBTYPE INTEGER NOT NULL,
+                SENDER_ID INTEGER NOT NULL,
+                BLOCK_TIMESTAMP INTEGER NOT NULL,
+                REFERENCED_TRANSACTION_FULL_HASH BLOB,
+                TRANSACTION_INDEX INTEGER NOT NULL,
+                PHASED INTEGER NOT NULL DEFAULT 0,
+                ATTACHMENT_BYTES BLOB,
+                VERSION INTEGER NOT NULL DEFAULT 0,
+                HAS_MESSAGE INTEGER NOT NULL DEFAULT 0,
+                HAS_ENCRYPTED_MESSAGE INTEGER NOT NULL DEFAULT 0,
+                HAS_PUBLIC_KEY_ANNOUNCEMENT INTEGER NOT NULL DEFAULT 0,
+                HAS_PRUNABLE_MESSAGE INTEGER NOT NULL DEFAULT 0,
+                HAS_PRUNABLE_ATTACHMENT INTEGER NOT NULL DEFAULT 0,
+                EC_BLOCK_HEIGHT INTEGER,
+                EC_BLOCK_ID INTEGER,
+                HAS_ENCRYPTTOSELF_MESSAGE INTEGER NOT NULL DEFAULT 0,
+                HAS_PRUNABLE_ENCRYPTED_MESSAGE INTEGER NOT NULL DEFAULT 0
+            )
+        "#)
+        .execute(&pool)
+        .await
+        .expect("Failed to create transaction table");
+
+        (
+            SqliteBlockRepository::new(pool.clone()),
+            SqliteAccountRepository::new(pool.clone()),
+            SqliteTransactionRepository::new(pool.clone()),
+            SqliteAccountLedgerRepository::new(pool),
+        )
     }
 
     #[tokio::test]
-    async fn test_genesis_creates_initial_state() -> sqlx::Result<()> {
-        let pool = setup_sqlite_pool().await?;
+    async fn test_genesis_creates_initial_state() {
+        let (block_repo, account_repo, tx_repo, ledger_repo) = setup_repos().await;
         
-        // 创建测试用的 genesis.json 文件
         let genesis_config = r#"{
             "genesis_time": "2024-1-1 00:00:00.000",
             "transactions": [
@@ -400,114 +406,95 @@ mod tests {
             ]
         }"#;
         
-        // 写入临时文件（使用绝对路径）
-        // load_genesis_config 读取 config/genesis.json，所以需要创建 config 子目录
         let temp_dir = std::env::temp_dir().join("nrcs_test_config_1");
         let config_dir = temp_dir.join("config");
         std::fs::create_dir_all(&config_dir).ok();
         let config_path = config_dir.join("genesis.json");
-        std::fs::write(&config_path, genesis_config)?;
+        std::fs::write(&config_path, genesis_config).ok();
         
-        // 临时更改工作目录
         let original_dir = std::env::current_dir().ok();
         std::env::set_current_dir(&temp_dir).ok();
         
-        let result = ensure_genesis(&pool).await;
+        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo).await;
         
-        // 恢复工作目录
         if let Some(dir) = original_dir {
             std::env::set_current_dir(dir).ok();
         }
         
-        result?;
+        result.expect("Genesis creation failed");
         
-        let block_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM block")
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(block_count.0, 1);
+        let count = block_repo.count().await.expect("Failed to count blocks");
+        assert_eq!(count, 1);
 
-        // 清理临时文件
         std::fs::remove_dir_all(&temp_dir).ok();
-        
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_genesis_block_height_is_zero() -> sqlx::Result<()> {
-        let pool = setup_sqlite_pool().await?;
+    async fn test_genesis_block_height_is_zero() {
+        let (block_repo, account_repo, tx_repo, ledger_repo) = setup_repos().await;
         
         let genesis_config = r#"{
             "genesis_time": "2024-1-1 00:00:00.000",
             "transactions": []
         }"#;
         
-        // 写入临时文件（使用绝对路径）
         let temp_dir = std::env::temp_dir().join("nrcs_test_config_2");
         let config_dir = temp_dir.join("config");
         std::fs::create_dir_all(&config_dir).ok();
         let config_path = config_dir.join("genesis.json");
-        std::fs::write(&config_path, genesis_config)?;
+        std::fs::write(&config_path, genesis_config).ok();
         
-        // 临时更改工作目录
         let original_dir = std::env::current_dir().ok();
         std::env::set_current_dir(&temp_dir).ok();
         
-        let result = ensure_genesis(&pool).await;
+        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo).await;
         
-        // 恢复工作目录
         if let Some(dir) = original_dir {
             std::env::set_current_dir(dir).ok();
         }
         
-        result?;
+        result.expect("Genesis creation failed");
         
-        let height: (i32,) = sqlx::query_as("SELECT height FROM block LIMIT 1")
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(height.0, 0, "Genesis block height should be 0");
+        let block = block_repo.find_latest().await.expect("Failed to get latest block");
+        assert!(block.is_some());
+        let block = block.unwrap();
+        assert_eq!(block.height, 0, "Genesis block height should be 0");
 
         std::fs::remove_dir_all(&temp_dir).ok();
-        
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_genesis_base_target() -> sqlx::Result<()> {
-        let pool = setup_sqlite_pool().await?;
+    async fn test_genesis_base_target() {
+        let (block_repo, account_repo, tx_repo, ledger_repo) = setup_repos().await;
         
         let genesis_config = r#"{
             "genesis_time": "2024-1-1 00:00:00.000",
             "transactions": []
         }"#;
         
-        // 写入临时文件（使用绝对路径）
         let temp_dir = std::env::temp_dir().join("nrcs_test_config_3");
         let config_dir = temp_dir.join("config");
         std::fs::create_dir_all(&config_dir).ok();
         let config_path = config_dir.join("genesis.json");
-        std::fs::write(&config_path, genesis_config)?;
+        std::fs::write(&config_path, genesis_config).ok();
         
-        // 临时更改工作目录
         let original_dir = std::env::current_dir().ok();
         std::env::set_current_dir(&temp_dir).ok();
         
-        let result = ensure_genesis(&pool).await;
+        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo).await;
         
-        // 恢复工作目录
         if let Some(dir) = original_dir {
             std::env::set_current_dir(dir).ok();
         }
         
-        result?;
+        result.expect("Genesis creation failed");
         
-        let base_target: (i64,) = sqlx::query_as("SELECT base_target FROM block LIMIT 1")
-            .fetch_one(&pool)
-            .await?;
-        assert_eq!(base_target.0, blockchain_types::constants::INITIAL_BASE_TARGET as i64, 
+        let block = block_repo.find_latest().await.expect("Failed to get latest block");
+        assert!(block.is_some());
+        let block = block.unwrap();
+        assert_eq!(block.base_target, blockchain_types::constants::INITIAL_BASE_TARGET as i64, 
             "Genesis block base_target should be INITIAL_BASE_TARGET");
 
         std::fs::remove_dir_all(&temp_dir).ok();
-        
-        Ok(())
     }
 }

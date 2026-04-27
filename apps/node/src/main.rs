@@ -180,14 +180,6 @@ async fn main() -> Result<()> {
             }
             info!("SQLite migrations completed");
             
-            // 确保创世区块存在
-            let pool_any = sqlx::any::AnyPool::connect(&database_url)
-                .await
-                .context("Failed to connect to SQLite database (AnyPool)")?;
-            orm::genesis::ensure_genesis(&pool_any).await
-                .context("Failed to create genesis block")?;
-            info!("Genesis block ensured");
-            
             // 创建数据库仓库
             let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::SqliteBlockRepository::new(pool.clone()));
             let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::SqliteTransactionRepository::new(pool.clone()));
@@ -195,6 +187,17 @@ async fn main() -> Result<()> {
             let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::SqliteAssetRepository::new(pool.clone()));
             let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::SqliteAccountAssetRepository::new(pool.clone()));
             let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::SqlitePublicKeyRepository::new(pool.clone()));
+            let ledger_repo: Arc<dyn orm::AccountLedgerRepository> = Arc::new(orm::SqliteAccountLedgerRepository::new(pool.clone()));
+            
+            // 确保创世区块存在
+            orm::genesis::ensure_genesis(
+                &*block_repo,
+                &*account_repo,
+                &*tx_repo,
+                &*ledger_repo,
+            ).await.context("Failed to create genesis block")?;
+            info!("Genesis block ensured");
+            
             let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(
                 BlockchainVerifier::new(Arc::clone(&block_repo), Arc::clone(&tx_repo))
             );

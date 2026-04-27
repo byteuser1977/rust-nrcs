@@ -927,3 +927,108 @@ impl PublicKeyRepository for SqlitePublicKeyRepository {
         Ok(None)
     }
 }
+
+pub struct SqliteAccountLedgerRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAccountLedgerRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl AccountLedgerRepository for SqliteAccountLedgerRepository {
+    async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<AccountLedgerModel>> {
+        let records = sqlx::query_as::<_, AccountLedgerModel>(
+            "SELECT * FROM account_ledger WHERE account_id = ? ORDER BY height DESC LIMIT ?"
+        )
+        .bind(account_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<AccountLedgerModel>> {
+        let records = sqlx::query_as::<_, AccountLedgerModel>(
+            "SELECT * FROM account_ledger WHERE block_id = ? ORDER BY height DESC"
+        )
+        .bind(block_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+}
+
+#[async_trait]
+impl Repository<AccountLedgerModel> for SqliteAccountLedgerRepository {
+    async fn insert(&self, ledger: &AccountLedgerModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO account_ledger (
+                account_id, event_type, event_id, holding_type, holding_id,
+                "CHANGE", balance, block_id, height, timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(ledger.account_id)
+        .bind(ledger.event_type)
+        .bind(ledger.event_id)
+        .bind(ledger.holding_type)
+        .bind(ledger.holding_id)
+        .bind(ledger.change)
+        .bind(ledger.balance)
+        .bind(ledger.block_id)
+        .bind(ledger.height)
+        .bind(ledger.timestamp)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountLedgerModel>> {
+        let record = sqlx::query_as::<_, AccountLedgerModel>(
+            "SELECT * FROM account_ledger WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _ledger: &AccountLedgerModel) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("update not implemented for account_ledger".to_string()))
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("delete not implemented for account_ledger".to_string()))
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountLedgerModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as::<_, AccountLedgerModel>(
+            "SELECT * FROM account_ledger ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_ledger")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}

@@ -178,6 +178,309 @@ pub trait BlockRepository: Send + Sync {
 
 ---
 
+## 5.5 ORM 实现规范
+
+### 5.5.1 数据库 Schema 规范
+
+**必须严格遵循 NRCS Java 项目的数据库 Schema**：
+
+- Schema 定义位置：`/mnt/d/workspace/git/nrcs/nrcs-main/resources/db/migration/`
+- Rust 项目迁移脚本：`crates/orm/migrations/001_initial.sql`
+- 字段名使用 `SCREAMING_SNAKE_CASE`（如 `GENERATOR_ID`, `PREVIOUS_BLOCK_ID`）
+- 表名使用大写（如 `BLOCK`, `TRANSACTION`, `ACCOUNT`）
+
+### 5.5.2 Model 层规范
+
+**Model 结构体定义**：
+
+```rust
+#[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
+#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+pub struct BlockModel {
+    pub db_id: i64,
+    pub id: i64,                              // 区块 ID（有符号 i64）
+    pub version: i32,
+    pub timestamp: i32,
+    pub previous_block_id: Option<i64>,
+    pub total_amount: i64,
+    pub total_fee: i64,
+    pub payload_length: i32,
+    pub previous_block_hash: Option<Vec<u8>>,
+    pub cumulative_difficulty: Vec<u8>,
+    pub base_target: i64,
+    pub next_block_id: Option<i64>,
+    pub height: i32,
+    pub generation_signature: Vec<u8>,
+    pub block_signature: Vec<u8>,
+    pub payload_hash: Vec<u8>,
+    pub generator_id: i64,                    // 生成者 ID（有符号 i64）
+}
+```
+
+**关键规则**：
+1. 使用 `#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]` 映射数据库字段
+2. 所有 `BIGINT` 类型映射为 `i64`（有符号）
+3. `BYTEA` 类型映射为 `Vec<u8>` 或 `Option<Vec<u8>>`
+4. 可空字段使用 `Option<T>`
+
+### 5.5.3 数据类型转换规范
+
+**u64 与 i64 转换**：
+
+```rust
+// Java NRCS 使用有符号 long 存储 ID，Rust 需要正确转换
+// u64 -> i64（存储到数据库）
+let signed_id = unsigned_id as i64;
+
+// i64 -> u64（从数据库读取）
+let unsigned_id = signed_id as u64;
+
+// 示例：generator_id 转换
+let generator_id: u64 = 18365787021584764528;
+let db_value: i64 = generator_id as i64;  // = -80957052124787088
+```
+
+**Hash 类型转换**：
+
+```rust
+// Hash256/Hash512 -> Vec<u8>（存储）
+let hash_bytes: Vec<u8> = hash.0.to_vec();
+
+// Vec<u8> -> Hash256/Hash512（读取）
+let hash = Hash256(bytes.as_slice().try_into()
+    .map_err(|_| BlockchainError::InvalidHash("length mismatch".to_string()))?);
+```
+
+**Domain 与 Model 转换**：
+
+```rust
+impl BlockModel {
+    pub fn from_domain(block: &Block) -> Result<Self> {
+        Ok(Self {
+            db_id: 0,
+            id: block.get_id() as i64,
+            generator_id: block.get_generator_id() as i64,
+            previous_block_id: block.previous_block_id
+                .filter(|&id| id != 0)
+                .map(|id| id as i64),
+            // ... 其他字段
+        })
+    }
+
+    pub fn to_domain(&self) -> Result<Block> {
+        Ok(Block {
+            id: Some(self.id as u64),
+            generator_id: Some(self.generator_id as u64),
+            previous_block_id: self.previous_block_id.map(|id| id as u64),
+            // ... 其他字段
+        })
+    }
+}
+```
+
+### 5.5.4 Repository Trait 规范
+
+**基础 Repository Trait**：
+
+```rust
+#[async_trait]
+pub trait Repository<T>: Send + Sync {
+    async fn insert(&self, item: &T) -> RepositoryResult<()>;
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<T>>;
+    async fn update(&self, item: &T) -> RepositoryResult<()>;
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()>;
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<T>>;
+    async fn count(&self) -> RepositoryResult<i64>;
+}
+```
+
+**扩展 Repository Trait**：
+
+```rust
+#[async_trait]
+pub trait BlockRepository: Repository<BlockModel> {
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Option<BlockModel>>;
+    async fn find_by_id_column(&self, id: i64) -> RepositoryResult<Option<BlockModel>>;
+    async fn find_by_hash(&self, hash: &[u8]) -> RepositoryResult<Option<BlockModel>>;
+    async fn find_latest(&self) -> RepositoryResult<Option<BlockModel>>;
+    async fn find_range(&self, start_height: i32, end_height: i32) -> RepositoryResult<Vec<BlockModel>>;
+    async fn find_by_generator(&self, generator_id: i64) -> RepositoryResult<Vec<BlockModel>>;
+    async fn get_height(&self) -> RepositoryResult<i32>;
+    async fn get_block_id_at_height(&self, height: i32) -> RepositoryResult<Option<i64>>;
+    async fn has_block(&self, id: i64) -> RepositoryResult<bool>;
+    async fn get_ids_after(&self, block_id: i64, limit: i32) -> RepositoryResult<Vec<i64>>;
+    async fn update_next_block_id(&self, previous_block_id: i64, next_block_id: i64) -> RepositoryResult<()>;
+}
+```
+
+### 5.5.5 SQLite 实现规范
+
+```rust
+pub struct SqliteBlockRepository {
+    pool: SqlitePool,
+}
+
+#[async_trait]
+impl BlockRepository for SqliteBlockRepository {
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Option<BlockModel>> {
+        let record = sqlx::query_as::<_, BlockModel>(
+            "SELECT * FROM block WHERE height = ?"
+        )
+        .bind(height)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn find_latest(&self) -> RepositoryResult<Option<BlockModel>> {
+        let record = sqlx::query_as::<_, BlockModel>(
+            "SELECT * FROM block ORDER BY height DESC LIMIT 1"
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+}
+```
+
+### 5.5.6 错误处理规范
+
+```rust
+#[derive(Debug, Error)]
+pub enum RepositoryError {
+    #[error("database error: {0}")]
+    DbError(#[from] sqlx::Error),
+    #[error("not found: {0}")]
+    NotFound(String),
+    #[error("duplicate key: {0}")]
+    DuplicateKey(String),
+    #[error("validation error: {0}")]
+    Validation(String),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("blockchain error: {0}")]
+    Blockchain(#[from] blockchain_types::BlockchainError),
+}
+
+pub type RepositoryResult<T> = Result<T, RepositoryError>;
+```
+
+### 5.5.7 JSON 序列化规范（P2P 同步）
+
+**从 Java NRCS 接收的 JSON 格式**：
+
+```json
+{
+    "blockSignature": "hex_string",
+    "generationSignature": "hex_string",
+    "generatorPublicKey": "hex_string",
+    "payloadHash": "hex_string",
+    "previousBlock": "12345678901234567890",
+    "timestamp": 40674,
+    "totalAmountNQT": 0,
+    "totalFeeNQT": 0,
+    "transactions": [],
+    "version": 3
+}
+```
+
+**字段名转换规则**：
+
+| Java JSON 字段 | Rust 字段 | 转换规则 |
+|---------------|----------|---------|
+| `generatorPublicKey` | `generator_public_key` | camelCase → snake_case |
+| `previousBlock` | `previous_block_id` | 字符串转 u64 |
+| `totalAmountNQT` | `total_amount` | camelCase + 去掉 NQT 后缀 |
+| `blockSignature` | `block_signature` | hex string → Hash512 |
+| `generatorPublicKey` | `generator_id` | hex string → SHA256 → 前 8 字节 → u64 |
+
+**generator_id 计算方法**（参考 Java `Account.getId(byte[] publicKey)`）：
+
+```rust
+pub fn account_id_from_public_key(public_key: &[u8; 32]) -> AccountId {
+    use sha2::{Sha256, Digest};
+    let hash = Sha256::digest(public_key);
+    let mut buf = [0u8; 8];
+    buf.copy_from_slice(&hash[..8]);
+    u64::from_le_bytes(buf)  // 小端序
+}
+```
+
+### 5.5.8 Hash 类型序列化规范
+
+**支持 hex string 和 byte array 双向反序列化**：
+
+```rust
+mod hex_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+    
+    pub fn serialize<const N: usize, S>(arr: &[u8; N], serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer {
+        serializer.serialize_str(&hex::encode(arr))
+    }
+    
+    pub fn deserialize<'de, const N: usize, D>(deserializer: D) -> Result<[u8; N], D::Error>
+    where D: Deserializer<'de> {
+        struct HexVisitor<const N: usize>;
+        
+        impl<'de, const N: usize> de::Visitor<'de> for HexVisitor<N> {
+            type Value = [u8; N];
+            
+            fn visit_str<E>(self, value: &str) -> Result<[u8; N], E>
+            where E: de::Error {
+                let bytes = hex::decode(value).map_err(|e| de::Error::custom(format!("invalid hex: {}", e)))?;
+                if bytes.len() != N {
+                    return Err(de::Error::custom(format!("expected {} bytes, got {}", N, bytes.len())));
+                }
+                let mut arr = [0u8; N];
+                arr.copy_from_slice(&bytes);
+                Ok(arr)
+            }
+            
+            fn visit_seq<A>(self, mut seq: A) -> Result<[u8; N], A::Error>
+            where A: de::SeqAccess<'de> {
+                let mut arr = [0u8; N];
+                for i in 0..N {
+                    arr[i] = seq.next_element()?.ok_or_else(|| de::Error::invalid_length(i, &self))?;
+                }
+                Ok(arr)
+            }
+        }
+        deserializer.deserialize_any(HexVisitor::<N>)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Hash256(pub [u8; 32]);
+
+impl Serialize for Hash256 {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer {
+        hex_serde::serialize::<32, S>(&self.0, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Hash256 {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where D: Deserializer<'de> {
+        Ok(Hash256(hex_serde::deserialize::<32, D>(deserializer)?))
+    }
+}
+```
+
+### 5.5.9 开发注意事项
+
+1. **严格参考 Java 实现**：所有数据库操作逻辑必须参考 NRCS Java 项目
+2. **Schema 一致性**：不得修改数据库 Schema，必须与 Java 版本完全一致
+3. **类型转换**：注意 u64/i64 的正确转换，Java 使用有符号 long
+4. **字段映射**：使用 `#[serde(alias = "camelCase")]` 支持 JSON 字段名映射
+5. **可选字段**：使用 `Option<T>` 和 `#[serde(default)]` 处理缺失字段
+6. **测试覆盖**：Model 转换必须有单元测试覆盖
+
+---
+
 ## 6. 测试规范
 
 | 模块 | 最低覆盖率 |
@@ -200,4 +503,4 @@ pub trait BlockRepository: Send + Sync {
 
 ---
 
-**版本**：v2.2 | **日期**：2026-04-25
+**版本**：v2.4 | **日期**：2026-04-25

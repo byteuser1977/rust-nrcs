@@ -4,23 +4,22 @@ use std::sync::Arc;
 
 use blockchain_types::prelude::*;
 use blockchain_types::consensus::{BlockchainState, AccountSnapshot};
-use orm::{BlockRepository, BlockModel};
+use orm::{BlockRepository, BlockModel, AccountRepository, PublicKeyRepository};
 use tx_engine::TransactionProcessor;
 use account::AccountManager;
 use chrono::Utc;
 use tracing::info;
-use sqlx::PgPool;
 use num_bigint::BigUint;
 use num_traits::{Zero, ToPrimitive};
 
 pub struct ChainService {
     block_repo: Arc<dyn BlockRepository>,
     tx_repo: Arc<dyn orm::TransactionRepository>,
+    account_repo: Arc<dyn AccountRepository>,
+    public_key_repo: Arc<dyn PublicKeyRepository>,
     tx_processor: Arc<dyn TransactionProcessor>,
     account_manager: Arc<dyn AccountManager>,
-    db_pool: PgPool,
     current_height: Arc<tokio::sync::Mutex<Height>>,
-    // Consensus engine for difficulty and block reward
     consensus: Arc<dyn consensus::ConsensusEngine + Send + Sync>,
     block_reward: Amount,
 }
@@ -29,18 +28,20 @@ impl ChainService {
     pub fn new(
         block_repo: Arc<dyn BlockRepository>,
         tx_repo: Arc<dyn orm::TransactionRepository>,
+        account_repo: Arc<dyn AccountRepository>,
+        public_key_repo: Arc<dyn PublicKeyRepository>,
         tx_processor: Arc<dyn TransactionProcessor>,
         account_manager: Arc<dyn AccountManager>,
-        db_pool: PgPool,
         consensus: Arc<dyn consensus::ConsensusEngine + Send + Sync>,
         block_reward: Amount,
     ) -> Self {
         Self {
             block_repo,
             tx_repo,
+            account_repo,
+            public_key_repo,
             tx_processor,
             account_manager,
-            db_pool,
             current_height: Arc::new(tokio::sync::Mutex::new(0)),
             consensus,
             block_reward,
@@ -67,18 +68,8 @@ impl ChainService {
     }
 
     pub async fn get_public_key(&self, account_id: AccountId) -> anyhow::Result<Option<PublicKey>> {
-        let row: Option<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT public_key FROM public_key WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC LIMIT 1"
-        )
-        .bind(account_id as i64)
-        .fetch_optional(&self.db_pool)
-        .await?;
-        if let Some((pk_vec,)) = row {
-            if let Ok(bytes) = pk_vec.try_into() {
-                return Ok(Some(PublicKey::Ed25519(bytes)));
-            }
-        }
-        Ok(None)
+        let account_pk = self.public_key_repo.find_latest_by_account_id(account_id as i64).await?;
+        Ok(account_pk.map(|pk| PublicKey::Ed25519(pk.public_key)))
     }
 
     pub async fn get_current_state(&self) -> anyhow::Result<BlockchainState> {
@@ -256,19 +247,6 @@ impl ChainService {
         Ok(())
     }
 
-
-    pub async fn create_block(
-        &self,
-        _generator_id: AccountId,
-        _transactions: Vec<Transaction>,
-    ) -> anyhow::Result<Block> {
-        let prev_block = Block::new(
-            self.current_height().await + 1,
-            [0u8; 32],
-            _generator_id,
-        );
-        Ok(prev_block)
-    }
 
     pub async fn start_sync(&self) -> anyhow::Result<()> {
         info!("Chain sync started");

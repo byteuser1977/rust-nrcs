@@ -82,6 +82,12 @@ pub trait AccountAssetRepository: Repository<AccountAssetModel> {
 }
 
 #[async_trait]
+pub trait AccountLedgerRepository: Repository<AccountLedgerModel> {
+    async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<AccountLedgerModel>>;
+    async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<AccountLedgerModel>>;
+}
+
+#[async_trait]
 pub trait AssetRepository: Repository<AssetModel> {
     async fn find_by_asset_id(&self, id: i64) -> RepositoryResult<Option<AssetModel>>;
     async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>>;
