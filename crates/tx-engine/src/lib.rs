@@ -6,6 +6,8 @@
 //! - 未确认交易池管理
 //! - 交易广播
 //! - 交易附件打包/解包
+//! - 账户账本记录
+//! - 账户限制检查
 
 pub mod types;
 pub mod attachment;
@@ -16,6 +18,11 @@ pub mod mempool;
 pub mod broadcast;
 pub mod trade_matcher;
 pub mod extensions;
+pub mod ledger;
+pub mod restrictions;
+pub mod phasing;
+pub mod shuffler;
+pub mod scheduler;
 
 pub use types::{TxPriority, TxReceiptInfo, TxStatus};
 pub use attachment::{
@@ -40,6 +47,26 @@ pub use mempool::{Mempool, MempoolConfig, MempoolError, MempoolStats};
 pub use broadcast::{
     TxBroadcaster, BroadcastConfig, BroadcastError, BroadcastResult,
     BroadcastedTx, TxConfirmationTracker,
+};
+pub use ledger::{
+    LedgerEvent, LedgerHolding, AccountLedger, LedgerEntry,
+    LedgerConfig, AccountLedgerEvent,
+};
+pub use restrictions::{
+    AccountControlType, AccountRestrictions, AccountPhasingOnly,
+    PhasingParams, RestrictionError, RestrictionResult,
+};
+pub use phasing::{
+    PhasingPoll, PhasingVote, PhasingPollResult, HashFunction,
+    PhasingService, PhasingPollRepository,
+};
+pub use shuffler::{
+    ShufflingStage, ShufflingEvent, ShufflingState,
+    Shuffler, ShufflerService, ShufflerError,
+    ShufflingParticipant, ParticipantState,
+};
+pub use scheduler::{
+    TransactionScheduler, SchedulerError, ScheduledTransaction,
 };
 
 pub mod prelude {
