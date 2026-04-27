@@ -76,7 +76,7 @@ fn parse_sql(sql: &str) -> SchemaAnalysis {
         if stmt.is_empty() {
             continue;
         }
-        all_constraints.push_str("\n");
+        all_constraints.push('\n');
         all_constraints.push_str(stmt);
 
         // Check for CREATE TABLE
@@ -93,11 +93,11 @@ fn parse_sql(sql: &str) -> SchemaAnalysis {
         }
 
         // If we're inside a table definition, try to parse column lines
-        if let Some(_) = &current_table {
+        if current_table.is_some() {
             let trimmed = stmt.trim_start();
-            if trimmed.starts_with(',') {
+            if let Some(col_part) = trimmed.strip_prefix(',') {
                 // Continuation - parse column definition
-                let col_part = trimmed[1..].trim_start();
+                let col_part = col_part.trim_start();
                 if let Some(caps) = column_def_re.captures(col_part) {
                     let col_name = caps[1].to_string();
                     let data_type = caps[2].to_string();
@@ -187,6 +187,7 @@ fn process_table(schema: &mut SchemaAnalysis, table_name: &str, column_defs: Vec
     let unique_groups = Vec::new();
 
     let mut pk_cols_from_inline: Vec<String> = Vec::new();
+    let default_re = Regex::new(r"(?i)DEFAULT\s+([^,\n]+)").unwrap();
 
     for (col_name, data_type, rest) in column_defs {
         let mut is_nullable = true;
@@ -201,7 +202,7 @@ fn process_table(schema: &mut SchemaAnalysis, table_name: &str, column_defs: Vec
             is_auto_increment = true;
         }
 
-        if let Some(default_match) = Regex::new(r"(?i)DEFAULT\s+([^,\n]+)").unwrap().find(&rest) {
+        if let Some(default_match) = default_re.find(&rest) {
             let default_str = default_match.as_str().to_string();
             default_value = Some(default_str);
         }
