@@ -265,3 +265,10 @@ pub trait TaggedTimestampRepository: Repository<TaggedTimestampModel> {
     async fn find_by_account_and_tag(&self, account_id: i64, tag: &str) -> RepositoryResult<Option<TaggedTimestampModel>>;
 }
 
+#[async_trait]
+pub trait AccountGuaranteedBalanceRepository: Repository<AccountGuaranteedBalanceModel> {
+    async fn find_by_account_and_height(&self, account_id: i64, height: i32) -> RepositoryResult<Option<AccountGuaranteedBalanceModel>>;
+    async fn upsert_additions(&self, account_id: i64, height: i32, additions: i64) -> RepositoryResult<()>;
+    async fn get_total_additions_since(&self, account_id: i64, since_height: i32, current_height: i32) -> RepositoryResult<i64>;
+}
+

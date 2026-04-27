@@ -3798,3 +3798,144 @@ impl Repository<TaggedTimestampModel> for SqliteTaggedTimestampRepository {
         Ok(count)
     }
 }
+
+pub struct SqliteAccountGuaranteedBalanceRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAccountGuaranteedBalanceRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<AccountGuaranteedBalanceModel> for SqliteAccountGuaranteedBalanceRepository {
+    async fn insert(&self, item: &AccountGuaranteedBalanceModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO account_guaranteed_balance (account_id, additions, height)
+            VALUES (?, ?, ?)
+            "#,
+        )
+        .bind(item.account_id)
+        .bind(item.additions)
+        .bind(item.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountGuaranteedBalanceModel>> {
+        let record = sqlx::query_as::<_, AccountGuaranteedBalanceModel>(
+            "SELECT * FROM account_guaranteed_balance WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, item: &AccountGuaranteedBalanceModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE account_guaranteed_balance
+            SET account_id = ?, additions = ?, height = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(item.account_id)
+        .bind(item.additions)
+        .bind(item.height)
+        .bind(item.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM account_guaranteed_balance WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountGuaranteedBalanceModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as::<_, AccountGuaranteedBalanceModel>(
+            "SELECT * FROM account_guaranteed_balance ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_guaranteed_balance")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl AccountGuaranteedBalanceRepository for SqliteAccountGuaranteedBalanceRepository {
+    async fn find_by_account_and_height(&self, account_id: i64, height: i32) -> RepositoryResult<Option<AccountGuaranteedBalanceModel>> {
+        let record = sqlx::query_as::<_, AccountGuaranteedBalanceModel>(
+            "SELECT * FROM account_guaranteed_balance WHERE account_id = ? AND height = ?"
+        )
+        .bind(account_id)
+        .bind(height)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn upsert_additions(&self, account_id: i64, height: i32, additions: i64) -> RepositoryResult<()> {
+        if additions <= 0 {
+            return Ok(());
+        }
+
+        match self.find_by_account_and_height(account_id, height).await? {
+            Some(mut existing) => {
+                existing.additions += additions;
+                self.update(&existing).await?;
+            }
+            None => {
+                let new_record = AccountGuaranteedBalanceModel {
+                    db_id: 0,
+                    account_id,
+                    additions,
+                    height,
+                };
+                self.insert(&new_record).await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn get_total_additions_since(&self, account_id: i64, since_height: i32, current_height: i32) -> RepositoryResult<i64> {
+        let (total,): (i64,) = sqlx::query_as(
+            "SELECT COALESCE(SUM(additions), 0) FROM account_guaranteed_balance \
+             WHERE account_id = ? AND height >= ? AND height <= ?"
+        )
+        .bind(account_id)
+        .bind(since_height)
+        .bind(current_height)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(total)
+    }
+}

@@ -30,7 +30,9 @@ use sqlx::SqlitePool;
 use http_api::state::ApiState;
 use account::{AccountManager, AccountConfig, DatabaseAccountManager, AccountStore, PgAccountStore};
 use tx_engine::{TransactionProcessor, DatabaseTransactionProcessor};
-use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository};
+use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransferRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository,
+         AccountGuaranteedBalanceRepository, AccountLedgerRepository};
+use orm::repository::sqlite::SqliteAccountGuaranteedBalanceRepository;
 
 use p2p::BlockchainVerifier;
 
@@ -187,9 +189,13 @@ async fn main() -> Result<()> {
             let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::SqliteAccountRepository::new(pool.clone()));
             let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::SqliteAssetRepository::new(pool.clone()));
             let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::SqliteAccountAssetRepository::new(pool.clone()));
+            let asset_transfer_repo: Arc<dyn AssetTransferRepository> = Arc::new(orm::SqliteAssetTransferRepository::new(pool.clone()));
             let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::SqlitePublicKeyRepository::new(pool.clone()));
-            let ledger_repo: Arc<dyn orm::AccountLedgerRepository> = Arc::new(orm::SqliteAccountLedgerRepository::new(pool.clone()));
-            
+            let ledger_repo: Arc<dyn AccountLedgerRepository> = Arc::new(orm::SqliteAccountLedgerRepository::new(pool.clone()));
+            let guaranteed_balance_repo: Arc<dyn AccountGuaranteedBalanceRepository> = Arc::new(
+                SqliteAccountGuaranteedBalanceRepository::new(pool.clone())
+            );
+
             // 确保创世区块存在
             orm::genesis::ensure_genesis(
                 &*block_repo,
@@ -199,7 +205,7 @@ async fn main() -> Result<()> {
             ).await.context("Failed to create genesis block")?;
             info!("Genesis block ensured");
 
-            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, account_repo, public_key_repo).await
+            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo).await
         }
     }
 }
@@ -211,14 +217,21 @@ async fn start_node(
     tx_repo: Arc<dyn TransactionRepository>,
     asset_repo: Arc<dyn AssetRepository>,
     account_asset_repo: Arc<dyn AccountAssetRepository>,
+    asset_transfer_repo: Arc<dyn AssetTransferRepository>,
     account_repo: Arc<dyn AccountRepository>,
     public_key_repo: Arc<dyn PublicKeyRepository>,
+    ledger_repo: Arc<dyn AccountLedgerRepository>,
+    guaranteed_balance_repo: Arc<dyn AccountGuaranteedBalanceRepository>,
 ) -> Result<()> {
     // 创建交易处理器
     let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
         Arc::clone(&account_repo),
         Arc::clone(&account_asset_repo),
+        Arc::clone(&asset_repo),
+        Arc::clone(&asset_transfer_repo),
         Arc::clone(&tx_repo),
+        Arc::clone(&guaranteed_balance_repo),
+        Arc::clone(&ledger_repo),
     ));
 
     // 创建区块奖励应用器

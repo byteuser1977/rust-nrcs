@@ -193,6 +193,11 @@ impl BlockchainVerifier {
 
         // === Phase 3: Officially execute transactions (update confirmed balances) ===
         debug!("Phase 3: Applying confirmed transactions...");
+
+        // Set current block context for ledger entries
+        // Reference: Java LedgerEntry constructor gets block_id/height/timestamp from Blockchain.getLastBlock()
+        self.tx_processor.set_current_block(block.id.unwrap_or(0) as i64, block.height as i32, block.timestamp as i32);
+
         for (idx, transaction) in block.transactions.iter().enumerate() {
             debug!("Executing tx {}/{}: id={}", idx + 1, block.transactions.len(), transaction.id);
             if let Err(e) = self.tx_processor.apply(transaction).await {
