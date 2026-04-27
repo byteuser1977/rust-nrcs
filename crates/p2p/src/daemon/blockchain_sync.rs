@@ -169,7 +169,7 @@ impl BlockchainSyncDaemon {
 
     async fn sync_loop(
         peers: Arc<crate::peer::Peers>,
-        config: P2PConfig,
+        _config: P2PConfig,
         running: Arc<RwLock<bool>>,
         is_downloading: Arc<RwLock<bool>>,
         sync_state: Arc<RwLock<SyncState>>,
@@ -384,6 +384,7 @@ impl BlockchainSyncDaemon {
         }
     }
 
+    #[allow(dead_code)]
     async fn get_common_milestone_block_id(
         peer_addr: std::net::SocketAddr,
         block_verifier: &Arc<dyn BlockVerifier>,
@@ -396,7 +397,7 @@ impl BlockchainSyncDaemon {
             if let Some(ref last_id) = last_milestone_block_id {
                 request.set("lastMilestoneBlockId", last_id);
             } else {
-                request.set("lastBlockId", &"0");
+                request.set("lastBlockId", "0");
             }
 
             match WebsocketClient::send_request(peer_addr, request).await {
@@ -450,8 +451,8 @@ impl BlockchainSyncDaemon {
         let mut match_id = start_block_id;
 
         let mut request = PeerRequest::new(RequestType::GetNextBlockIds, 1);
-        request.set("blockId", &start_block_id.to_string());
-        request.set("limit", &(MAX_BLOCKS_LIMIT as i32));
+        request.set("blockId", start_block_id.to_string());
+        request.set("limit", MAX_BLOCKS_LIMIT as i32);
 
         debug!("Requesting block IDs after {} from peer", start_block_id);
 
@@ -551,7 +552,7 @@ impl BlockchainSyncDaemon {
         
         for (segment_idx, &(start_idx, stop_idx)) in get_list.iter().enumerate() {
             let peer_addr = peer_addrs[segment_idx % peer_count];
-            let common_block_id = chain_block_ids.get(0).copied().unwrap_or(0);
+            let common_block_id = chain_block_ids.first().copied().unwrap_or(0);
             
             let (prev_block_id, id_start_idx) = if start_idx == 0 {
                 (common_block_id, 1)
@@ -566,7 +567,7 @@ impl BlockchainSyncDaemon {
 
             let mut request = PeerRequest::new(RequestType::GetNextBlocks, 1);
             request.set("blockIds", &id_list);
-            request.set("blockId", &prev_block_id.to_string());
+            request.set("blockId", prev_block_id.to_string());
 
             download_futures.push(async move {
                 let mut last_error = None;
@@ -642,6 +643,7 @@ impl BlockchainSyncDaemon {
         Ok(processed)
     }
 
+    #[allow(dead_code)]
     async fn download_blocks(
         peer_addr: std::net::SocketAddr,
         chain_block_ids: &[u64],
@@ -688,10 +690,10 @@ impl BlockchainSyncDaemon {
 
         block.height = block_height;
 
-        if block.generator_id.is_none() && block.generator_public_key.is_some() {
-            block.generator_id = Some(blockchain_types::block::account_id_from_public_key(
-                block.generator_public_key.as_ref().unwrap()
-            ));
+        if block.generator_id.is_none() {
+            if let Some(pub_key) = &block.generator_public_key {
+                block.generator_id = Some(blockchain_types::block::account_id_from_public_key(pub_key));
+            }
         }
 
         let mut transactions = Vec::new();
@@ -725,7 +727,7 @@ impl BlockchainSyncDaemon {
             }
             Err(e) => {
                 warn!("Block verification/processing failed at height {}: {}", block_height, e);
-                Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn std::error::Error + Send + Sync>)
+                Err(Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error + Send + Sync>)
             }
         }
     }

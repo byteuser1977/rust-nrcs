@@ -7,6 +7,9 @@
 //! - 助记词与 128 位数字互相转换
 //! - 从助记词派生密钥对
 
+#![allow(clippy::assign_op_pattern)]
+#![allow(clippy::unnecessary_cast)]
+
 mod words;
 
 use num_bigint::BigInt;

@@ -3,7 +3,7 @@
 //! 管理未确认交易的内存池：
 //! - 去重（防止双花）
 //! - 优先级排序（gas price 高的优先）
-//! 内存限制+驱逐策略（可选）
+//!   - 内存限制+驱逐策略（可选）
 //! - 持久化（可选的 Redis 或数据库）
 
 use std::time::{Duration, Instant};
@@ -133,7 +133,7 @@ impl Mempool {
     /// 获取所有交易（按优先级排序）
     pub fn get_all_sorted(&self) -> Vec<Transaction> {
         let mut vec: Vec<(Transaction, TxPriority, Instant)> = self.pool.iter().map(|v| v.value().clone()).collect();
-        vec.sort_by(|a, b| a.1.cmp(&b.1));
+        vec.sort_by_key(|a| a.1);
         vec.into_iter().map(|(tx, _p, _t)| tx).collect()
     }
 
@@ -197,12 +197,12 @@ impl Mempool {
     }
 
     /// 获取下一个 nonce（防重放）
+    #[allow(dead_code)]
     fn get_next_nonce(&self, sender_id: AccountId) -> u64 {
-        self.nonce_tracker
+        *self.nonce_tracker
             .entry(sender_id)
             .and_modify(|n| *n += 1)
             .or_insert(0)
-            .clone()
     }
 
     /// 驱逐一个最不优先的交易
@@ -210,7 +210,7 @@ impl Mempool {
         // 收集所有交易并按优先级排序
         let mut entries: Vec<_> = self.pool.iter().map(|entry| {
             let (_tx, priority, _time) = entry.value();
-            (priority.clone(), entry.key().clone())
+            (*priority, *entry.key())
         }).collect();
         
         if entries.is_empty() {

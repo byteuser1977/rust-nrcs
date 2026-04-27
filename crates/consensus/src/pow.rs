@@ -99,14 +99,14 @@ impl ConsensusEngine for PoWEngine {
         let max_drift = self.target_spacing * 4;
         if block.timestamp > current_time + max_drift {
             return Err(ConsensusError::InvalidTimestamp(
-                format!("block timestamp too far in future")
+                "block timestamp too far in future".to_string()
             ));
         }
         Ok(())
     }
 
     fn verify_block_signature(&self, block: &Block, public_key: &PublicKey) -> ConsensusResult<()> {
-        block.verify_signature(public_key).map_err(|e| ConsensusError::BlockchainError(e))
+        block.verify_signature(public_key).map_err(ConsensusError::BlockchainError)
     }
 
     fn serialize_header(block: &Block) -> Vec<u8> {

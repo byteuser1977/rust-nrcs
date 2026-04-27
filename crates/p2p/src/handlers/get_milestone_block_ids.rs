@@ -78,15 +78,12 @@ impl GetMilestoneBlockIdsHandler {
                     }
 
                     // 检查本地是否有这个区块
-                    match block_repo.has_block(last_block_id).await {
-                        Ok(true) => {
-                            let mut response = serde_json::Map::new();
-                            response.insert("milestoneBlockIds".to_string(),
-                                serde_json::json!([last_block_id_str.clone()])
-                            );
-                            return serde_json::Value::Object(response);
-                        }
-                        _ => {}
+                    if let Ok(true) = block_repo.has_block(last_block_id).await {
+                        let mut response = serde_json::Map::new();
+                        response.insert("milestoneBlockIds".to_string(),
+                            serde_json::json!([last_block_id_str.clone()])
+                        );
+                        return serde_json::Value::Object(response);
                     }
                 }
                 Err(e) => {

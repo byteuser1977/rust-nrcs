@@ -16,6 +16,7 @@ use blockchain_types::prelude::*;
 /// 处理：验证区块，然后异步提交到区块链处理器
 /// 响应：空 JSON {}
 pub struct ProcessBlockHandler {
+    #[allow(dead_code)]
     peers: Arc<Peers>,
     verifier: Arc<dyn BlockVerifier>,
 }
@@ -60,7 +61,7 @@ impl ProcessBlockHandler {
         };
 
         // 获取 previousBlock 字段（用于验证）
-        let previous_block_id_str: Option<String> = request.get("previousBlock")
+        let _previous_block_id_str: Option<String> = request.get("previousBlock")
             .or_else(|| block_json.get("previousBlock").and_then(|v| v.as_str().map(|s| s.to_string())));
 
         debug!("Received block: height={}, generator={:?}", block.height, block.generator_id);
@@ -80,6 +81,7 @@ impl ProcessBlockHandler {
 }
 
 /// 解析无符号长整型区块ID
+#[allow(dead_code)]
 fn parse_unsigned_long(s: &str) -> Option<i64> {
     s.parse::<u64>().ok().map(|v| v as i64)
 }

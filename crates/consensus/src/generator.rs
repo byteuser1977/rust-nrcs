@@ -55,6 +55,7 @@ impl GeneratorInfo {
 
 pub struct Generator {
     account_id: AccountId,
+    #[allow(dead_code)]
     secret_phrase: String,
     public_key: Vec<u8>,
     hit_time: u64,

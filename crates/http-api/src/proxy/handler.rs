@@ -150,6 +150,7 @@ impl ProxyRequestHandler {
         }
     }
     
+    #[allow(clippy::too_many_arguments)]
     pub async fn try_local_first_then_proxy(
         &self,
         request_type: &str,

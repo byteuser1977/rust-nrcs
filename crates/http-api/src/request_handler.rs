@@ -113,6 +113,12 @@ pub struct RsRespBuilder {
     data: serde_json::Map<String, Value>,
 }
 
+impl Default for RsRespBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RsRespBuilder {
     pub fn new() -> Self {
         Self {
@@ -221,6 +227,12 @@ pub struct HandlerContext {
     pub start_time: Instant,
     pub require_block: Option<u64>,
     pub require_last_block: Option<u64>,
+}
+
+impl Default for HandlerContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HandlerContext {

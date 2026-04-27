@@ -165,10 +165,8 @@ impl TxBroadcaster {
             if tx.should_rebroadcast(current_time, &self.config) {
                 rebroadcasted.push(tx.tx_hash);
                 true
-            } else if tx.expiration > 0 && current_time > tx.expiration {
-                false
             } else {
-                true
+                !(tx.expiration > 0 && current_time > tx.expiration)
             }
         });
         

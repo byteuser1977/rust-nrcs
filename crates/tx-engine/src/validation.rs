@@ -166,10 +166,8 @@ impl TransactionValidator {
     pub fn validate_recipient(&self, tx: &Transaction) -> TxValidationResult<()> {
         match tx.type_id {
             TransactionType::Payment |
-            TransactionType::ColoredCoins => {
-                if tx.recipient_id.is_none() {
-                    return Err(TxValidationError::MissingRecipient);
-                }
+            TransactionType::ColoredCoins if tx.recipient_id.is_none() => {
+                return Err(TxValidationError::MissingRecipient);
             }
             _ => {}
         }
@@ -253,6 +251,7 @@ impl Default for PaymentValidator {
 }
 
 pub struct AssetTransferValidator {
+    #[allow(dead_code)]
     max_quantity: u64,
 }
 

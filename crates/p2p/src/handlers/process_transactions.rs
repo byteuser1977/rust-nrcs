@@ -6,6 +6,7 @@ use tx_engine::TransactionProcessor;
 use blockchain_types::prelude::*;
 
 pub struct ProcessTransactionsHandler {
+    #[allow(dead_code)]
     peers: Arc<Peers>,
     tx_processor: Option<Arc<dyn TransactionProcessor>>,
 }

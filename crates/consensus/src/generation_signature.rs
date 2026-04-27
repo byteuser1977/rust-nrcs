@@ -7,7 +7,7 @@ pub fn calculate_generation_signature(
 ) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(prev_generation_signature);
-    hasher.update(&generator_id.to_be_bytes());
+    hasher.update(generator_id.to_be_bytes());
     let hash = hasher.finalize();
     hash.to_vec()
 }

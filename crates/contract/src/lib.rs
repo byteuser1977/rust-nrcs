@@ -8,6 +8,8 @@
 //! - 性能：JIT 编译（wasmtime）快速执行
 //! - 兼容性：支持多种语言编译到 WASM（Rust, C/C++, AssemblyScript 等）
 
+#![allow(async_fn_in_trait)]
+
 use thiserror::Error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

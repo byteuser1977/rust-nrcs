@@ -44,6 +44,7 @@ impl SensitiveParameter {
 }
 
 pub struct PasswordFilter {
+    #[allow(dead_code)]
     sensitive_patterns: Vec<String>,
 }
 

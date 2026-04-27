@@ -3,7 +3,7 @@
 //! 管理所有 API Handler 的注册和查找
 
 use crate::api_tag::ApiTag;
-use crate::request_handler::{HandlerPtr, RequestHandler};
+use crate::request_handler::HandlerPtr;
 use std::collections::{HashMap, HashSet};
 use parking_lot::RwLock;
 
@@ -47,7 +47,7 @@ impl ApiRegistry {
             self.tags_map
                 .write()
                 .entry(tag)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(name.to_string());
         }
     }

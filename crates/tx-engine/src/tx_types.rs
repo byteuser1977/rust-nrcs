@@ -353,7 +353,7 @@ impl TxTypeHandler for AliasHandler {
         state.sender_balance -= tx.fee;
         
         if tx.subtype == blockchain_types::transaction::SUBTYPE_MESSAGING_ALIAS_BUY {
-            if let Some(recipient) = state.recipient_id {
+            if let Some(_recipient) = state.recipient_id {
                 state.recipient_balance += tx.amount;
             }
         }
@@ -686,21 +686,21 @@ impl TxTypeRegistry {
     
     pub fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
         let handler = self.get_handler(tx.type_id)
-            .ok_or_else(|| TxTypeError::UnsupportedType(tx.type_id))?;
+            .ok_or(TxTypeError::UnsupportedType(tx.type_id))?;
         
         handler.validate(tx)
     }
     
     pub fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
         let handler = self.get_handler(tx.type_id)
-            .ok_or_else(|| TxTypeError::UnsupportedType(tx.type_id))?;
+            .ok_or(TxTypeError::UnsupportedType(tx.type_id))?;
         
         handler.apply(tx, state)
     }
     
     pub fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
         let handler = self.get_handler(tx.type_id)
-            .ok_or_else(|| TxTypeError::UnsupportedType(tx.type_id))?;
+            .ok_or(TxTypeError::UnsupportedType(tx.type_id))?;
         
         handler.undo(tx, state)
     }

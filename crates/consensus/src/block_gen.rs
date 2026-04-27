@@ -169,7 +169,7 @@ impl BlockGenerator {
         
         for tx in transactions {
             if let Ok(tx_hash) = tx.compute_hash() {
-                hasher.update(&tx_hash.0);
+                hasher.update(tx_hash.0);
             }
         }
         
@@ -194,7 +194,7 @@ impl BlockGenerator {
         
         let mut hasher = Sha256::new();
         hasher.update(&header_data);
-        hasher.update(&key_hash);
+        hasher.update(key_hash);
         let sig_hash = hasher.finalize();
         
         let mut signature = [0u8; 64];

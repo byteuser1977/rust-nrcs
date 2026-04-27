@@ -120,7 +120,7 @@ impl RequestHandler for GetTransactionsHandler {
                 .map_err(ApiError::Repository)?;
             all_txs.extend(sent);
             all_txs.extend(received);
-            all_txs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            all_txs.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
             all_txs.truncate(limit as usize);
             all_txs
         } else {

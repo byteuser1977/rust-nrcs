@@ -23,6 +23,9 @@
 //! assert_eq!(plaintext, decrypted.as_slice());
 //! ```
 
+#![allow(clippy::manual_repeat_n)]
+#![allow(clippy::manual_is_multiple_of)]
+
 use crate::CryptoError;
 use rand::RngCore;
 use sm4::cipher::{BlockCipherDecBackend, BlockCipherEncBackend, KeyInit};

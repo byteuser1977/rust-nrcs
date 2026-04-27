@@ -3,6 +3,13 @@
 //! 移植自 Java NRCS 实现，用于与 NRCS 区块链兼容
 //! 这是自定义的 Curve25519 签名算法，与标准 Ed25519 不同
 
+#![allow(clippy::just_underscores_and_digits)]
+#![allow(clippy::double_parens)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::explicit_auto_deref)]
+#![allow(clippy::unnecessary_cast)]
+#![allow(clippy::needless_range_loop)]
+
 pub const KEY_SIZE: usize = 32;
 
 const P25: i64 = 33554431;

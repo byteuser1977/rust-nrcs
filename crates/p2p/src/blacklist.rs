@@ -208,7 +208,7 @@ impl BlacklistManager {
         let entries: Vec<_> = blacklist.values().collect();
         
         let json = serde_json::to_string_pretty(&entries)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
         
         std::fs::write(path, json)?;
         debug!("Blacklist persisted to {}", path);
@@ -220,7 +220,7 @@ impl BlacklistManager {
         let content = std::fs::read_to_string(path)?;
         
         let entries: Vec<BlacklistEntry> = serde_json::from_str(&content)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
         
         let mut blacklist = self.blacklist.write().await;
         for entry in entries {

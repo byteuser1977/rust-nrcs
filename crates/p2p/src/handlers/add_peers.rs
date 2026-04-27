@@ -11,6 +11,7 @@ const MAX_KNOWN_PEERS: usize = 2000;
 /// 处理：验证并添加到已知 peers
 /// 响应：统计添加的数量，重复数量，黑名单数量等
 pub struct AddPeersHandler {
+    #[allow(dead_code)]
     peers: Arc<Peers>,
 }
 

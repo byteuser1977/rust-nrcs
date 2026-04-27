@@ -7,8 +7,8 @@
 //! - 创建 Trade 记录
 //! - 更新账户资产余额
 
-use orm::models::{AskOrderModel, BidOrderModel, TradeModel, AccountAssetModel};
-use orm::repository::{AskOrderRepository, BidOrderRepository, TradeRepository, AccountAssetRepository, Repository};
+use orm::models::TradeModel;
+use orm::repository::{AskOrderRepository, BidOrderRepository, TradeRepository, AccountAssetRepository};
 use async_trait::async_trait;
 use thiserror::Error;
 
@@ -70,6 +70,7 @@ where
     ask_repo: A,
     bid_repo: B,
     trade_repo: T,
+    #[allow(dead_code)]
     account_asset_repo: AA,
 }
 

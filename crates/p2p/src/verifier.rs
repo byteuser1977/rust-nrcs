@@ -40,13 +40,14 @@ impl BlockchainVerifier {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         for tx in txs {
-            hasher.update(&tx.full_hash.0);
+            hasher.update(tx.full_hash.0);
         }
         let hash = hasher.finalize();
-        let arr: [u8; 32] = hash.try_into().unwrap();
+        let arr: [u8; 32] = hash.into();
         Ok(Hash256(arr))
     }
 
+    #[allow(dead_code)]
     async fn block_exists(&self, height: u32) -> Result<bool> {
         match self.block_repo.find_by_height(height as i32).await {
             Ok(Some(_)) => Ok(true),
@@ -108,7 +109,7 @@ impl BlockVerifier for BlockchainVerifier {
         if block_height <= 2 {
             let serialized = block.serialize_for_id();
             info!("Block {} serialized bytes (first 40): {:02x?}", block_height, &serialized[..40.min(serialized.len())]);
-            info!("Block {} gen_pub_key: {:?}", block_height, block.generator_public_key.as_ref().map(|k| hex::encode(k)));
+            info!("Block {} gen_pub_key: {:?}", block_height, block.generator_public_key.as_ref().map(hex::encode));
             info!("Block {} prev_block_hash: {:02x?}", block_height, block.previous_block_hash.0.iter().take(8).collect::<Vec<_>>());
             info!("Block {} generation_signature: {:02x?}", block_height, block.generation_signature.iter().take(8).collect::<Vec<_>>());
             info!("Block {} block_signature: {:02x?}", block_height, block.block_signature.0.iter().take(8).collect::<Vec<_>>());

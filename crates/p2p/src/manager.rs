@@ -60,7 +60,7 @@ impl P2PManager {
         info!("Initializing P2P manager...");
 
         // 验证配置
-        self.config.validate().map_err(|e| P2PError::internal(e))?;
+        self.config.validate().map_err(P2PError::internal)?;
 
         // 创建守护进程
         self.connection_daemon = Some(ConnectionDaemon::new(

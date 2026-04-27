@@ -34,8 +34,9 @@ pub enum AttachmentError {
 pub type AttachmentResult<T> = std::result::Result<T, AttachmentError>;
 
 /// 交易附件统一枚举
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum Attachment {
+    #[default]
     None,
     Payment(PaymentAttachment),
     AssetTransfer(AssetTransferAttachment),
@@ -45,12 +46,6 @@ pub enum Attachment {
     Lease(LeaseAttachment),
     SetProperty(SetPropertyAttachment),
     Message(MessageAttachment),
-}
-
-impl Default for Attachment {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl Attachment {

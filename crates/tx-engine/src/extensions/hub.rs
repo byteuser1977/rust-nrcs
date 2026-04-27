@@ -4,7 +4,7 @@
 //!
 //! 处理 Hub 节点公告和选择
 
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 /// Hub 节点
 #[derive(Debug, Clone)]

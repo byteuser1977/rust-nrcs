@@ -11,6 +11,12 @@ use crate::handlers::BlockVerifier;
 
 pub struct NoOpBlockVerifier;
 
+impl Default for NoOpBlockVerifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NoOpBlockVerifier {
     pub fn new() -> Self {
         Self

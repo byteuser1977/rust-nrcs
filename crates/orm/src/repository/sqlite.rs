@@ -567,7 +567,7 @@ impl AccountRepository for SqliteAccountRepository {
         .map_err(RepositoryError::DbError)?;
         
         if result.rows_affected() == 0 {
-            let account = self.get_or_create(account_id).await?;
+            let _account = self.get_or_create(account_id).await?;
             sqlx::query(
                 r#"
                 UPDATE account
@@ -599,7 +599,7 @@ impl AccountRepository for SqliteAccountRepository {
         .map_err(RepositoryError::DbError)?;
         
         if result.rows_affected() == 0 {
-            let account = self.get_or_create(account_id).await?;
+            let _account = self.get_or_create(account_id).await?;
             sqlx::query(
                 r#"
                 UPDATE account
@@ -632,7 +632,7 @@ impl AccountRepository for SqliteAccountRepository {
         .map_err(RepositoryError::DbError)?;
         
         if result.rows_affected() == 0 {
-            let account = self.get_or_create(account_id).await?;
+            let _account = self.get_or_create(account_id).await?;
             sqlx::query(
                 r#"
                 UPDATE account

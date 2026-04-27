@@ -109,6 +109,7 @@ pub trait AccountManager: Send + Sync {
 /// Database-backed AccountManager implementation
 pub struct DatabaseAccountManager {
     store: Arc<dyn AccountStore>,
+    #[allow(dead_code)]
     account_repo: Arc<dyn AccountRepository>,
     account_asset_repo: Arc<dyn AccountAssetRepository>,
     public_key_repo: Arc<dyn PublicKeyRepository>,

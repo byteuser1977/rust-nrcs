@@ -46,7 +46,7 @@ impl RequestHandler for GetPeersHandler {
         
         if include_info {
             let peers_json: Vec<serde_json::Value> = peers.iter()
-                .map(|p| peer_to_json(p))
+                .map(peer_to_json)
                 .collect();
             let mut builder = RsRespBuilder::new();
             builder.insert("peers", json!(peers_json));
@@ -139,7 +139,7 @@ impl RequestHandler for GetInboundPeersHandler {
         
         if include_info {
             let peers_json: Vec<serde_json::Value> = inbound_peers.iter()
-                .map(|p| peer_to_json(p))
+                .map(peer_to_json)
                 .collect();
             let mut builder = RsRespBuilder::new();
             builder.insert("peers", json!(peers_json));

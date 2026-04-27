@@ -154,6 +154,7 @@ impl DiscoveryDaemon {
     /// Update saved peers to database
     /// 
     /// 对应 NRCS Java: updateSavedPeers()
+    #[allow(dead_code)]
     async fn update_saved_peers(_peers: &Arc<Peers>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // TODO: 实现节点持久化
         Ok(())

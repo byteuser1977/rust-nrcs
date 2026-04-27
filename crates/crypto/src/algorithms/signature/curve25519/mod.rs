@@ -3,6 +3,8 @@
 //! 使用 x25519-dalek 标准库进行公钥派生
 //! 使用 NRCS 特有的 EC-KCDSA 变体进行签名/验证
 
+#![allow(clippy::needless_borrows_for_generic_args)]
+
 pub mod core;
 #[cfg(test)]
 mod test_vectors;

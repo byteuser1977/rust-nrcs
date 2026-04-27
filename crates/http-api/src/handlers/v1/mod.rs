@@ -2,6 +2,8 @@
 //!
 //! 与 Java 版本 Handler 完全对齐
 
+#![allow(clippy::new_without_default)]
+
 pub mod account;
 pub mod account_control;
 pub mod alias;

@@ -60,6 +60,7 @@ impl ForgerSelection {
 
 pub struct ForgerSelector {
     min_forging_balance: u64,
+    #[allow(dead_code)]
     max_forgers: usize,
 }
 

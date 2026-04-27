@@ -12,7 +12,7 @@ use crate::RepositoryResult;
 /// Returns (timestamp, Vec<(account_id, balance)>)
 fn load_genesis_config() -> RepositoryResult<(i64, Vec<(i64, i64)>)> {
     let content = fs::read_to_string("config/genesis.json")
-        .map_err(|e| crate::RepositoryError::Io(e))?;
+        .map_err(crate::RepositoryError::Io)?;
     let json: Value = serde_json::from_str(&content)
         .map_err(|e| crate::RepositoryError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -209,7 +209,7 @@ pub async fn ensure_genesis(
     ];
     let genesis_amounts: Vec<i64> = vec![
         999999999i64 * one_nrcs_nqt,
-        1i64 * one_nrcs_nqt,
+        one_nrcs_nqt,
     ];
     let genesis_fees: Vec<i64> = vec![
         100000000i64,

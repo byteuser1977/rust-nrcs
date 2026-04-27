@@ -25,6 +25,7 @@ pub trait SignatureAlgorithm: Send + Sync + std::fmt::Debug + 'static {
     fn generate_keypair(&self) -> KeyPair;
 
     /// 从 32 字节种子派生密钥对（用于确定性生成）
+    #[allow(clippy::wrong_self_convention)]
     fn from_seed(&self, seed: &[u8; 32]) -> KeyPair;
 
     /// 签名消息

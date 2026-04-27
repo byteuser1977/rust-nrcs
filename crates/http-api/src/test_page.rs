@@ -44,16 +44,14 @@ fn generate_test_html(request_tag: &str, request_type: Option<&String>) -> Strin
     } else {
         let apis = if request_tag.is_empty() {
             get_all_handlers()
-                .keys()
-                .map(|s| s.clone())
+                .keys().cloned()
                 .collect::<Vec<_>>()
         } else {
             if let Ok(tag) = parse_tag(request_tag) {
                 get_apis_by_tag(tag)
             } else {
                 get_all_handlers()
-                    .keys()
-                    .map(|s| s.clone())
+                    .keys().cloned()
                     .collect::<Vec<_>>()
             }
         };

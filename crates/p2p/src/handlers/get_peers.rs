@@ -7,6 +7,7 @@ use tracing::debug;
 /// 响应：返回 peers 列表
 /// 格式：{"peers":[{peer info...}]}
 pub struct GetPeersHandler {
+    #[allow(dead_code)]
     peers: Arc<Peers>,
 }
 
@@ -22,11 +23,11 @@ impl GetPeersHandler {
         let mut all_peers = peers.get_known_peers().await;
 
         // 按最后更新时间降序排序（最新的在前）
-        all_peers.sort_by(|a, b| b.last_updated.cmp(&a.last_updated));
+        all_peers.sort_by_key(|b| std::cmp::Reverse(b.last_updated));
 
         // 分页参数：limit (默认 1000，最大 1000), offset (默认 0)
         let limit = if let Some(v) = request.extra.get("limit") {
-            v.as_i64().unwrap_or(1000).max(1).min(1000) as usize
+            v.as_i64().unwrap_or(1000).clamp(1, 1000) as usize
         } else {
             1000
         };

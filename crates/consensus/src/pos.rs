@@ -72,7 +72,7 @@ impl PosEngine {
         let mut cumulative = BigUint::zero();
         for candidate in candidates {
             let hit = cumulative + BigUint::from(candidate.balance);
-            if &remainder < &hit {
+            if remainder < hit {
                 // 选中该账户
                 let gen_sig = self.generate_signature(candidate.id, &state.last_generation_signature);
                 return Ok((candidate.id, gen_sig));
@@ -102,14 +102,14 @@ impl ConsensusEngine for PosEngine {
         let max_drift = self.target_spacing * 4;
         if block.timestamp > current_time + max_drift {
             return Err(ConsensusError::InvalidTimestamp(
-                format!("block timestamp too far in future")
+                "block timestamp too far in future".to_string()
             ));
         }
         Ok(())
     }
 
     fn verify_block_signature(&self, block: &Block, public_key: &PublicKey) -> ConsensusResult<()> {
-        block.verify_signature(public_key).map_err(|e| ConsensusError::BlockchainError(e))
+        block.verify_signature(public_key).map_err(ConsensusError::BlockchainError)
     }
 
     fn serialize_header(block: &Block) -> Vec<u8> {
@@ -138,8 +138,8 @@ impl crate::PoSEngine for PosEngine {
         blockchain: &BlockchainState,
         timestamp: Timestamp,
     ) -> ConsensusResult<(AccountId, Vec<u8>)> {
-        if timestamp < blockchain.last_timestamp + self.target_spacing as u32 {
-            let remaining = blockchain.last_timestamp + self.target_spacing as u32 - timestamp;
+        if timestamp < blockchain.last_timestamp + self.target_spacing {
+            let remaining = blockchain.last_timestamp + self.target_spacing - timestamp;
             return Err(ConsensusError::DeadlineExpired { remaining: remaining as u64 });
         }
 

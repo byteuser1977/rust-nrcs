@@ -78,6 +78,11 @@ impl PublicKey {
         }
     }
 
+    /// 公钥是否为空（始终返回 false，因为公钥长度固定）
+    pub fn is_empty(&self) -> bool {
+        false
+    }
+
     /// 转换为字节 slice
     pub fn as_bytes(&self) -> &[u8] {
         match self {
@@ -110,6 +115,11 @@ impl SecretKey {
             SecretKey::Curve25519(bytes) => bytes.len(),
             SecretKey::Sm2 { secret_key, .. } => secret_key.len(),
         }
+    }
+
+    /// 私钥是否为空（始终返回 false，因为私钥长度固定）
+    pub fn is_empty(&self) -> bool {
+        false
     }
 
     /// 转换为字节 slice

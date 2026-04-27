@@ -2,6 +2,9 @@
 //!
 //! 移植自 NRCS Java 实现，用于 Account ID 编码
 
+#![allow(clippy::manual_memcpy)]
+#![allow(clippy::needless_range_loop)]
+
 /// 初始码字（保留用于完整性，移植自 Java 实现）
 #[allow(dead_code)]
 const INITIAL_CODEWORD: [i32; 17] = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];

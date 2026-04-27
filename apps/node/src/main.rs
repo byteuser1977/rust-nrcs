@@ -8,6 +8,7 @@
 //! - 账户管理
 
 use anyhow::{Context, Result};
+use serde::Deserialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::time::Duration;
@@ -22,11 +23,8 @@ use p2p::{
     config::P2PConfig as GlobalP2PConfig,
 };
 
-use blockchain_types::prelude::*;
-
 use config::{Config, File, Environment};
-use async_trait::async_trait;
-use sqlx::{PgPool, SqlitePool};
+use sqlx::SqlitePool;
 
 use http_api::state::ApiState;
 use account::{AccountManager, AccountConfig, DatabaseAccountManager, AccountStore, PgAccountStore};
@@ -84,9 +82,10 @@ struct WsAppConfig {
     port: u16,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct DatabaseConfig {
     url: String,
+    #[allow(dead_code)]
     max_connections: u32,
 }
 
@@ -109,6 +108,7 @@ fn parse_socket_addr(addr: &str) -> anyhow::Result<SocketAddr> {
 
 impl NodeConfig {
     /// 加载配置：默认读取 `config/default.toml`，覆盖 `config/local.toml`
+    #[allow(deprecated)]
     fn load() -> anyhow::Result<Self> {
         let mut cfg = Config::default();
         cfg.merge(File::with_name("config/default"))?;
@@ -154,7 +154,7 @@ async fn main() -> Result<()> {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| cfg.database.url.clone());
     let db_type = DatabaseType::from_url(&database_url);
-    info!("Connecting to database: {}", database_url.split('@').last().unwrap_or(&database_url));
+    info!("Connecting to database: {}", database_url.split('@').next_back().unwrap_or(&database_url));
     
     match db_type {
         DatabaseType::PostgreSQL => {
@@ -207,6 +207,7 @@ async fn main() -> Result<()> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_node(
     cfg: NodeConfig,
     block_repo: Arc<dyn BlockRepository>,

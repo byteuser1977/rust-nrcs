@@ -2,6 +2,8 @@
 //!
 //! 与 Java 版本 GetAccount, GetBalance 等完全对齐
 
+#![allow(clippy::new_without_default)]
+
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -11,6 +13,12 @@ use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWi
 use crate::state::ApiState;
 
 pub struct GetAccountHandler;
+
+impl Default for GetAccountHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl GetAccountHandler {
     pub fn new() -> Self {
@@ -83,6 +91,12 @@ impl RequestHandler for GetAccountHandler {
 
 pub struct GetBalanceHandler;
 
+impl Default for GetBalanceHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GetBalanceHandler {
     pub fn new() -> Self {
         Self
@@ -123,6 +137,12 @@ impl RequestHandler for GetBalanceHandler {
 
 pub struct GetAccountIdHandler;
 
+impl Default for GetAccountIdHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GetAccountIdHandler {
     pub fn new() -> Self {
         Self
@@ -155,6 +175,12 @@ impl RequestHandler for GetAccountIdHandler {
 }
 
 pub struct GetAccountPublicKeyHandler;
+
+impl Default for GetAccountPublicKeyHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl GetAccountPublicKeyHandler {
     pub fn new() -> Self {
@@ -193,6 +219,12 @@ impl RequestHandler for GetAccountPublicKeyHandler {
 }
 
 pub struct GetAccountAssetsHandler;
+
+impl Default for GetAccountAssetsHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl GetAccountAssetsHandler {
     pub fn new() -> Self {
@@ -241,6 +273,12 @@ impl RequestHandler for GetAccountAssetsHandler {
 
 pub struct GetAccountCurrenciesHandler;
 
+impl Default for GetAccountCurrenciesHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GetAccountCurrenciesHandler {
     pub fn new() -> Self {
         Self
@@ -270,6 +308,12 @@ impl RequestHandler for GetAccountCurrenciesHandler {
 }
 
 pub struct GetAccountPropertiesHandler;
+
+impl Default for GetAccountPropertiesHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl GetAccountPropertiesHandler {
     pub fn new() -> Self {
@@ -301,6 +345,12 @@ impl RequestHandler for GetAccountPropertiesHandler {
 
 pub struct GetAccountLessorsHandler;
 
+impl Default for GetAccountLessorsHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GetAccountLessorsHandler {
     pub fn new() -> Self {
         Self
@@ -331,6 +381,12 @@ impl RequestHandler for GetAccountLessorsHandler {
 }
 
 pub struct GetEffectiveBalanceHandler;
+
+impl Default for GetEffectiveBalanceHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl GetEffectiveBalanceHandler {
     pub fn new() -> Self {
@@ -371,6 +427,12 @@ impl RequestHandler for GetEffectiveBalanceHandler {
 
 pub struct GetGuaranteedBalanceHandler;
 
+impl Default for GetGuaranteedBalanceHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GetGuaranteedBalanceHandler {
     pub fn new() -> Self {
         Self
@@ -405,6 +467,12 @@ impl RequestHandler for GetGuaranteedBalanceHandler {
 }
 
 pub struct SetAccountInfoHandler;
+
+impl Default for SetAccountInfoHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SetAccountInfoHandler {
     pub fn new() -> Self {

@@ -22,6 +22,7 @@ fn too_many_blocks_error() -> serde_json::Value {
 }
 
 pub struct GetNextBlocksHandler {
+    #[allow(dead_code)]
     peers: Arc<Peers>,
     block_repo: Option<Arc<dyn BlockRepository>>,
 }
@@ -148,7 +149,7 @@ impl GetNextBlocksHandler {
         // previousBlock 使用无符号长整型字符串
         json.insert("previousBlock".to_string(), 
             model.previous_block_id
-                .map(|id| format_unsigned_long(id))
+                .map(format_unsigned_long)
                 .map(serde_json::Value::String)
                 .unwrap_or(serde_json::Value::Null)
         );

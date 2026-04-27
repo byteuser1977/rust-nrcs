@@ -64,8 +64,10 @@ pub trait TransactionProcessor: Send + Sync {
 
 pub struct DatabaseTransactionProcessor {
     account_repo: Arc<dyn AccountRepository>,
+    #[allow(dead_code)]
     account_asset_repo: Arc<dyn AccountAssetRepository>,
     tx_repo: Arc<dyn TransactionRepository>,
+    #[allow(dead_code)]
     public_key_repo: Arc<dyn PublicKeyRepository>,
 }
 

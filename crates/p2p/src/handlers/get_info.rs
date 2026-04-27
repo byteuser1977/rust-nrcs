@@ -6,6 +6,7 @@ use tracing::debug;
 /// GetInfo 处理器
 /// 响应包含本节点的 PeerInfo，字段需与 Java 的 Peers.getMyPeerInfoResponse() 完全匹配
 pub struct GetInfoHandler {
+    #[allow(dead_code)]
     peers: Arc<Peers>,
 }
 

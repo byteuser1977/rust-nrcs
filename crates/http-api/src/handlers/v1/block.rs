@@ -105,7 +105,7 @@ impl RequestHandler for GetBlockHandler {
                     "sender": tx.sender_id.to_string(),
                     "senderRS": format_account_rs(tx.sender_id),
                     "recipient": tx.recipient_id.map(|r| r.to_string()).unwrap_or_default(),
-                    "recipientRS": tx.recipient_id.map(|r| format_account_rs(r)).unwrap_or_default(),
+                    "recipientRS": tx.recipient_id.map(format_account_rs).unwrap_or_default(),
                     "amountNQT": tx.amount.to_string(),
                     "feeNQT": tx.fee.to_string()
                 }))

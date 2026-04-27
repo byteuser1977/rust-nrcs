@@ -4,7 +4,7 @@
 //!
 //! 处理可修剪的交易数据（消息、附件等）
 
-use blockchain_types::prelude::{TransactionType, Hash256};
+use blockchain_types::prelude::TransactionType;
 
 /// 可修剪交易
 #[derive(Debug, Clone)]

@@ -8,6 +8,12 @@ pub struct GetTransactionsHandler {
     tx_repo: Option<Arc<dyn TransactionRepository>>,
 }
 
+impl Default for GetTransactionsHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GetTransactionsHandler {
     pub fn new() -> Self {
         Self { tx_repo: None }

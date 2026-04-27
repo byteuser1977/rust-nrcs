@@ -338,7 +338,7 @@ impl WebsocketClient {
             }
             Ok(Ok(None)) => {
                 warn!("[CLIENT] HTTP non-success status from {}", addr);
-                Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "HTTP request failed")) as Box<dyn std::error::Error + Send + Sync>)
+                Err(Box::new(std::io::Error::other("HTTP request failed")) as Box<dyn std::error::Error + Send + Sync>)
             }
             Ok(Err(e)) => {
                 error!("[CLIENT] HTTP request error to {}: {}", addr, e);
