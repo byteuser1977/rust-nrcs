@@ -49,6 +49,9 @@ pub trait BlockRepository: Repository<BlockModel> {
     async fn has_block(&self, id: i64) -> RepositoryResult<bool>;
     async fn get_ids_after(&self, block_id: i64, limit: i32) -> RepositoryResult<Vec<i64>>;
     async fn update_next_block_id(&self, previous_block_id: i64, next_block_id: i64) -> RepositoryResult<()>;
+    
+    async fn delete_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>>;
+    async fn find_blocks_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>>;
 }
 
 #[async_trait]
@@ -69,6 +72,12 @@ pub trait AccountRepository: Repository<AccountModel> {
     async fn find_latest_by_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>>;
     async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<AccountModel>>;
     async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()>;
+    
+    async fn get_or_create(&self, account_id: i64) -> RepositoryResult<AccountModel>;
+    async fn add_to_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
+    async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
+    async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
+    async fn get_account_count(&self) -> RepositoryResult<i64>;
 }
 
 #[async_trait]
@@ -93,5 +102,138 @@ pub trait AssetRepository: Repository<AssetModel> {
     async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>>;
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AssetModel>>;
     async fn find_tradable(&self, limit: i64) -> RepositoryResult<Vec<AssetModel>>;
+}
+
+#[async_trait]
+pub trait AliasRepository: Repository<AliasModel> {
+    async fn find_by_alias_id(&self, id: i64) -> RepositoryResult<Option<AliasModel>>;
+    async fn find_by_name(&self, name: &str) -> RepositoryResult<Option<AliasModel>>;
+    async fn find_by_owner(&self, account_id: i64) -> RepositoryResult<Vec<AliasModel>>;
+    async fn update_owner(&self, alias_id: i64, new_owner_id: i64) -> RepositoryResult<()>;
+    async fn update_uri(&self, alias_id: i64, uri: &str) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait AliasOfferRepository: Repository<AliasOfferModel> {
+    async fn find_by_alias(&self, alias_id: i64) -> RepositoryResult<Option<AliasOfferModel>>;
+    async fn find_by_buyer(&self, buyer_id: i64) -> RepositoryResult<Vec<AliasOfferModel>>;
+    async fn update_price(&self, alias_id: i64, price: i64, buyer_id: Option<i64>) -> RepositoryResult<()>;
+    async fn delete_by_alias(&self, alias_id: i64) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait AssetTransferRepository: Repository<AssetTransferModel> {
+    async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<AssetTransferModel>>;
+    async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<AssetTransferModel>>;
+    async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<AssetTransferModel>>;
+}
+
+#[async_trait]
+pub trait AskOrderRepository: Repository<AskOrderModel> {
+    async fn find_by_order_id(&self, id: i64) -> RepositoryResult<Option<AskOrderModel>>;
+    async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<AskOrderModel>>;
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AskOrderModel>>;
+    async fn find_best_by_asset(&self, asset_id: i64) -> RepositoryResult<Option<AskOrderModel>>;
+    async fn update_quantity(&self, order_id: i64, quantity: i64) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait BidOrderRepository: Repository<BidOrderModel> {
+    async fn find_by_order_id(&self, id: i64) -> RepositoryResult<Option<BidOrderModel>>;
+    async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<BidOrderModel>>;
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<BidOrderModel>>;
+    async fn find_best_by_asset(&self, asset_id: i64) -> RepositoryResult<Option<BidOrderModel>>;
+    async fn update_quantity(&self, order_id: i64, quantity: i64) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait TradeRepository: Repository<TradeModel> {
+    async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<TradeModel>>;
+    async fn find_by_ask_order(&self, ask_order_id: i64) -> RepositoryResult<Vec<TradeModel>>;
+    async fn find_by_bid_order(&self, bid_order_id: i64) -> RepositoryResult<Vec<TradeModel>>;
+    async fn find_by_buyer(&self, buyer_id: i64, limit: i64) -> RepositoryResult<Vec<TradeModel>>;
+    async fn find_by_seller(&self, seller_id: i64, limit: i64) -> RepositoryResult<Vec<TradeModel>>;
+}
+
+#[async_trait]
+pub trait GoodsRepository: Repository<GoodsModel> {
+    async fn find_by_goods_id(&self, id: i64) -> RepositoryResult<Option<GoodsModel>>;
+    async fn find_by_seller(&self, seller_id: i64, limit: i64) -> RepositoryResult<Vec<GoodsModel>>;
+    async fn find_in_stock(&self, limit: i64) -> RepositoryResult<Vec<GoodsModel>>;
+    async fn update_quantity(&self, goods_id: i64, quantity: i32) -> RepositoryResult<()>;
+    async fn update_price(&self, goods_id: i64, price: i64) -> RepositoryResult<()>;
+    async fn set_delisted(&self, goods_id: i64, delisted: bool) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait PurchaseRepository: Repository<PurchaseModel> {
+    async fn find_by_purchase_id(&self, id: i64) -> RepositoryResult<Option<PurchaseModel>>;
+    async fn find_by_buyer(&self, buyer_id: i64, limit: i64) -> RepositoryResult<Vec<PurchaseModel>>;
+    async fn find_by_seller(&self, seller_id: i64, limit: i64) -> RepositoryResult<Vec<PurchaseModel>>;
+    async fn find_by_goods(&self, goods_id: i64, limit: i64) -> RepositoryResult<Vec<PurchaseModel>>;
+    async fn update_pending(&self, purchase_id: i64, pending: bool) -> RepositoryResult<()>;
+    async fn set_delivered(&self, purchase_id: i64, goods: &[u8], nonce: &[u8]) -> RepositoryResult<()>;
+    async fn set_refund(&self, purchase_id: i64, refund: i64, note: &[u8], nonce: &[u8]) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait CurrencyRepository: Repository<CurrencyModel> {
+    async fn find_by_currency_id(&self, id: i64) -> RepositoryResult<Option<CurrencyModel>>;
+    async fn find_by_code(&self, code: &str) -> RepositoryResult<Option<CurrencyModel>>;
+    async fn find_by_owner(&self, account_id: i64) -> RepositoryResult<Vec<CurrencyModel>>;
+    async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<CurrencyModel>>;
+}
+
+#[async_trait]
+pub trait AccountCurrencyRepository: Repository<AccountCurrencyModel> {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountCurrencyModel>>;
+    async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<AccountCurrencyModel>>;
+    async fn find_by_account_and_currency(&self, account_id: i64, currency_id: i64) -> RepositoryResult<Option<AccountCurrencyModel>>;
+    async fn update_units(&self, account_id: i64, currency_id: i64, units: i64) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait CurrencyTransferRepository: Repository<CurrencyTransferModel> {
+    async fn find_by_currency(&self, currency_id: i64, limit: i64) -> RepositoryResult<Vec<CurrencyTransferModel>>;
+    async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<CurrencyTransferModel>>;
+    async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<CurrencyTransferModel>>;
+}
+
+#[async_trait]
+pub trait TaggedDataRepository: Repository<TaggedDataModel> {
+    async fn find_by_data_id(&self, id: i64) -> RepositoryResult<Option<TaggedDataModel>>;
+    async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>>;
+    async fn find_by_type(&self, data_type: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>>;
+    async fn search_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>>;
+}
+
+#[async_trait]
+pub trait PollRepository: Repository<PollModel> {
+    async fn find_by_poll_id(&self, id: i64) -> RepositoryResult<Option<PollModel>>;
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<PollModel>>;
+    async fn find_active(&self, height: i32, limit: i64) -> RepositoryResult<Vec<PollModel>>;
+    async fn update_voters_count(&self, poll_id: i64, count: i64) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait VoteRepository: Repository<VoteModel> {
+    async fn find_by_poll(&self, poll_id: i64, limit: i64) -> RepositoryResult<Vec<VoteModel>>;
+    async fn find_by_voter(&self, voter_id: i64, limit: i64) -> RepositoryResult<Vec<VoteModel>>;
+    async fn find_by_poll_and_voter(&self, poll_id: i64, voter_id: i64) -> RepositoryResult<Option<VoteModel>>;
+}
+
+#[async_trait]
+pub trait ShufflingRepository: Repository<ShufflingModel> {
+    async fn find_by_shuffling_id(&self, id: i64) -> RepositoryResult<Option<ShufflingModel>>;
+    async fn find_by_issuer(&self, issuer_id: i64) -> RepositoryResult<Vec<ShufflingModel>>;
+    async fn find_active(&self, limit: i64) -> RepositoryResult<Vec<ShufflingModel>>;
+    async fn update_stage(&self, shuffling_id: i64, stage: i32) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait ContractReferenceRepository: Repository<ContractReferenceModel> {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<ContractReferenceModel>>;
+    async fn find_by_contract_name(&self, name: &str) -> RepositoryResult<Option<ContractReferenceModel>>;
+    async fn delete_by_account_and_name(&self, account_id: i64, name: &str) -> RepositoryResult<()>;
 }
 

@@ -316,6 +316,66 @@ impl TxTypeHandler for DataHandler {
     }
 }
 
+pub struct AliasHandler;
+
+impl AliasHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for AliasHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TxTypeHandler for AliasHandler {
+    fn tx_type(&self) -> TransactionType {
+        TransactionType::Messaging
+    }
+    
+    fn validate(&self, tx: &Transaction) -> TxTypeResult<()> {
+        match tx.subtype {
+            blockchain_types::transaction::SUBTYPE_MESSAGING_ALIAS_ASSIGNMENT |
+            blockchain_types::transaction::SUBTYPE_MESSAGING_ALIAS_SELL |
+            blockchain_types::transaction::SUBTYPE_MESSAGING_ALIAS_BUY |
+            blockchain_types::transaction::SUBTYPE_MESSAGING_ALIAS_DELETE => Ok(()),
+            _ => Err(TxTypeError::InvalidAttachment(format!("invalid alias subtype: {}", tx.subtype))),
+        }
+    }
+    
+    fn apply(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        if state.sender_balance < tx.fee {
+            return Err(TxTypeError::InvalidAmount(state.sender_balance));
+        }
+        
+        state.sender_balance -= tx.fee;
+        
+        if tx.subtype == blockchain_types::transaction::SUBTYPE_MESSAGING_ALIAS_BUY {
+            if let Some(recipient) = state.recipient_id {
+                state.recipient_balance += tx.amount;
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn undo(&self, tx: &Transaction, state: &mut TxExecutionContext) -> TxTypeResult<()> {
+        state.sender_balance += tx.fee;
+        
+        if tx.subtype == blockchain_types::transaction::SUBTYPE_MESSAGING_ALIAS_BUY {
+            if let Some(_recipient) = state.recipient_id {
+                if state.recipient_balance >= tx.amount {
+                    state.recipient_balance -= tx.amount;
+                }
+            }
+        }
+        
+        Ok(())
+    }
+}
+
 pub struct TxTypeRegistry {
     handlers: std::collections::HashMap<TransactionType, Box<dyn TxTypeHandler>>,
 }
@@ -332,6 +392,10 @@ impl TxTypeRegistry {
         handlers.insert(TransactionType::Data, Box::new(DataHandler::new()));
         
         Self { handlers }
+    }
+    
+    pub fn register(&mut self, handler: Box<dyn TxTypeHandler>) {
+        self.handlers.insert(handler.tx_type(), handler);
     }
     
     pub fn get_handler(&self, tx_type: TransactionType) -> Option<&dyn TxTypeHandler> {

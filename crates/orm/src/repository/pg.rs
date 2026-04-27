@@ -141,6 +141,50 @@ impl BlockRepository for PgBlockRepository {
         
         Ok(records.into_iter().map(|b| b.id).collect())
     }
+
+    async fn update_next_block_id(&self, previous_block_id: i64, next_block_id: i64) -> RepositoryResult<()> {
+        sqlx::query("UPDATE block SET next_block_id = $1 WHERE id = $2")
+            .bind(next_block_id)
+            .bind(previous_block_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>> {
+        let blocks = self.find_blocks_after_height(height).await?;
+        
+        for block in &blocks {
+            sqlx::query("DELETE FROM block WHERE id = $1")
+                .bind(block.id)
+                .execute(&self.pool)
+                .await
+                .map_err(RepositoryError::DbError)?;
+        }
+        
+        if let Some(last_block) = blocks.last() {
+            sqlx::query("UPDATE block SET next_block_id = NULL WHERE id = $1")
+                .bind(last_block.previous_block_id)
+                .execute(&self.pool)
+                .await
+                .map_err(RepositoryError::DbError)?;
+        }
+        
+        Ok(blocks)
+    }
+
+    async fn find_blocks_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>> {
+        let records = sqlx::query_as!(
+            BlockModel,
+            "SELECT * FROM block WHERE height > $1 ORDER BY height ASC",
+            height
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
 }
 
 #[async_trait]
@@ -495,6 +539,131 @@ impl AccountRepository for PgAccountRepository {
         .await
         .map_err(RepositoryError::DbError)?;
         Ok(())
+    }
+
+    async fn get_or_create(&self, account_id: i64) -> RepositoryResult<AccountModel> {
+        if let Some(account) = self.find_by_account_id(account_id).await? {
+            return Ok(account);
+        }
+        
+        let account = AccountModel {
+            db_id: 0,
+            id: account_id,
+            balance: 0,
+            unconfirmed_balance: 0,
+            forged_balance: 0,
+            active_lessee_id: None,
+            has_control_phasing: false,
+            height: 0,
+            latest: true,
+        };
+        
+        self.insert(&account).await?;
+        Ok(account)
+    }
+
+    async fn add_to_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+        let result = sqlx::query(
+            r#"
+            UPDATE account
+            SET balance = balance + $2
+            WHERE id = $1 AND latest = TRUE
+            "#,
+            account_id,
+            amount
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        
+        if result.rows_affected() == 0 {
+            let _account = self.get_or_create(account_id).await?;
+            sqlx::query(
+                r#"
+                UPDATE account
+                SET balance = balance + $2
+                WHERE id = $1 AND latest = TRUE
+                "#,
+                account_id,
+                amount
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        }
+        Ok(())
+    }
+
+    async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+        let result = sqlx::query(
+            r#"
+            UPDATE account
+            SET unconfirmed_balance = unconfirmed_balance + $2
+            WHERE id = $1 AND latest = TRUE
+            "#,
+            account_id,
+            amount
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        
+        if result.rows_affected() == 0 {
+            let _account = self.get_or_create(account_id).await?;
+            sqlx::query(
+                r#"
+                UPDATE account
+                SET unconfirmed_balance = unconfirmed_balance + $2
+                WHERE id = $1 AND latest = TRUE
+                "#,
+                account_id,
+                amount
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        }
+        Ok(())
+    }
+
+    async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+        let result = sqlx::query(
+            r#"
+            UPDATE account
+            SET balance = balance + $2, unconfirmed_balance = unconfirmed_balance + $2
+            WHERE id = $1 AND latest = TRUE
+            "#,
+            account_id,
+            amount
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        
+        if result.rows_affected() == 0 {
+            let _account = self.get_or_create(account_id).await?;
+            sqlx::query(
+                r#"
+                UPDATE account
+                SET balance = balance + $2, unconfirmed_balance = unconfirmed_balance + $2
+                WHERE id = $1 AND latest = TRUE
+                "#,
+                account_id,
+                amount
+            )
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        }
+        Ok(())
+    }
+
+    async fn get_account_count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account WHERE latest = TRUE")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
     }
 }
 

@@ -227,6 +227,35 @@ impl BlockVerifier for BlockchainVerifier {
             Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
         }
     }
+
+    async fn get_height(&self) -> anyhow::Result<u32> {
+        match self.block_repo.find_latest().await {
+            Ok(Some(block)) => Ok(block.height as u32),
+            Ok(None) => Ok(0),
+            Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
+        }
+    }
+
+    async fn get_cumulative_difficulty(&self) -> anyhow::Result<u128> {
+        match self.block_repo.find_latest().await {
+            Ok(Some(block)) => {
+                let bytes = &block.cumulative_difficulty;
+                if bytes.len() >= 16 {
+                    let mut arr = [0u8; 16];
+                    arr.copy_from_slice(&bytes[bytes.len()-16..]);
+                    Ok(u128::from_be_bytes(arr))
+                } else if bytes.is_empty() {
+                    Ok(0)
+                } else {
+                    let mut arr = [0u8; 16];
+                    arr[16-bytes.len()..].copy_from_slice(bytes);
+                    Ok(u128::from_be_bytes(arr))
+                }
+            }
+            Ok(None) => Ok(0),
+            Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
+        }
+    }
 }
 
 pub struct NoOpBlockVerifier;
@@ -271,5 +300,13 @@ impl BlockVerifier for NoOpBlockVerifier {
 
     async fn get_block_height(&self, _block_id: u64) -> anyhow::Result<Option<u32>> {
         Ok(None)
+    }
+
+    async fn get_height(&self) -> anyhow::Result<u32> {
+        Ok(0)
+    }
+
+    async fn get_cumulative_difficulty(&self) -> anyhow::Result<u128> {
+        Ok(0)
     }
 }

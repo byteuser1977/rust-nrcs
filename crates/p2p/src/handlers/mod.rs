@@ -47,6 +47,10 @@ pub trait BlockVerifier: Send + Sync {
     async fn process_fork_block(&self, block: Block) -> Result<()>;
     
     async fn get_block_height(&self, block_id: u64) -> Result<Option<u32>>;
+    
+    async fn get_height(&self) -> Result<u32>;
+    
+    async fn get_cumulative_difficulty(&self) -> Result<u128>;
 }
 
 pub struct Handler {

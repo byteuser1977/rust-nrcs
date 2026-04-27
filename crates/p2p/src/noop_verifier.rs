@@ -46,4 +46,12 @@ impl BlockVerifier for NoOpBlockVerifier {
     async fn get_block_height(&self, _block_id: u64) -> Result<Option<u32>> {
         Ok(None)
     }
+
+    async fn get_height(&self) -> Result<u32> {
+        Ok(0)
+    }
+
+    async fn get_cumulative_difficulty(&self) -> Result<u128> {
+        Ok(0)
+    }
 }

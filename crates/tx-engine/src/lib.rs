@@ -14,6 +14,7 @@ pub mod validation;
 pub mod processor;
 pub mod mempool;
 pub mod broadcast;
+pub mod trade_matcher;
 
 pub use types::{TxPriority, TxReceiptInfo, TxStatus};
 pub use attachment::{

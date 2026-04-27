@@ -16,18 +16,74 @@ use blockchain_types::prelude::Block;
 use blockchain_types::prelude::Transaction;
 use blockchain_types::constants::GENESIS_BLOCK_ID;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use std::cmp::min;
 
 const SEGMENT_SIZE: usize = 36;
 const MAX_BLOCKS_BATCH: usize = 720;
+const MAX_BLOCKS_LIMIT: usize = 1440;
+const SYNC_INTERVAL_SECS: u64 = 1;
+const SYNC_EMPTY_RETRY: u32 = 3;
+
+#[derive(Debug, Clone, Default)]
+pub struct SyncState {
+    pub is_syncing: bool,
+    pub start_time: Option<Instant>,
+    pub start_height: u32,
+    pub current_height: u32,
+    pub target_height: u32,
+    pub blocks_downloaded: usize,
+    pub blocks_processed: usize,
+    pub errors_count: usize,
+    pub active_peers: usize,
+    pub last_sync_time: Option<Instant>,
+}
+
+impl SyncState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn progress_percent(&self) -> f64 {
+        if self.target_height <= self.start_height {
+            return 100.0;
+        }
+        let total = self.target_height - self.start_height;
+        let done = self.current_height.saturating_sub(self.start_height);
+        (done as f64 / total as f64 * 100.0).min(100.0)
+    }
+
+    pub fn elapsed_secs(&self) -> u64 {
+        self.start_time
+            .map(|t| t.elapsed().as_secs())
+            .unwrap_or(0)
+    }
+
+    pub fn blocks_per_sec(&self) -> f64 {
+        let elapsed = self.elapsed_secs();
+        if elapsed == 0 {
+            return 0.0;
+        }
+        self.blocks_processed as f64 / elapsed as f64
+    }
+
+    pub fn eta_secs(&self) -> u64 {
+        let rate = self.blocks_per_sec();
+        if rate == 0.0 {
+            return 0;
+        }
+        let remaining = self.target_height.saturating_sub(self.current_height);
+        (remaining as f64 / rate) as u64
+    }
+}
 
 pub struct BlockchainSyncDaemon {
     config: P2PConfig,
     running: Arc<RwLock<bool>>,
     is_downloading: Arc<RwLock<bool>>,
+    sync_state: Arc<RwLock<SyncState>>,
 }
 
 impl BlockchainSyncDaemon {
@@ -36,6 +92,7 @@ impl BlockchainSyncDaemon {
             config,
             running: Arc::new(RwLock::new(false)),
             is_downloading: Arc::new(RwLock::new(false)),
+            sync_state: Arc::new(RwLock::new(SyncState::new())),
         }
     }
 
@@ -55,10 +112,11 @@ impl BlockchainSyncDaemon {
         let config = self.config.clone();
         let running = Arc::clone(&self.running);
         let is_downloading = Arc::clone(&self.is_downloading);
+        let sync_state = Arc::clone(&self.sync_state);
 
         tokio::spawn(async move {
             info!("Blockchain sync daemon started");
-            Self::sync_loop(peers, config, running, is_downloading, block_verifier).await;
+            Self::sync_loop(peers, config, running, is_downloading, sync_state, block_verifier).await;
             info!("Blockchain sync daemon stopped");
         });
     }
@@ -73,11 +131,48 @@ impl BlockchainSyncDaemon {
         *self.is_downloading.read().await
     }
 
+    pub async fn get_sync_state(&self) -> SyncState {
+        self.sync_state.read().await.clone()
+    }
+
+    async fn update_sync_progress(
+        sync_state: &Arc<RwLock<SyncState>>,
+        current_height: u32,
+        blocks_processed: usize,
+    ) {
+        let mut state = sync_state.write().await;
+        state.current_height = current_height;
+        state.blocks_processed = blocks_processed;
+        
+        if state.blocks_processed % 100 == 0 && state.blocks_processed > 0 {
+            let progress = state.progress_percent();
+            let rate = state.blocks_per_sec();
+            let eta = state.eta_secs();
+            info!(
+                "Sync progress: {:.1}% | Height: {} | Blocks: {} | Rate: {:.1} blocks/s | ETA: {}s",
+                progress, current_height, blocks_processed, rate, eta
+            );
+        }
+    }
+
+    async fn log_sync_summary(sync_state: &Arc<RwLock<SyncState>>) {
+        let state = sync_state.read().await;
+        if state.blocks_processed > 0 {
+            let elapsed = state.elapsed_secs();
+            let rate = state.blocks_per_sec();
+            info!(
+                "Sync completed: {} blocks in {}s ({:.1} blocks/s)",
+                state.blocks_processed, elapsed, rate
+            );
+        }
+    }
+
     async fn sync_loop(
         peers: Arc<crate::peer::Peers>,
         config: P2PConfig,
         running: Arc<RwLock<bool>>,
         is_downloading: Arc<RwLock<bool>>,
+        sync_state: Arc<RwLock<SyncState>>,
         block_verifier: Arc<dyn BlockVerifier>,
     ) {
         loop {
@@ -85,21 +180,78 @@ impl BlockchainSyncDaemon {
                 break;
             }
 
-            tokio::time::sleep(Duration::from_secs(30)).await;
-
-            if let Err(e) = Self::download_peer(&peers, &is_downloading, &block_verifier).await {
-                if *running.read().await {
-                    debug!("Sync loop error: {}", e);
-                }
+            {
+                let mut state = sync_state.write().await;
+                state.is_syncing = true;
+                state.start_time = Some(Instant::now());
+                state.start_height = block_verifier.get_height().await.unwrap_or(0);
+                state.current_height = state.start_height;
+                state.blocks_downloaded = 0;
+                state.blocks_processed = 0;
+                state.errors_count = 0;
             }
+
+            let mut consecutive_empty = 0u32;
+            let mut total_processed = 0usize;
+            
+            loop {
+                if !*running.read().await {
+                    break;
+                }
+
+                match Self::download_peer(&peers, &is_downloading, &sync_state, &block_verifier).await {
+                    Ok(downloaded) => {
+                        if downloaded == 0 {
+                            consecutive_empty += 1;
+                            if consecutive_empty >= SYNC_EMPTY_RETRY {
+                                debug!("No more blocks to download after {} attempts", SYNC_EMPTY_RETRY);
+                                break;
+                            }
+                        } else {
+                            consecutive_empty = 0;
+                            total_processed += downloaded;
+                            info!("Downloaded {} blocks (total: {}), continuing sync...", downloaded, total_processed);
+                            
+                            let current_height = block_verifier.get_height().await.unwrap_or(0);
+                            Self::update_sync_progress(&sync_state, current_height, total_processed).await;
+                        }
+                    }
+                    Err(e) => {
+                        debug!("Sync error: {}", e);
+                        consecutive_empty += 1;
+                        {
+                            let mut state = sync_state.write().await;
+                            state.errors_count += 1;
+                        }
+                        if consecutive_empty >= SYNC_EMPTY_RETRY {
+                            break;
+                        }
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+
+            {
+                let mut state = sync_state.write().await;
+                state.is_syncing = false;
+                state.last_sync_time = Some(Instant::now());
+            }
+
+            Self::log_sync_summary(&sync_state).await;
+
+            *is_downloading.write().await = false;
+
+            tokio::time::sleep(Duration::from_secs(SYNC_INTERVAL_SECS)).await;
         }
     }
 
     async fn download_peer(
         peers: &Arc<crate::peer::Peers>,
         is_downloading: &Arc<RwLock<bool>>,
+        sync_state: &Arc<RwLock<SyncState>>,
         block_verifier: &Arc<dyn BlockVerifier>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let connected_peers = peers.get_known_peers().await;
         let connected_peers: Vec<Peer> = connected_peers.into_iter()
             .filter(|p| p.state == PeerState::Connected)
@@ -107,71 +259,106 @@ impl BlockchainSyncDaemon {
 
         if connected_peers.is_empty() {
             debug!("No connected peers for sync");
-            return Ok(());
+            return Ok(0);
         }
 
-        let peer = match connected_peers.first() {
+        let peer_addrs: Vec<std::net::SocketAddr> = connected_peers.iter()
+            .map(|p| p.address)
+            .collect();
+
+        {
+            let mut state = sync_state.write().await;
+            state.active_peers = peer_addrs.len();
+        }
+
+        let feeder_peer = match connected_peers.first() {
             Some(p) => p.clone(),
             None => {
                 debug!("No suitable peer found for sync");
-                return Ok(());
+                return Ok(0);
             }
         };
 
-        let peer_addr = peer.address;
+        let feeder_addr = feeder_peer.address;
         let unknown_label = "unknown".to_string();
-        let peer_label = peer.announced_address.as_ref().unwrap_or(&unknown_label);
-        info!("Selected peer for sync: {}", peer_label);
+        let peer_label = feeder_peer.announced_address.as_ref().unwrap_or(&unknown_label);
 
-        let cumulative_difficulty = Self::get_cumulative_difficulty(peer_addr).await?;
+        let cumulative_difficulty = Self::get_cumulative_difficulty(feeder_addr).await?;
         if cumulative_difficulty.is_none() {
             debug!("Failed to get cumulative difficulty from peer");
-            return Ok(());
+            return Ok(0);
         }
 
         let peer_cumulative_difficulty = cumulative_difficulty.unwrap();
-        info!("Peer cumulative difficulty: {}", peer_cumulative_difficulty);
 
-        // Get the last local block ID to continue from there
+        let local_cumulative_difficulty = block_verifier.get_cumulative_difficulty().await
+            .unwrap_or_default();
+        
+        if peer_cumulative_difficulty <= local_cumulative_difficulty {
+            debug!("Peer cumulative difficulty ({}) not higher than local ({})", 
+                   peer_cumulative_difficulty, local_cumulative_difficulty);
+            return Ok(0);
+        }
+
+        info!("Peer {} has higher cumulative difficulty: {} > {}", 
+              peer_label, peer_cumulative_difficulty, local_cumulative_difficulty);
+
         let last_local_block_id = block_verifier.get_last_block_id().await
             .ok()
             .flatten()
             .unwrap_or(0);
         
         let common_block_id = if last_local_block_id != 0 {
-            info!("Last local block ID: {}, continuing sync from there", last_local_block_id);
+            debug!("Last local block ID: {}, continuing sync from there", last_local_block_id);
             last_local_block_id
         } else {
             info!("No local blocks, starting from genesis block");
             GENESIS_BLOCK_ID
         };
 
-        info!("Starting sync from block ID: {}", common_block_id);
-
         let common_block_height = block_verifier.get_block_height(common_block_id).await
             .ok()
             .flatten()
             .unwrap_or(0);
-        info!("Common block height: {}", common_block_height);
 
-        let chain_block_ids = Self::get_block_ids_after_common(peer_addr, common_block_id, block_verifier).await?;
-        if chain_block_ids.len() < 2 {
-            debug!("Not enough blocks after common block");
-            return Ok(());
+        let current_height = block_verifier.get_height().await.unwrap_or(0);
+        
+        if current_height > 0 && current_height - common_block_height >= blockchain_types::constants::MAX_ROLLBACK {
+            warn!("Common block is too far behind ({} blocks >= {}), skipping sync from peer {}", 
+                  current_height - common_block_height, blockchain_types::constants::MAX_ROLLBACK, peer_label);
+            return Ok(0);
         }
 
-        info!("Blocks to download: {}", chain_block_ids.len() - 1);
+        info!("Starting sync from block ID: {} (height: {})", common_block_id, common_block_height);
 
-        if !*is_downloading.read().await && chain_block_ids.len() > 10 {
+        let chain_block_ids = Self::get_block_ids_after_common(feeder_addr, common_block_id, block_verifier).await?;
+        if chain_block_ids.len() < 2 {
+            debug!("Not enough blocks after common block");
+            return Ok(0);
+        }
+
+        let blocks_to_download = chain_block_ids.len() - 1;
+        info!("Blocks to download: {} from {} peer(s)", blocks_to_download, peer_addrs.len());
+
+        {
+            let mut state = sync_state.write().await;
+            state.target_height = common_block_height + blocks_to_download as u32;
+            state.blocks_downloaded = blocks_to_download;
+        }
+
+        if !*is_downloading.read().await && blocks_to_download > 10 {
             info!("Blockchain download in progress");
             *is_downloading.write().await = true;
         }
 
-        Self::download_blocks(peer_addr, &chain_block_ids, common_block_height, block_verifier).await?;
+        let downloaded = Self::download_blocks_multi_peer(
+            &peer_addrs,
+            &chain_block_ids,
+            common_block_height,
+            block_verifier,
+        ).await?;
 
-        *is_downloading.write().await = false;
-
-        Ok(())
+        Ok(downloaded)
     }
 
     async fn get_cumulative_difficulty(
@@ -261,46 +448,39 @@ impl BlockchainSyncDaemon {
     ) -> Result<Vec<u64>, Box<dyn std::error::Error + Send + Sync>> {
         let mut block_list = Vec::new();
         let mut match_id = start_block_id;
-        let limit = 1440;
 
         let mut request = PeerRequest::new(RequestType::GetNextBlockIds, 1);
         request.set("blockId", &start_block_id.to_string());
-        request.set("limit", &(limit as i32));
+        request.set("limit", &(MAX_BLOCKS_LIMIT as i32));
 
-        info!("Requesting block IDs after {} from peer", start_block_id);
+        debug!("Requesting block IDs after {} from peer", start_block_id);
 
         match WebsocketClient::send_request(peer_addr, request).await {
             Ok(response) => {
-                info!("Received response: {:?}", response);
-                
                 if let Some(next_block_ids) = response.get("nextBlockIds").and_then(|v| v.as_array()) {
-                    info!("Received {} block IDs from peer", next_block_ids.len());
+                    debug!("Received {} block IDs from peer", next_block_ids.len());
                     
                     if next_block_ids.is_empty() {
                         block_list.push(match_id);
                         return Ok(block_list);
                     }
 
-                    if next_block_ids.len() > limit {
-                        warn!("Peer {} sends too many nextBlockIds", peer_addr);
+                    if next_block_ids.len() > MAX_BLOCKS_LIMIT {
+                        warn!("Peer {} sends too many nextBlockIds ({})", peer_addr, next_block_ids.len());
                         return Ok(Vec::new());
                     }
 
                     let mut matching = true;
-                    for (index, next_block_id) in next_block_ids.iter().enumerate() {
+                    for next_block_id in next_block_ids.iter() {
                         if let Some(id_str) = next_block_id.as_str() {
                             if let Ok(block_id) = Self::parse_block_id(id_str) {
-                                info!("Block ID[{}]: {}", index, block_id);
-                                
                                 if matching {
                                     if Self::has_block(block_id, block_verifier).await? {
                                         match_id = block_id;
-                                        info!("Block {} already exists locally, continuing", block_id);
                                     } else {
                                         block_list.push(match_id);
                                         block_list.push(block_id);
                                         matching = false;
-                                        info!("Block {} not found locally, adding to download list", block_id);
                                     }
                                 } else {
                                     block_list.push(block_id);
@@ -345,17 +525,15 @@ impl BlockchainSyncDaemon {
     /// 重试延迟（毫秒）
     const RETRY_DELAY_MS: u64 = 1000;
 
-    async fn download_blocks(
-        peer_addr: std::net::SocketAddr,
+    async fn download_blocks_multi_peer(
+        peer_addrs: &[std::net::SocketAddr],
         chain_block_ids: &[u64],
         common_block_height: u32,
         block_verifier: &Arc<dyn BlockVerifier>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         if chain_block_ids.len() < 2 {
-            return Ok(());
+            return Ok(0);
         }
-
-        info!("Downloading {} blocks from peer", chain_block_ids.len() - 1);
 
         let stop = chain_block_ids.len() - 1;
         let mut get_list: Vec<(usize, usize)> = Vec::new();
@@ -365,27 +543,22 @@ impl BlockchainSyncDaemon {
             get_list.push((start, seg_stop));
         }
 
-        // 并发下载所有段（带重试机制）
-        // Java NRCS 限制 blockIds 数组长度不能超过 36
+        let peer_count = peer_addrs.len().max(1);
+        info!("Downloading {} blocks using {} peer(s), {} segments", 
+              chain_block_ids.len() - 1, peer_count, get_list.len());
+
         let mut download_futures = Vec::new();
         
-        for &(start_idx, stop_idx) in &get_list {
-            // chain_block_ids[0] 是公共区块 ID
-            // chain_block_ids[1..] 是需要下载的区块 ID 列表
-            // Java NRCS 期望:
-            // - blockId: 公共区块 ID (前一个区块)
-            // - blockIds: 需要下载的区块 ID 列表 (不包含公共区块)
+        for (segment_idx, &(start_idx, stop_idx)) in get_list.iter().enumerate() {
+            let peer_addr = peer_addrs[segment_idx % peer_count];
             let common_block_id = chain_block_ids.get(0).copied().unwrap_or(0);
             
-            // 如果 start_idx == 0，blockId 应该是公共区块，blockIds 从 start_idx+1 开始
-            // 如果 start_idx > 0，blockId 是 start_idx-1 的区块，blockIds 从 start_idx 开始
             let (prev_block_id, id_start_idx) = if start_idx == 0 {
-                (common_block_id, 1) // 跳过公共区块
+                (common_block_id, 1)
             } else {
                 (chain_block_ids.get(start_idx - 1).copied().unwrap_or(common_block_id), start_idx)
             };
 
-            // blockIds 应该包含从 id_start_idx 开始的区块 ID
             let id_list: Vec<serde_json::Value> = (id_start_idx..stop_idx)
                 .filter_map(|i| chain_block_ids.get(i).copied())
                 .map(|id| serde_json::Value::String(id.to_string()))
@@ -395,26 +568,17 @@ impl BlockchainSyncDaemon {
             request.set("blockIds", &id_list);
             request.set("blockId", &prev_block_id.to_string());
 
-            let peer_addr_clone = peer_addr;
             download_futures.push(async move {
-                // 重试机制
                 let mut last_error = None;
                 for retry in 0..Self::MAX_RETRIES {
-                    match WebsocketClient::send_request(peer_addr_clone, request.clone()).await {
+                    match WebsocketClient::send_request(peer_addr, request.clone()).await {
                         Ok(response) => {
-                            // 调试：打印响应内容
-                            debug!("Response for segment {}: {:?}", start_idx, response);
-                            
-                            // 验证响应
                             if let Some(next_blocks) = response.get("nextBlocks").and_then(|v| v.as_array()) {
-                                debug!("nextBlocks array length: {}", next_blocks.len());
                                 if !next_blocks.is_empty() {
                                     return (start_idx, stop_idx, Ok(response));
                                 }
                             }
-                            // 空响应，重试
                             last_error = Some("Empty response".to_string());
-                            warn!("Empty nextBlocks in response for segment {}, keys: {:?}", start_idx, response.as_object().map(|m| m.keys().collect::<Vec<_>>()));
                             if retry < Self::MAX_RETRIES - 1 {
                                 tokio::time::sleep(tokio::time::Duration::from_millis(Self::RETRY_DELAY_MS)).await;
                             }
@@ -422,7 +586,6 @@ impl BlockchainSyncDaemon {
                         Err(e) => {
                             last_error = Some(e.to_string());
                             if retry < Self::MAX_RETRIES - 1 {
-                                warn!("Retry {}/{} for segment {}: {}", retry + 1, Self::MAX_RETRIES, start_idx, e);
                                 tokio::time::sleep(tokio::time::Duration::from_millis(Self::RETRY_DELAY_MS)).await;
                             }
                         }
@@ -432,10 +595,8 @@ impl BlockchainSyncDaemon {
             });
         }
 
-        // 并发执行所有下载请求
         let results = futures::future::join_all(download_futures).await;
 
-        // 按顺序处理结果
         let mut processed = 0;
         let mut all_blocks: Vec<(usize, serde_json::Value)> = Vec::new();
         let mut failed_segments = Vec::new();
@@ -444,12 +605,7 @@ impl BlockchainSyncDaemon {
             match result {
                 Ok(response) => {
                     if let Some(next_blocks) = response.get("nextBlocks").and_then(|v| v.as_array()) {
-                        if next_blocks.len() > SEGMENT_SIZE {
-                            warn!("Peer {} sends {} nextBlocks (expected <= {}), but continuing...", 
-                                  peer_addr, next_blocks.len(), SEGMENT_SIZE);
-                        }
-
-                        info!("Received {} blocks from peer for segment starting at {}", 
+                        debug!("Received {} blocks for segment starting at {}", 
                               next_blocks.len(), start_idx);
 
                         for (block_idx, block_data) in next_blocks.iter().enumerate() {
@@ -458,22 +614,18 @@ impl BlockchainSyncDaemon {
                     }
                 }
                 Err(e) => {
-                    warn!("Failed to get next blocks for segment {} after {} retries: {}", 
-                          start_idx, Self::MAX_RETRIES, e);
+                    warn!("Failed to get blocks for segment {}: {}", start_idx, e);
                     failed_segments.push(start_idx);
                 }
             }
         }
 
-        // 报告失败的段
         if !failed_segments.is_empty() {
             warn!("Failed to download {} segments: {:?}", failed_segments.len(), failed_segments);
         }
 
-        // 按区块索引排序
         all_blocks.sort_by_key(|(idx, _)| *idx);
 
-        // 处理所有下载的区块
         for (block_idx, block_data) in all_blocks {
             let block_height = common_block_height + block_idx as u32 + 1;
             if let Err(e) = Self::process_downloaded_block(&block_data, block_height, block_verifier).await {
@@ -487,7 +639,16 @@ impl BlockchainSyncDaemon {
             info!("Downloaded and processed {} blocks total", processed);
         }
 
-        Ok(())
+        Ok(processed)
+    }
+
+    async fn download_blocks(
+        peer_addr: std::net::SocketAddr,
+        chain_block_ids: &[u64],
+        common_block_height: u32,
+        block_verifier: &Arc<dyn BlockVerifier>,
+    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        Self::download_blocks_multi_peer(&[peer_addr], chain_block_ids, common_block_height, block_verifier).await
     }
 
     async fn process_downloaded_block(
