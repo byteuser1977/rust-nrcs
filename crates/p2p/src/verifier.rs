@@ -125,10 +125,7 @@ impl BlockchainVerifier {
     ///
     /// If any phase fails, all previous operations are rolled back
     async fn accept_block(&self, block: &Block) -> anyhow::Result<()> {
-        info!(
-            "🔄 Starting accept flow for block height={}, txs={}",
-            block.height, block.transactions.len()
-        );
+        debug!("Accept block height={}, txs={}", block.height, block.transactions.len());
 
         // === Phase 1: Pre-deduct unconfirmed balance (double-spend detection) ===
         debug!("Phase 1: Applying unconfirmed transactions...");
@@ -213,10 +210,7 @@ impl BlockchainVerifier {
         }
         debug!("✅ Phase 3 complete: {} transactions executed", block.transactions.len());
 
-        info!(
-            "✅ Accept flow completed successfully for block height={}, {} transactions processed",
-            block.height, block.transactions.len()
-        );
+        debug!("✅ Accept complete: height={}, txs={}", block.height, block.transactions.len());
 
         Ok(())
     }
@@ -247,12 +241,7 @@ impl BlockVerifier for BlockchainVerifier {
         let block_id = block.get_id();
 
         if block_height <= 2 {
-            let serialized = block.serialize_for_id();
-            info!("Block {} serialized bytes (first 40): {:02x?}", block_height, &serialized[..40.min(serialized.len())]);
-            info!("Block {} gen_pub_key: {:?}", block_height, block.generator_public_key.as_ref().map(hex::encode));
-            info!("Block {} prev_block_hash: {:02x?}", block_height, block.previous_block_hash.0.iter().take(8).collect::<Vec<_>>());
-            info!("Block {} generation_signature: {:02x?}", block_height, block.generation_signature.iter().take(8).collect::<Vec<_>>());
-            info!("Block {} block_signature: {:02x?}", block_height, block.block_signature.0.iter().take(8).collect::<Vec<_>>());
+            debug!("Block {} gen_pub_key: {:?}", block_height, block.generator_public_key.as_ref().map(hex::encode));
         }
 
         // Step 2: Basic validation
@@ -293,8 +282,7 @@ impl BlockVerifier for BlockchainVerifier {
                         block_hm2.as_ref(),
                     );
 
-                    info!("Calculated base_target={} cumulative_difficulty={:?} for block height={}",
-                          base_target, cumulative_difficulty, block_height);
+                    debug!("base_target={}, height={}", base_target, block_height);
 
                     block.base_target = base_target;
                     block.cumulative_difficulty = cumulative_difficulty;
@@ -327,10 +315,7 @@ impl BlockVerifier for BlockchainVerifier {
         // Step 6: Execute accept flow (two-phase transaction commit)
         match self.accept_block(&block).await {
             Ok(()) => {
-                info!(
-                    "✅ Block accepted successfully: height={}, id={}, generator={}, txs={}",
-                    block_height, block_id, block.get_generator_id(), block.transactions.len()
-                );
+                info!("Block accepted: height={}, id={}, txs={}", block_height, block_id, block.transactions.len());
                 Ok(())
             }
             Err(e) => {

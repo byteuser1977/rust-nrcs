@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use blockchain_types::prelude::{Block, AccountId};
 use orm::{AccountRepository, BlockRepository, PublicKeyRepository};
-use tracing::{debug, info};
+use tracing::debug;
 
 /// Block reward applicator (corresponds to Java's Block.apply())
 pub struct BlockRewardApplicator {
@@ -67,10 +67,7 @@ impl BlockRewardApplicator {
             net_fee
         ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
 
-        info!(
-            "Block reward applied: height={}, generator={}, net_fee={}, back_fees={}",
-            block.height, generator_id, net_fee, total_back_fees
-        );
+        debug!("Block reward: height={}, generator={}, net_fee={}", block.height, generator_id, net_fee);
 
         Ok(())
     }
