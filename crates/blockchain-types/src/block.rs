@@ -926,7 +926,7 @@ mod tests {
         
         // Verify txCount
         let tx_count = i32::from_le_bytes(serialized[16..20].try_into().unwrap());
-        assert_eq!(tx_count, 0); // block has empty transactions in test
+        assert_eq!(tx_count, 1); // block has 1 transaction in test
         
         // Verify totalAmount (8 bytes for v>=3)
         let amount = u64::from_le_bytes(serialized[20..28].try_into().unwrap());
