@@ -1,5 +1,5 @@
 [p2p]
-listen_addr = "0.0.0.0:17986"
+listen_addr = "0.0.0.0:17974"
 external_addr = "192.168.2.164:17984"
 bootstrap_nodes = ["192.168.2.164:17974"]
 max_connections = 100
@@ -8,11 +8,11 @@ protocol_id = "NRCS/2.1"
 
 [api]
 host = "0.0.0.0"
-port = 18196
+port = 17976
 
 [websocket]
 enabled = true
-port = 18194
+port = 17975
 
 [database]
 url = "sqlite:///mnt/d/workspace/git/rust-nrcs/nrcs.db?mode=rwc"

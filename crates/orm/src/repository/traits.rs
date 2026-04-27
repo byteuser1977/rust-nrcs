@@ -237,3 +237,30 @@ pub trait ContractReferenceRepository: Repository<ContractReferenceModel> {
     async fn delete_by_account_and_name(&self, account_id: i64, name: &str) -> RepositoryResult<()>;
 }
 
+#[async_trait]
+pub trait AssetPropertyRepository: Repository<AssetPropertyModel> {
+    async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetPropertyModel>>;
+    async fn find_by_asset_and_account(&self, asset_id: i64, account_id: i64) -> RepositoryResult<Vec<AssetPropertyModel>>;
+    async fn find_by_asset_account_property(&self, asset_id: i64, account_id: i64, property: &str) -> RepositoryResult<Option<AssetPropertyModel>>;
+    async fn delete_by_asset_account_property(&self, asset_id: i64, account_id: i64, property: &str) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait AssetHistoryRepository: Repository<AssetHistoryModel> {
+    async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<AssetHistoryModel>>;
+    async fn find_by_asset_and_account(&self, asset_id: i64, account_id: i64, limit: i64) -> RepositoryResult<Vec<AssetHistoryModel>>;
+}
+
+#[async_trait]
+pub trait TaggedDataTagRepository: Repository<TaggedDataTagModel> {
+    async fn find_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataTagModel>>;
+    async fn find_by_data_id(&self, id: i64) -> RepositoryResult<Vec<TaggedDataTagModel>>;
+}
+
+#[async_trait]
+pub trait TaggedTimestampRepository: Repository<TaggedTimestampModel> {
+    async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<TaggedTimestampModel>>;
+    async fn find_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedTimestampModel>>;
+    async fn find_by_account_and_tag(&self, account_id: i64, tag: &str) -> RepositoryResult<Option<TaggedTimestampModel>>;
+}
+

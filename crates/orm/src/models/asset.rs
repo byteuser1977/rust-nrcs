@@ -55,3 +55,28 @@ impl AssetModel {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_asset_model() {
+        let model = AssetModel {
+            db_id: 0,
+            id: 1,
+            account_id: 100,
+            name: "Test Asset".to_string(),
+            description: Some("Test Description".to_string()),
+            quantity: 1000000,
+            decimals: 4,
+            has_control_phasing: false,
+            initial_quantity: 1000000,
+            height: 1000,
+            latest: true,
+        };
+        
+        assert_eq!(model.id, 1);
+        assert_eq!(model.name, "Test Asset");
+    }
+}

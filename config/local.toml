@@ -1,21 +1,2 @@
-# NRCS 本地测试配置 (SQLite)
-
-[database]
-url = "sqlite://./nrcs_test.db?mode=rwc"
-max_connections = 10
-
 [p2p]
-listen_addr = "0.0.0.0:17975"
-external_addr = "192.168.2.101:17975"
 bootstrap_nodes = ["192.168.2.164:17974"]
-max_connections = 100
-connection_ttl_secs = 600
-protocol_id = "NRCS"
-
-[api]
-host = "127.0.0.1"
-port = 17977
-
-[websocket]
-enabled = true
-port = 17978

@@ -3317,3 +3317,436 @@ impl Repository<ContractReferenceModel> for SqliteContractReferenceRepository {
         Ok(count)
     }
 }
+
+pub struct SqliteAssetPropertyRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAssetPropertyRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl AssetPropertyRepository for SqliteAssetPropertyRepository {
+    async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetPropertyModel>> {
+        let records = sqlx::query_as::<_, AssetPropertyModel>(
+            "SELECT * FROM asset_property WHERE asset_id = ? AND latest = 1 ORDER BY height DESC"
+        )
+        .bind(asset_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_asset_and_account(&self, asset_id: i64, setter_id: i64) -> RepositoryResult<Vec<AssetPropertyModel>> {
+        let records = sqlx::query_as::<_, AssetPropertyModel>(
+            "SELECT * FROM asset_property WHERE asset_id = ? AND setter_id = ? AND latest = 1 ORDER BY height DESC"
+        )
+        .bind(asset_id)
+        .bind(setter_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_asset_account_property(&self, asset_id: i64, setter_id: i64, property: &str) -> RepositoryResult<Option<AssetPropertyModel>> {
+        let record = sqlx::query_as::<_, AssetPropertyModel>(
+            "SELECT * FROM asset_property WHERE asset_id = ? AND setter_id = ? AND property = ? AND latest = 1 LIMIT 1"
+        )
+        .bind(asset_id)
+        .bind(setter_id)
+        .bind(property)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn delete_by_asset_account_property(&self, asset_id: i64, setter_id: i64, property: &str) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM asset_property WHERE asset_id = ? AND setter_id = ? AND property = ?")
+            .bind(asset_id)
+            .bind(setter_id)
+            .bind(property)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl Repository<AssetPropertyModel> for SqliteAssetPropertyRepository {
+    async fn insert(&self, prop: &AssetPropertyModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO asset_property (id, asset_id, setter_id, property, value, height, latest)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(prop.id)
+        .bind(prop.asset_id)
+        .bind(prop.setter_id)
+        .bind(&prop.property)
+        .bind(&prop.value)
+        .bind(prop.height)
+        .bind(prop.latest)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetPropertyModel>> {
+        let record = sqlx::query_as::<_, AssetPropertyModel>("SELECT * FROM asset_property WHERE db_id = ?")
+            .bind(db_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _item: &AssetPropertyModel) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("update not implemented for asset_property".to_string()))
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM asset_property WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AssetPropertyModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as::<_, AssetPropertyModel>(
+            "SELECT * FROM asset_property WHERE latest = 1 ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset_property WHERE latest = 1")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+pub struct SqliteAssetHistoryRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAssetHistoryRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl AssetHistoryRepository for SqliteAssetHistoryRepository {
+    async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<AssetHistoryModel>> {
+        let records = sqlx::query_as::<_, AssetHistoryModel>(
+            "SELECT * FROM asset_history WHERE asset_id = ? ORDER BY height DESC LIMIT ?"
+        )
+        .bind(asset_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_asset_and_account(&self, asset_id: i64, account_id: i64, limit: i64) -> RepositoryResult<Vec<AssetHistoryModel>> {
+        let records = sqlx::query_as::<_, AssetHistoryModel>(
+            "SELECT * FROM asset_history WHERE asset_id = ? AND account_id = ? ORDER BY height DESC LIMIT ?"
+        )
+        .bind(asset_id)
+        .bind(account_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+}
+
+#[async_trait]
+impl Repository<AssetHistoryModel> for SqliteAssetHistoryRepository {
+    async fn insert(&self, history: &AssetHistoryModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO asset_history (id, full_hash, asset_id, account_id, quantity, timestamp, chain_id, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(history.id)
+        .bind(&history.full_hash)
+        .bind(history.asset_id)
+        .bind(history.account_id)
+        .bind(history.quantity)
+        .bind(history.timestamp)
+        .bind(history.chain_id)
+        .bind(history.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetHistoryModel>> {
+        let record = sqlx::query_as::<_, AssetHistoryModel>("SELECT * FROM asset_history WHERE db_id = ?")
+            .bind(db_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _item: &AssetHistoryModel) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("update not implemented for asset_history".to_string()))
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("delete not implemented for asset_history".to_string()))
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AssetHistoryModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as::<_, AssetHistoryModel>(
+            "SELECT * FROM asset_history ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset_history")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+pub struct SqliteTaggedDataTagRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteTaggedDataTagRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl TaggedDataTagRepository for SqliteTaggedDataTagRepository {
+    async fn find_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataTagModel>> {
+        let records = sqlx::query_as::<_, TaggedDataTagModel>(
+            "SELECT * FROM tagged_data_tag WHERE tag = ? ORDER BY height DESC LIMIT ?"
+        )
+        .bind(tag)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_data_id(&self, id: i64) -> RepositoryResult<Vec<TaggedDataTagModel>> {
+        let records = sqlx::query_as::<_, TaggedDataTagModel>(
+            "SELECT * FROM tagged_data_tag WHERE id = ? ORDER BY height DESC"
+        )
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+}
+
+#[async_trait]
+impl Repository<TaggedDataTagModel> for SqliteTaggedDataTagRepository {
+    async fn insert(&self, tag: &TaggedDataTagModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO tagged_data_tag (id, tag, height, latest)
+            VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(tag.id)
+        .bind(&tag.tag)
+        .bind(tag.height)
+        .bind(tag.latest)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TaggedDataTagModel>> {
+        let record = sqlx::query_as::<_, TaggedDataTagModel>("SELECT * FROM tagged_data_tag WHERE db_id = ?")
+            .bind(db_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _item: &TaggedDataTagModel) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("update not implemented for tagged_data_tag".to_string()))
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("delete not implemented for tagged_data_tag".to_string()))
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<TaggedDataTagModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as::<_, TaggedDataTagModel>(
+            "SELECT * FROM tagged_data_tag WHERE latest = 1 ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tagged_data_tag WHERE latest = 1")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+pub struct SqliteTaggedTimestampRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteTaggedTimestampRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl TaggedTimestampRepository for SqliteTaggedTimestampRepository {
+    async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<TaggedTimestampModel>> {
+        let records = sqlx::query_as::<_, TaggedTimestampModel>(
+            "SELECT * FROM tagged_timestamp WHERE account_id = ? ORDER BY height DESC LIMIT ?"
+        )
+        .bind(account_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedTimestampModel>> {
+        let records = sqlx::query_as::<_, TaggedTimestampModel>(
+            "SELECT * FROM tagged_timestamp WHERE tag = ? ORDER BY height DESC LIMIT ?"
+        )
+        .bind(tag)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_account_and_tag(&self, account_id: i64, tag: &str) -> RepositoryResult<Option<TaggedTimestampModel>> {
+        let record = sqlx::query_as::<_, TaggedTimestampModel>(
+            "SELECT * FROM tagged_timestamp WHERE account_id = ? AND tag = ? LIMIT 1"
+        )
+        .bind(account_id)
+        .bind(tag)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+}
+
+#[async_trait]
+impl Repository<TaggedTimestampModel> for SqliteTaggedTimestampRepository {
+    async fn insert(&self, ts: &TaggedTimestampModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO tagged_timestamp (id, account_id, tag, timestamp, height, latest)
+            VALUES (?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(ts.id)
+        .bind(ts.account_id)
+        .bind(&ts.tag)
+        .bind(ts.timestamp)
+        .bind(ts.height)
+        .bind(ts.latest)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TaggedTimestampModel>> {
+        let record = sqlx::query_as::<_, TaggedTimestampModel>("SELECT * FROM tagged_timestamp WHERE db_id = ?")
+            .bind(db_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _item: &TaggedTimestampModel) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("update not implemented for tagged_timestamp".to_string()))
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("delete not implemented for tagged_timestamp".to_string()))
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<TaggedTimestampModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as::<_, TaggedTimestampModel>(
+            "SELECT * FROM tagged_timestamp WHERE latest = 1 ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tagged_timestamp WHERE latest = 1")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
