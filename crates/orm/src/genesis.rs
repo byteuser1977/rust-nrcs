@@ -117,6 +117,7 @@ pub async fn ensure_genesis(
     account_repo: &dyn AccountRepository,
     tx_repo: &dyn TransactionRepository,
     ledger_repo: &dyn AccountLedgerRepository,
+    guaranteed_balance_repo: &dyn AccountGuaranteedBalanceRepository,
 ) -> RepositoryResult<()> {
     let count = block_repo.count().await?;
     if count > 0 {
@@ -183,12 +184,16 @@ pub async fn ensure_genesis(
         };
         account_repo.insert(&account_model).await?;
 
+        if balance_nqt > 0 {
+            guaranteed_balance_repo.upsert_additions(account_id, height, balance_nqt).await?;
+        }
+
         let ledger_model = AccountLedgerModel {
             db_id: 0,
             account_id,
-            event_type: 0,
+            event_type: 3, // LedgerEvent.ORDINARY_PAYMENT
             event_id: 1,
-            holding_type: 0,
+            holding_type: 2, // LedgerHolding.NRCS_BALANCE
             holding_id: None,
             change: balance_nqt,
             balance: balance_nqt,
@@ -283,6 +288,7 @@ mod tests {
         SqliteAccountRepository,
         SqliteTransactionRepository,
         SqliteAccountLedgerRepository,
+        SqliteAccountGuaranteedBalanceRepository,
     ) {
         let pool = SqlitePool::connect("sqlite::memory:")
             .await
@@ -390,13 +396,14 @@ mod tests {
             SqliteBlockRepository::new(pool.clone()),
             SqliteAccountRepository::new(pool.clone()),
             SqliteTransactionRepository::new(pool.clone()),
-            SqliteAccountLedgerRepository::new(pool),
+            SqliteAccountLedgerRepository::new(pool.clone()),
+            SqliteAccountGuaranteedBalanceRepository::new(pool),
         )
     }
 
     #[tokio::test]
     async fn test_genesis_creates_initial_state() {
-        let (block_repo, account_repo, tx_repo, ledger_repo) = setup_repos().await;
+        let (block_repo, account_repo, tx_repo, ledger_repo, guaranteed_balance_repo) = setup_repos().await;
         
         let genesis_config = r#"{
             "genesis_time": "2024-1-1 00:00:00.000",
@@ -415,7 +422,7 @@ mod tests {
         let original_dir = std::env::current_dir().ok();
         std::env::set_current_dir(&temp_dir).ok();
         
-        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo).await;
+        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo, &guaranteed_balance_repo).await;
         
         if let Some(dir) = original_dir {
             std::env::set_current_dir(dir).ok();
@@ -431,7 +438,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_genesis_block_height_is_zero() {
-        let (block_repo, account_repo, tx_repo, ledger_repo) = setup_repos().await;
+        let (block_repo, account_repo, tx_repo, ledger_repo, guaranteed_balance_repo) = setup_repos().await;
         
         let genesis_config = r#"{
             "genesis_time": "2024-1-1 00:00:00.000",
@@ -447,7 +454,7 @@ mod tests {
         let original_dir = std::env::current_dir().ok();
         std::env::set_current_dir(&temp_dir).ok();
         
-        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo).await;
+        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo, &guaranteed_balance_repo).await;
         
         if let Some(dir) = original_dir {
             std::env::set_current_dir(dir).ok();
@@ -465,7 +472,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_genesis_base_target() {
-        let (block_repo, account_repo, tx_repo, ledger_repo) = setup_repos().await;
+        let (block_repo, account_repo, tx_repo, ledger_repo, guaranteed_balance_repo) = setup_repos().await;
         
         let genesis_config = r#"{
             "genesis_time": "2024-1-1 00:00:00.000",
@@ -481,7 +488,7 @@ mod tests {
         let original_dir = std::env::current_dir().ok();
         std::env::set_current_dir(&temp_dir).ok();
         
-        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo).await;
+        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo, &guaranteed_balance_repo).await;
         
         if let Some(dir) = original_dir {
             std::env::set_current_dir(dir).ok();
