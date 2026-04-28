@@ -1,12 +1,12 @@
 //! 交易附件模块
 //!
-//! 对应 Java: Attachment 及其子类
+//! 对应 Java: Attachment 及其子类、AbstractAppendix 及其子类
 //!
 //! 负责:
 //! - 每种交易类型的数据结构定义
-//! - 数据打包（序列化到attachment_bytes）
-//! - 数据解包（从attachment_bytes反序列化）
-//! - 数据库保存
+//! - 数据库保存（TransactionDbModel）
+//!
+//! 二进制序列化逻辑已移至 blockchain-types::attachment_serde 模块
 
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
@@ -33,7 +33,7 @@ pub enum AttachmentError {
 
 pub type AttachmentResult<T> = std::result::Result<T, AttachmentError>;
 
-/// 交易附件统一枚举
+/// 交易附件统一枚举（用于内部数据结构，不用于二进制序列化）
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum Attachment {
     #[default]
@@ -221,8 +221,8 @@ impl ContractDeploymentAttachment {
         self
     }
     
-    pub fn with_gas_limit(mut self, limit: u64) -> Self {
-        self.gas_limit = limit;
+    pub fn with_gas_limit(mut self, limit: u32) -> Self {
+        self.gas_limit = limit as u64;
         self
     }
     
@@ -267,8 +267,8 @@ impl ContractInvocationAttachment {
         }
     }
     
-    pub fn with_gas_limit(mut self, limit: u64) -> Self {
-        self.gas_limit = limit;
+    pub fn with_gas_limit(mut self, limit: u32) -> Self {
+        self.gas_limit = limit as u64;
         self
     }
     
@@ -465,6 +465,7 @@ impl TransactionDbModel {
             has_message: false,
             has_encrypted_message: false,
             has_public_key_announcement: false,
+            has_prunable_message: false,
             has_prunable_attachment: false,
             ec_block_height: None,
             ec_block_id: None,
@@ -557,6 +558,7 @@ mod tests {
             has_message: false,
             has_encrypted_message: false,
             has_public_key_announcement: false,
+            has_prunable_message: false,
             has_prunable_attachment: false,
             ec_block_height: None,
             ec_block_id: None,
