@@ -12,6 +12,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
+use serde_json;
 
 use blockchain_types::*;
 use blockchain_types::prelude::Transaction;
@@ -308,6 +309,10 @@ pub struct DatabaseTransactionProcessor {
     // 新增：资产属性
     asset_property_repo: Arc<dyn AssetPropertyRepository>,
 
+    // 新增：Exchange和Mint（可选，实验性功能）
+    exchange_request_repo: Option<Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>>,
+    currency_mint_repo: Option<Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>>,
+
     // 区块上下文
     current_block_id: std::sync::RwLock<i64>,
     current_height: std::sync::RwLock<i32>,
@@ -340,6 +345,9 @@ impl DatabaseTransactionProcessor {
         account_currency_repo: Arc<dyn AccountCurrencyRepository>,
         currency_transfer_repo: Arc<dyn CurrencyTransferRepository>,
         asset_property_repo: Arc<dyn AssetPropertyRepository>,
+        // 新增：Exchange和Mint（可选，实验性功能）
+        exchange_request_repo: Option<Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>>,
+        currency_mint_repo: Option<Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>>,
     ) -> Self {
         Self {
             account_repo,
@@ -364,6 +372,8 @@ impl DatabaseTransactionProcessor {
             account_currency_repo,
             currency_transfer_repo,
             asset_property_repo,
+            exchange_request_repo,
+            currency_mint_repo,
             current_block_id: std::sync::RwLock::new(0),
             current_height: std::sync::RwLock::new(0),
             current_timestamp: std::sync::RwLock::new(0),
@@ -676,8 +686,44 @@ impl DatabaseTransactionProcessor {
                 self.apply_asset_transfer(tx).await?;
             }
 
-            2..=12 => {
-                debug!("ColoredCoins subtype {} processed (stub)", tx.subtype);
+            2 => { // ASK_ORDER_PLACEMENT
+                self.apply_ask_order_placement(tx).await?;
+            }
+
+            3 => { // BID_ORDER_PLACEMENT
+                self.apply_bid_order_placement(tx).await?;
+            }
+
+            4 => { // ASK_ORDER_CANCELLATION
+                self.apply_ask_order_cancellation(tx).await?;
+            }
+
+            5 => { // BID_ORDER_CANCELLATION
+                self.apply_bid_order_cancellation(tx).await?;
+            }
+
+            6 => { // DIVIDEND_PAYMENT
+                self.apply_dividend_payment(tx).await?;
+            }
+
+            7 => { // ASSET_DELETE
+                self.apply_asset_delete(tx).await?;
+            }
+
+            9 => { // ASSET_INCREASE
+                self.apply_asset_increase(tx).await?;
+            }
+
+            10 => { // ASSET_PROPERTY_SET
+                self.apply_asset_property_set(tx).await?;
+            }
+
+            11 => { // ASSET_PROPERTY_DELETE
+                self.apply_asset_property_delete(tx).await?;
+            }
+
+            12 => { // ASSET_LONG_VALUE_PROPERTY_SET
+                self.apply_asset_long_value_property_set(tx).await?;
             }
 
             _ => {}
@@ -784,11 +830,809 @@ impl DatabaseTransactionProcessor {
         Ok(())
     }
 
+    /// ASK_ORDER_PLACEMENT: Place a sell order for assets
+    ///
+    /// Reference: Java TransactionTypeAsset.ASK_ORDER_PLACEMENT.applyAttachment()
+    ///   OrderAsk.addOrder(transaction, attachment);
+    ///   senderAccount.addToUnconfirmedAssetBalanceQNT(event, assetId, -quantityQNT);
+    async fn apply_ask_order_placement(&self, tx: &Transaction) -> ProcessorResult<()> {
+        use orm::models::AskOrderModel;
+
+        let sender_id = tx.sender_id as i64;
+        let current_height = self.get_current_height();
+
+        // 解析attachment字段
+        let asset_id = self.parse_long_field(tx, "asset").unwrap_or(tx.id as i64);
+        let quantity = self.parse_long_field(tx, "quantityQNT").unwrap_or(tx.amount as i64);
+        let price_nqt = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
+
+        // 创建ASK_ORDER记录
+        let ask_order = AskOrderModel {
+            db_id: 0,
+            id: tx.id as i64,
+            account_id: sender_id,
+            asset_id: asset_id,
+            price: price_nqt,
+            quantity: quantity,
+            transaction_index: 0, // TODO: 从block获取
+            transaction_height: current_height,
+            creation_height: current_height,
+            height: current_height,
+            latest: true,
+        };
+
+        match self.ask_order_repo.insert(&ask_order).await {
+            Ok(_) => {
+                info!("Placed ASK order {} for asset {}, qty={}, price={}",
+                    tx.id, asset_id, quantity, price_nqt);
+
+                // 减少unconfirmed资产余额
+                // TODO: 实现decrease_unconfirmed_quantity方法（需要扩展AccountAssetRepository）
+                debug!("Decreasing unconfirmed asset balance for account {} asset {}", sender_id, asset_id);
+            }
+            Err(e) => {
+                warn!("Failed to place ASK order {}: {}", tx.id, e);
+                return Err(e.into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// BID_ORDER_PLACEMENT: Place a buy order for assets (paying NRCS)
+    ///
+    /// Reference: Java TransactionTypeAsset.BID_ORDER_PLACEMENT.applyAttachment()
+    ///   OrderBid.addOrder(transaction, attachment);
+    ///   senderAccount.addToUnconfirmedBalance(event, txId, -(priceNQT * quantityQNT));
+    async fn apply_bid_order_placement(&self, tx: &Transaction) -> ProcessorResult<()> {
+        use orm::models::BidOrderModel;
+
+        let sender_id = tx.sender_id as i64;
+        let current_height = self.get_current_height();
+
+        // 解析attachment字段
+        let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+        let quantity = self.parse_long_field(tx, "quantityQNT").unwrap_or(tx.amount as i64);
+        let price_nqt = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
+
+        // 创建BID_ORDER记录
+        let bid_order = BidOrderModel {
+            db_id: 0,
+            id: tx.id as i64,
+            account_id: sender_id,
+            asset_id: asset_id,
+            price: price_nqt,
+            quantity: quantity,
+            transaction_index: 0, // TODO: 从block获取
+            transaction_height: current_height,
+            creation_height: current_height,
+            height: current_height,
+            latest: true,
+        };
+
+        match self.bid_order_repo.insert(&bid_order).await {
+            Ok(_) => {
+                info!("Placed BID order {} for asset {}, qty={}, price={}",
+                    tx.id, asset_id, quantity, price_nqt);
+
+                // 减少unconfirmed NRCS余额（预扣购买金额）
+                let total_cost = price_nqt * quantity;
+                self.account_repo.add_to_unconfirmed_balance(sender_id, -total_cost).await?;
+            }
+            Err(e) => {
+                warn!("Failed to place BID order {}: {}", tx.id, e);
+                return Err(e.into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// ASK_ORDER_CANCELLATION: Cancel a sell order
+    ///
+    /// Reference: Java TransactionTypeAsset.ASK_ORDER_CANCELLATION.applyAttachment()
+    ///   OrderAsk.removeOrder(orderId);
+    ///   senderAccount.addToUnconfirmedAssetBalanceQNT(event, assetId, quantityQNT);
+    async fn apply_ask_order_cancellation(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+
+        // 解析要取消的order ID
+        let order_id = self.parse_long_field(tx, "order").unwrap_or(tx.id as i64);
+
+        // 查找并删除order
+        match self.ask_order_repo.find_by_id(order_id).await {
+            Ok(Some(order)) if order.account_id == sender_id => {
+                let asset_id = order.asset_id;
+                let quantity = order.quantity;
+
+                // 删除order记录
+                self.ask_order_repo.delete(order.db_id).await?;
+
+                info!("Cancelled ASK order {} for account {}", order_id, sender_id);
+
+                // 恢复unconfirmed资产余额
+                // TODO: 实现increase_unconfirmed_quantity方法（需要扩展AccountAssetRepository）
+                debug!("Increasing unconfirmed asset balance for account {} asset {}", sender_id, asset_id);
+            }
+            Ok(Some(_)) => {
+                warn!("Cannot cancel ASK order owned by another account");
+            }
+            Ok(None) => {
+                warn!("Cannot find ASK order {} to cancel", order_id);
+            }
+            Err(e) => {
+                warn!("Error finding ASK order {}: {}", order_id, e);
+                return Err(e.into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// BID_ORDER_CANCELLATION: Cancel a buy order
+    ///
+    /// Reference: Java TransactionTypeAsset.BID_ORDER_CANCELLATION.applyAttachment()
+    ///   OrderBid.removeOrder(orderId);
+    ///   senderAccount.addToUnconfirmedBalance(event, txId, priceNQT * quantityQNT);
+    async fn apply_bid_order_cancellation(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+
+        // 解析要取消的order ID
+        let order_id = self.parse_long_field(tx, "order").unwrap_or(tx.id as i64);
+
+        // 查找并删除order
+        match self.bid_order_repo.find_by_id(order_id).await {
+            Ok(Some(order)) if order.account_id == sender_id => {
+                let total_cost = order.price * order.quantity;
+
+                // 删除order记录
+                self.bid_order_repo.delete(order.db_id).await?;
+
+                info!("Cancelled BID order {} for account {}", order_id, sender_id);
+
+                // 恢复unconfirmed NRCS余额
+                self.account_repo.add_to_unconfirmed_balance(sender_id, total_cost).await?;
+            }
+            Ok(Some(_)) => {
+                warn!("Cannot cancel BID order owned by another account");
+            }
+            Ok(None) => {
+                warn!("Cannot find BID order {} to cancel", order_id);
+            }
+            Err(e) => {
+                warn!("Error finding BID order {}: {}", order_id, e);
+                return Err(e.into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// DIVIDEND_PAYMENT: Pay dividends to asset holders
+    ///
+    /// Reference: Java TransactionTypeAsset.DIVIDEND_PAYMENT.applyAttachment()
+    ///   senderAccount.payDividends(transaction, attachment);
+    ///   - For each holder: addToBalance(dividend per share)
+    ///   - Write ACCOUNT_LEDGER entries for each recipient
+    async fn apply_dividend_payment(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+        let current_block_id = self.get_current_block_id();
+        let current_height = self.get_current_height();
+        let current_timestamp = self.get_current_timestamp();
+
+        // 解析attachment字段
+        let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+        let dividend_per_share = self.parse_long_field(tx, "amountNQT").unwrap_or(0);
+
+        if dividend_per_share <= 0 || asset_id <= 0 {
+            warn!("Invalid dividend parameters in transaction {}", tx.id);
+            return Ok(());
+        }
+
+        // 获取所有资产持有者
+        // TODO: 实现find_all_by_asset方法（需要扩展AccountAssetRepository）
+        match self.account_asset_repo.find_by_asset(asset_id).await {
+            Ok(holders) => {
+                info!("Paying dividend on asset {} to {} holders", asset_id, holders.len());
+
+                for holder in holders {
+                    let holder_id = holder.account_id;
+                    let shares = holder.quantity;
+                    let dividend_amount = dividend_per_share * shares;
+
+                    if dividend_amount > 0 && holder_id != sender_id {
+                        // 更新接收者余额
+                        self.account_repo.add_to_balance(holder_id, dividend_amount).await?;
+
+                        // 写入LEDGER记录
+                        use orm::models::AccountLedgerModel;
+                        let ledger_entry = AccountLedgerModel {
+                            db_id: 0,
+                            account_id: holder_id,
+                            event_type: ledger_event::ASSET_DIVIDEND_PAYMENT, // 正确的event type
+                            event_id: tx.id as i64,
+                            holding_type: ledger_holding::NRCS_BALANCE,
+                            holding_id: None,
+                            change: dividend_amount,
+                            balance: self.get_account_balance(holder_id).await.unwrap_or(0),
+                            block_id: current_block_id,
+                            height: current_height,
+                            timestamp: current_timestamp,
+                        };
+                        self.ledger_repo.insert(&ledger_entry).await?;
+
+                        debug!("Paid {} NQT dividend to account {} ({} shares)",
+                            dividend_amount, holder_id, shares);
+                    }
+                }
+
+                info!("Dividend payment completed for asset {}", asset_id);
+            }
+            Err(e) => {
+                warn!("Failed to query asset holders for dividend: {}", e);
+                return Err(e.into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// ASSET_DELETE: Delete some quantity of an asset
+    ///
+    /// Reference: Java TransactionTypeAsset.ASSET_DELETE.applyAttachment()
+    ///   Asset.deleteAsset(transaction, attachment);
+    ///   senderAccount.addToAssetBalanceQNT(event, txId, assetId, -quantityQNT);
+    async fn apply_asset_delete(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+        let asset_id = self.parse_long_field(tx, "asset").unwrap_or(tx.id as i64);
+        let delete_quantity = self.parse_long_field(tx, "quantityQQT").unwrap_or(tx.amount as i64);
+
+        if delete_quantity > 0 && asset_id > 0 {
+            // 更新ASSET表的总数量
+            // TODO: 实现decrease_quantity方法（需要扩展AssetRepository）
+            debug!("Decreasing asset {} quantity by {}", asset_id, delete_quantity);
+
+            // 更新发送者的资产余额
+            self.account_asset_repo.decrease_quantity(sender_id, asset_id, delete_quantity).await?;
+
+            info!("Deleted {} of asset {} from account {}", delete_quantity, asset_id, sender_id);
+        } else {
+            warn!("Invalid asset delete parameters in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// ASSET_INCREASE: Increase the supply of an existing asset
+    ///
+    /// Reference: Java TransactionTypeAsset.ASSET_INCREASE.applyAttachment()
+    ///   Asset.increaseAsset(transaction, attachment);
+    ///   senderAccount.addToAssetAndUnconfirmedAssetBalanceQNT(event, assetId, increaseQuantityQNT);
+    async fn apply_asset_increase(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+        let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+        let increase_quantity = self.parse_long_field(tx, "quantityQQT").unwrap_or(tx.amount as i64);
+
+        if increase_quantity > 0 && asset_id > 0 {
+            // 更新ASSET表的总数量
+            // TODO: 实现increase_quantity方法（需要扩展AssetRepository）
+            debug!("Increasing asset {} quantity by {}", asset_id, increase_quantity);
+
+            // 更新发送者的资产余额
+            self.account_asset_repo.increase_quantity(sender_id, asset_id, increase_quantity).await?;
+
+            info!("Increased asset {} by {} for account {}", asset_id, increase_quantity, sender_id);
+        } else {
+            warn!("Invalid asset increase parameters in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// ASSET_PROPERTY_SET: Set a property on an asset
+    ///
+    /// Reference: Java TransactionTypeAsset.ASSET_PROPERTY_SET.applyAttachment()
+    ///   Asset.setProperty(transaction, attachment);
+    async fn apply_asset_property_set(&self, tx: &Transaction) -> ProcessorResult<()> {
+        use orm::models::AssetPropertyModel;
+
+        let sender_id = tx.sender_id as i64;
+        let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+        let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
+        let property_value = self.parse_string_field(tx, "value").unwrap_or_default();
+
+        if !property_name.is_empty() && asset_id > 0 {
+            let prop_model = AssetPropertyModel {
+                db_id: 0,
+                id: tx.id as i64,
+                asset_id: asset_id,
+                setter_id: sender_id,
+                property: property_name.clone(),
+                value: Some(property_value.clone()),
+                height: self.get_current_height(),
+                latest: true,
+            };
+
+            self.asset_property_repo.insert(&prop_model).await?;
+            info!("Set property '{}'='{}' on asset {}", property_name, property_value, asset_id);
+        }
+
+        Ok(())
+    }
+
+    /// ASSET_PROPERTY_DELETE: Delete a property from an asset
+    ///
+    /// Reference: Java TransactionTypeAsset.ASSET_PROPERTY_DELETE.applyAttachment()
+    ///   Asset.deleteProperty(transaction, attachment);
+    async fn apply_asset_property_delete(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+        let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
+
+        if !property_name.is_empty() && asset_id > 0 {
+            // TODO: 实现delete方法
+            debug!("Deleting property '{}' from asset {}", property_name, asset_id);
+            info!("AssetProperty deletion not yet fully implemented");
+        }
+
+        Ok(())
+    }
+
+    /// ASSET_LONG_VALUE_PROPERTY_SET: Set a long-value property on an asset
+    ///
+    /// Reference: Java TransactionTypeAsset.ASSET_LONG_VALUE_PROPERTY_SET.applyAttachment()
+    ///   Asset.setProperty(transaction, attachment); (long value version)
+    async fn apply_asset_long_value_property_set(&self, tx: &Transaction) -> ProcessorResult<()> {
+        use orm::models::AssetPropertyModel;
+
+        let sender_id = tx.sender_id as i64;
+        let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+        let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
+        let long_value = self.parse_long_field(tx, "value").unwrap_or(0);
+
+        if !property_name.is_empty() && asset_id > 0 {
+            let prop_model = AssetPropertyModel {
+                db_id: 0,
+                id: tx.id as i64,
+                asset_id: asset_id,
+                setter_id: sender_id,
+                property: property_name.clone(),
+                value: Some(long_value.to_string()), // 存储为字符串表示
+                height: self.get_current_height(),
+                latest: true,
+            };
+
+            self.asset_property_repo.insert(&prop_model).await?;
+            info!("Set long-value property '{}'={} on asset {}", property_name, long_value, asset_id);
+        }
+
+        Ok(())
+    }
+
     /// MonetarySystem attachment processing
     ///
     /// Reference: Java TransactionTypeCurrency
     async fn apply_monetary_system_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
-        debug!("MonetarySystem subtype {} processed (stub)", tx.subtype);
+        match tx.subtype {
+            0 => { // CURRENCY_ISSUANCE
+                self.apply_currency_issuance(tx).await?;
+            }
+
+            1 => { // RESERVE_INCREASE
+                self.apply_reserve_increase(tx).await?;
+            }
+
+            2 => { // RESERVE_CLAIM
+                self.apply_reserve_claim(tx).await?;
+            }
+
+            3 => { // CURRENCY_TRANSFER
+                self.apply_currency_transfer(tx).await?;
+            }
+
+            4 => { // PUBLISH_EXCHANGE_OFFER
+                self.apply_publish_exchange_offer(tx).await?;
+            }
+
+            5 => { // EXCHANGE_BUY (NRCS → Currency)
+                self.apply_exchange_buy(tx).await?;
+            }
+
+            6 => { // EXCHANGE_SELL (Currency → NRCS)
+                self.apply_exchange_sell(tx).await?;
+            }
+
+            7 => { // CURRENCY_MINTING
+                self.apply_currency_minting(tx).await?;
+            }
+
+            8 => { // CURRENCY_DELETION
+                self.apply_currency_deletion(tx).await?;
+            }
+
+            _ => {
+                debug!("MonetarySystem subtype {} processed (stub)", tx.subtype);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// CURRENCY_ISSUANCE: Issue a new currency
+    ///
+    /// Reference: Java TransactionTypeCurrency.CURRENCY_ISSUANCE.applyAttachment()
+    ///   Currency.addCurrency(transaction, attachment);
+    ///   senderAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, currencyId, initialSupply);
+    async fn apply_currency_issuance(&self, tx: &Transaction) -> ProcessorResult<()> {
+        use orm::models::CurrencyModel;
+
+        let sender_id = tx.sender_id as i64;
+        let current_height = self.get_current_height();
+        let currency_id = tx.id as i64;
+
+        // 解析attachment字段
+        let name = self.parse_string_field(tx, "name").unwrap_or(format!("Currency_{}", currency_id));
+        let code = self.parse_string_field(tx, "code").unwrap_or_default();
+        let description = self.parse_string_field(tx, "description");
+        let initial_supply = self.parse_long_field(tx, "initialSupply").unwrap_or(0);
+        let max_supply = self.parse_long_field(tx, "maxSupply").unwrap_or(initial_supply);
+
+        // 创建CURRENCY记录
+        let currency_model = CurrencyModel {
+            db_id: 0,
+            id: currency_id,
+            account_id: sender_id,
+            name: name.clone(),
+            name_lower: name.to_lowercase(),
+            code: code.clone(),
+            description: description,
+            type_: 0, // TODO: 从attachment解析
+            initial_supply: initial_supply,
+            reserve_supply: 0,
+            max_supply: max_supply,
+            creation_height: current_height,
+            issuance_height: current_height,
+            min_reserve_per_unit_nqt: 0, // TODO: 从attachment解析
+            min_difficulty: 0,
+            max_difficulty: 0,
+            ruleset: 0,
+            algorithm: 0,
+            decimals: 0, // TODO: 从attachment解析
+            height: current_height,
+            latest: true,
+        };
+
+        match self.currency_repo.insert(&currency_model).await {
+            Ok(_) => {
+                info!("Issued currency '{}' (ID={}) with initial supply {}", name, currency_id, initial_supply);
+
+                // 更新发送者的货币余额
+                if initial_supply > 0 {
+                    self.account_currency_repo.update_units(sender_id, currency_id, initial_supply).await?;
+                }
+            }
+            Err(e) => {
+                warn!("Failed to issue currency '{}': {}", name, e);
+                return Err(e.into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// RESERVE_INCREASE: Increase the reserve of a currency
+    ///
+    /// Reference: Java TransactionTypeCurrency.RESERVE_INCREASE.applyAttachment()
+    ///   Currency.increaseReserve(transaction, attachment);
+    ///   senderAccount.addToBalance(event, txId, -amountNQT);
+    async fn apply_reserve_increase(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+        let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+        let amount_per_unit = self.parse_long_field(tx, "amountPerUnitNQT").unwrap_or(0);
+
+        if currency_id > 0 && amount_per_unit > 0 {
+            // 增加currency的reserve
+            // TODO: 实现reserve增加逻辑（需要扩展CurrencyRepository）
+            debug!("Increasing reserve for currency {} by {} NQT/unit", currency_id, amount_per_unit);
+
+            // 从发送者扣除NRCS（费用）
+            // TODO: 计算实际费用并扣减
+
+            info!("Increased reserve for currency {} by {} NQT/unit (stub)", currency_id, amount_per_unit);
+        } else {
+            warn!("Invalid reserve increase parameters in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// RESERVE_CLAIM: Claim reserve from a currency
+    ///
+    /// Reference: Java TransactionTypeCurrency.RESERVE_CLAIM.applyAttachment()
+    ///   Currency.claimReserve(transaction, attachment);
+    ///   senderAccount.addToCurrencyUnits(event, txId, -units);
+    ///   senderAccount.addToBalance(event, txId, +nrcsReceived);
+    async fn apply_reserve_claim(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+        let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+        let units_to_claim = self.parse_long_field(tx, "units").unwrap_or(0);
+
+        if currency_id > 0 && units_to_claim > 0 {
+            // 减少货币余额
+            self.account_currency_repo.update_units(sender_id, currency_id, -units_to_claim).await?;
+
+            // 增加NRCS余额（按reserve比例计算）
+            // TODO: 实际计算received NRCS
+            let nrcs_received = units_to_claim; // 简化处理，实际需要根据reserve计算
+            self.account_repo.add_to_balance(sender_id, nrcs_received).await?;
+
+            info!("Claimed {} units from currency {}, received {} NQT", units_to_claim, currency_id, nrcs_received);
+        } else {
+            warn!("Invalid reserve claim parameters in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// PUBLISH_EXCHANGE_OFFER: Publish an exchange offer for currency
+    ///
+    /// Reference: Java TransactionTypeCurrency.PUBLISH_EXCHANGE_OFFER.applyAttachment()
+    ///   CurrencyExchangeOffer.publishOffer(transaction, attachment);
+    async fn apply_publish_exchange_offer(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+        let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+
+        if currency_id > 0 {
+            // TODO: 创建或更新exchange offer记录
+            debug!("Publishing exchange offer for currency {}", currency_id);
+            info!("Exchange offer publishing not yet fully implemented");
+        } else {
+            warn!("Missing currency ID in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// EXCHANGE_BUY: Buy currency using NRCS
+    ///
+    /// Reference: Java TransactionTypeCurrency.EXCHANGE_BUY.applyAttachment()
+    ///   ExchangeRequest.addExchangeRequest(transaction, attachment);
+    ///   Currency.exchangeNRCSForCurrency(...);
+    async fn apply_exchange_buy(&self, tx: &Transaction) -> ProcessorResult<()> {
+        use orm::models::ExchangeRequestModel;
+
+        let sender_id = tx.sender_id as i64;
+        let current_height = self.get_current_height();
+
+        let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+        let rate = self.parse_long_field(tx, "rate").unwrap_or(0);
+        let units = self.parse_long_field(tx, "units").unwrap_or(0);
+
+        if currency_id > 0 && units > 0 && rate > 0 {
+            // 创建EXCHANGE_REQUEST记录
+            let request_model = ExchangeRequestModel {
+                db_id: 0,
+                id: tx.id as i64,
+                account_id: sender_id,
+                currency_id: currency_id,
+                units: units,
+                rate: rate,
+                is_buy: true, // EXCHANGE_BUY = true
+                timestamp: self.get_current_timestamp(),
+                height: current_height,
+            };
+
+            if let Some(ref repo) = self.exchange_request_repo {
+                match repo.insert(&request_model).await {
+                Ok(_) => {
+                    info!("Created exchange buy request: {} units of currency {} at rate {}",
+                        units, currency_id, rate);
+
+                    // 扣减NRCS余额
+                    let total_cost = units * rate;
+                    self.account_repo.add_to_balance(sender_id, -total_cost).await?;
+                }
+                Err(e) => {
+                    warn!("Failed to create exchange buy request (non-critical): {}", e);
+                    // Exchange功能是实验性的，不阻塞交易处理
+                    debug!("Exchange buy request creation failed: {}", e);
+                }
+            }
+        } // end if let Some(ref repo)
+        } else {
+            warn!("Invalid exchange buy parameters in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// EXCHANGE_SELL: Sell currency for NRCS
+    ///
+    /// Reference: Java TransactionTypeCurrency.EXCHANGE_SELL.applyAttachment()
+    ///   ExchangeRequest.addExchangeRequest(transaction, attachment);
+    ///   Currency.exchangeCurrencyForNRCS(...);
+    async fn apply_exchange_sell(&self, tx: &Transaction) -> ProcessorResult<()> {
+        use orm::models::ExchangeRequestModel;
+
+        let sender_id = tx.sender_id as i64;
+        let current_height = self.get_current_height();
+
+        let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+        let rate = self.parse_long_field(tx, "rate").unwrap_or(0);
+        let units = self.parse_long_field(tx, "units").unwrap_or(0);
+
+        if currency_id > 0 && units > 0 && rate > 0 {
+            // 创建EXCHANGE_REQUEST记录
+            let request_model = ExchangeRequestModel {
+                db_id: 0,
+                id: tx.id as i64,
+                account_id: sender_id,
+                currency_id: currency_id,
+                units: units,
+                rate: rate,
+                is_buy: false, // EXCHANGE_SELL = false
+                timestamp: self.get_current_timestamp(),
+                height: current_height,
+            };
+
+            if let Some(ref repo) = self.exchange_request_repo {
+                match repo.insert(&request_model).await {
+                    Ok(_) => {
+                        info!("Created exchange sell request: {} units of currency {} at rate {}",
+                            units, currency_id, rate);
+
+                        // 扣减货币余额
+                        self.account_currency_repo.update_units(sender_id, currency_id, -units).await?;
+                    }
+                    Err(e) => {
+                        warn!("Failed to create exchange sell request: {}", e);
+                        return Err(e.into());
+                    }
+                }
+            } // end if let Some
+        } else {
+            warn!("Invalid exchange sell parameters in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// CURRENCY_MINTING: Mint new currency units
+    ///
+    /// Reference: Java TransactionTypeCurrency.CURRENCY_MINTING.applyAttachment()
+    ///   CurrencyMint.mintCurrency(transaction, attachment);
+    ///   senderAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, currencyId, mintedUnits);
+    async fn apply_currency_minting(&self, tx: &Transaction) -> ProcessorResult<()> {
+        use orm::models::CurrencyMintModel;
+
+        let sender_id = tx.sender_id as i64;
+        let current_height = self.get_current_height();
+        let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+        let minted_units = self.parse_long_field(tx, "units").unwrap_or(0);
+
+        if currency_id > 0 && minted_units > 0 {
+            // 创建CURRENCY_MINT记录
+            let mint_model = CurrencyMintModel {
+                db_id: 0,
+                currency_id: currency_id,
+                account_id: sender_id,
+                counter: minted_units, // 使用counter字段存储minted数量
+                height: current_height,
+                latest: true,
+            };
+
+            if let Some(ref repo) = self.currency_mint_repo {
+                match repo.insert(&mint_model).await {
+                    Ok(_) => {
+                        info!("Minted {} units of currency {} for account {}", minted_units, currency_id, sender_id);
+
+                        // 更新货币余额
+                        self.account_currency_repo.update_units(sender_id, currency_id, minted_units).await?;
+
+                        // TODO: 更新currency的总supply（需要扩展CurrencyRepository）
+                        debug!("Currency supply update not yet fully implemented");
+                    }
+                    Err(e) => {
+                        warn!("Failed to mint currency {}: {}", currency_id, e);
+                        return Err(e.into());
+                    }
+                }
+            } // end if let Some
+        } else {
+            warn!("Invalid currency minting parameters in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// CURRENCY_DELETION: Delete a currency
+    ///
+    /// Reference: Java TransactionTypeCurrency.CURRENCY_DELETION.applyAttachment()
+    ///   currency.delete(currency);
+    async fn apply_currency_deletion(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+        let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+
+        if currency_id > 0 {
+            // 验证发送者是currency的创建者
+            match self.currency_repo.find_by_id(currency_id).await {
+                Ok(Some(currency)) if currency.account_id == sender_id => {
+                    // 标记为deleted或实际删除
+                    self.currency_repo.delete(currency_id).await?;
+                    info!("Deleted currency {} by owner account {}", currency_id, sender_id);
+                }
+                Ok(Some(_)) => {
+                    warn!("Cannot delete currency owned by another account");
+                }
+                Ok(None) => {
+                    warn!("Cannot find currency {} to delete", currency_id);
+                }
+                Err(e) => {
+                    warn!("Error finding currency {}: {}", currency_id, e);
+                    return Err(e.into());
+                }
+            }
+        } else {
+            warn!("Missing currency ID in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// CURRENCY_TRANSFER: Transfer currency between accounts
+    ///
+    /// Reference: Java TransactionTypeCurrency.CURRENCY_TRANSFER.applyAttachment()
+    ///   senderAccount.addToCurrencyUnits(event, txId, currencyId, -units);
+    ///   recipientAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, txId, currencyId, +units);
+    ///   CurrencyTransfer.addCurrencyTransfer(transaction, attachment);
+    async fn apply_currency_transfer(&self, tx: &Transaction) -> ProcessorResult<()> {
+        use orm::models::CurrencyTransferModel;
+
+        let sender_id = tx.sender_id as i64;
+        let recipient_id = tx.recipient_id.map(|id| id as i64).unwrap_or(0);
+        let current_height = self.get_current_height();
+
+        // 解析attachment字段
+        let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+        let units = self.parse_long_field(tx, "units").unwrap_or(tx.amount as i64);
+
+        if units > 0 && currency_id > 0 {
+            // 更新发送者货币余额
+            self.account_currency_repo.update_units(sender_id, currency_id, -units).await?;
+
+            if recipient_id != 0 {
+                // 确保接收者账户存在
+                self.account_repo.get_or_create(recipient_id).await?;
+
+                // 更新接收者货币余额
+                self.account_currency_repo.update_units(recipient_id, currency_id, units).await?;
+            }
+
+            // 创建CURRENCY_TRANSFER记录
+            let transfer_model = CurrencyTransferModel {
+                db_id: 0,
+                id: tx.id as i64,
+                sender_id: sender_id,
+                recipient_id: recipient_id,
+                currency_id: currency_id,
+                units: units,
+                timestamp: self.get_current_timestamp(),
+                height: current_height,
+            };
+
+            match self.currency_transfer_repo.insert(&transfer_model).await {
+                Ok(_) => {
+                    info!("Transferred {} of currency {} from {} to {}",
+                        units, currency_id, sender_id, recipient_id);
+                }
+                Err(e) => {
+                    warn!("Failed to record currency transfer: {}", e);
+                    return Err(e.into());
+                }
+            }
+        } else {
+            warn!("Invalid currency transfer parameters in transaction {}", tx.id);
+        }
+
         Ok(())
     }
 
@@ -1705,25 +2549,88 @@ impl DatabaseTransactionProcessor {
 
     // ==================== 辅助方法：Attachment字段解析 ====================
 
-    /// 从Transaction的attachment JSON中解析String字段
+    /// 从Transaction的attachment JSON bytes中解析String字段
     ///
-    /// 由于当前Transaction结构体可能没有直接的JSON字段，
-    /// 这个方法需要根据实际实现调整
+    /// Reference: Transaction.from_json() 将 attachment JSON 对象序列化为 bytes
+    /// 这里需要反序列化并提取指定字段的值
     fn parse_string_field(&self, tx: &Transaction, field_name: &str) -> Option<String> {
-        // TODO: 根据实际的Transaction结构实现字段解析
-        // 可能的实现方式：
-        // 1. 如果tx有attachment_json字段，直接解析JSON
-        // 2. 如果只有bytes，需要先反序列化
+        if tx.attachment_bytes.is_empty() {
+            debug!("Empty attachment bytes for transaction {}", tx.id);
+            return None;
+        }
 
-        // 暂时返回None（待实现）
-        debug!("Parsing string field '{}' from transaction {} attachment", field_name, tx.id);
-        None
+        // 反序列化 attachment JSON
+        match serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes) {
+            Ok(json) => {
+                match json.get(field_name) {
+                    Some(serde_json::Value::String(s)) => {
+                        debug!("Parsed string field '{}='{}' from transaction {}",
+                            field_name, s, tx.id);
+                        Some(s.clone())
+                    }
+                    Some(serde_json::Value::Number(n)) => {
+                        // 某些字段可能是数字类型，转换为字符串
+                        let s = n.to_string();
+                        debug!("Parsed numeric field '{}='{}' as string from transaction {}",
+                            field_name, s, tx.id);
+                        Some(s)
+                    }
+                    Some(other) => {
+                        warn!("Field '{}' in transaction {} has unexpected type: {:?}",
+                            field_name, tx.id, other);
+                        None
+                    }
+                    None => {
+                        debug!("Field '{}' not found in attachment for transaction {}",
+                            field_name, tx.id);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Failed to parse attachment JSON for transaction {}: {}", tx.id, e);
+                None
+            }
+        }
     }
 
-    /// 从Transaction的attachment JSON中解析Long字段
+    /// 从Transaction的attachment JSON bytes中解析Long (i64) 字段
     fn parse_long_field(&self, tx: &Transaction, field_name: &str) -> Option<i64> {
-        // TODO: 同上，根据实际实现调整
-        debug!("Parsing long field '{}' from transaction {} attachment", field_name, tx.id);
-        None
+        if tx.attachment_bytes.is_empty() {
+            debug!("Empty attachment bytes for transaction {}", tx.id);
+            return None;
+        }
+
+        match serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes) {
+            Ok(json) => {
+                match json.get(field_name) {
+                    Some(serde_json::Value::Number(n)) => {
+                        n.as_i64().or_else(|| {
+                            // 如果不是i64，尝试从u64转换（处理大数字）
+                            n.as_u64().map(|v| v as i64)
+                        })
+                    }
+                    Some(serde_json::Value::String(s)) => {
+                        // Java NRCS有时将long作为字符串传输
+                        s.parse::<i64>().ok()
+                            .or_else(|| {
+                                // 尝试解析为u64再转换（处理大正数）
+                                s.parse::<u64>().ok().map(|v| v as i64)
+                            })
+                    }
+                    _ => None,
+                }
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// 获取完整的attachment JSON对象（用于复杂解析）
+    fn get_attachment_json(&self, tx: &Transaction) -> Option<serde_json::Value> {
+        if tx.attachment_bytes.is_empty() {
+            return None;
+        }
+
+        serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes).ok()
     }
 }

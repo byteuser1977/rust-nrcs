@@ -219,6 +219,9 @@ async fn main() -> Result<()> {
             let account_currency_repo: Arc<dyn AccountCurrencyRepository> = Arc::new(orm::SqliteAccountCurrencyRepository::new(pool.clone()));
             let currency_transfer_repo: Arc<dyn CurrencyTransferRepository> = Arc::new(orm::SqliteCurrencyTransferRepository::new(pool.clone()));
             let asset_property_repo: Arc<dyn AssetPropertyRepository> = Arc::new(orm::SqliteAssetPropertyRepository::new(pool.clone()));
+            // Exchange和Mint使用通用Repository（临时方案，后续可优化为专用实现）
+            let exchange_request_repo: Option<Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>> = None;  // 暂时禁用
+            let currency_mint_repo: Option<Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>> = None;  // 暂时禁用
 
             // 确保创世区块存在
             orm::genesis::ensure_genesis(
@@ -231,7 +234,8 @@ async fn main() -> Result<()> {
             info!("Genesis block ensured");
 
             start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
-                alias_repo, alias_offer_repo, poll_repo, vote_repo, /* account_property_repo, */ tagged_data_repo, tagged_data_tag_repo, contract_ref_repo, ask_order_repo, bid_order_repo, currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo
+                alias_repo, alias_offer_repo, poll_repo, vote_repo, /* account_property_repo, */ tagged_data_repo, tagged_data_tag_repo, contract_ref_repo, ask_order_repo, bid_order_repo, currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo,
+                exchange_request_repo, currency_mint_repo
             ).await
         }
     }
@@ -264,6 +268,9 @@ async fn start_node(
     account_currency_repo: Arc<dyn AccountCurrencyRepository>,
     currency_transfer_repo: Arc<dyn CurrencyTransferRepository>,
     asset_property_repo: Arc<dyn AssetPropertyRepository>,
+    // 新增：Exchange和Mint
+    exchange_request_repo: Option<Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>>,
+    currency_mint_repo: Option<Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>>,
 ) -> Result<()> {
     // 创建交易处理器（完整版本 - 支持所有交易类型）
     let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
@@ -289,6 +296,9 @@ async fn start_node(
         Arc::clone(&account_currency_repo),
         Arc::clone(&currency_transfer_repo),
         Arc::clone(&asset_property_repo),
+        // 新增：Exchange和Mint
+        exchange_request_repo,
+        currency_mint_repo,
     ));
 
     // 创建区块奖励应用器
