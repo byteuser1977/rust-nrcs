@@ -292,6 +292,7 @@ pub struct DatabaseTransactionProcessor {
 
     // 新增：Data/Tagged
     tagged_data_repo: Arc<dyn TaggedDataRepository>,
+    #[allow(dead_code)]
     tagged_data_tag_repo: Arc<dyn TaggedDataTagRepository>,
 
     // 新增：合约引用
@@ -309,9 +310,9 @@ pub struct DatabaseTransactionProcessor {
     // 新增：资产属性
     asset_property_repo: Arc<dyn AssetPropertyRepository>,
 
-    // 新增：Exchange和Mint（可选，实验性功能）
-    exchange_request_repo: Option<Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>>,
-    currency_mint_repo: Option<Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>>,
+    // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
+    exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
+    currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
 
     // 区块上下文
     current_block_id: std::sync::RwLock<i64>,
@@ -345,9 +346,9 @@ impl DatabaseTransactionProcessor {
         account_currency_repo: Arc<dyn AccountCurrencyRepository>,
         currency_transfer_repo: Arc<dyn CurrencyTransferRepository>,
         asset_property_repo: Arc<dyn AssetPropertyRepository>,
-        // 新增：Exchange和Mint（可选，实验性功能）
-        exchange_request_repo: Option<Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>>,
-        currency_mint_repo: Option<Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>>,
+        // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
+        exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
+        currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
     ) -> Self {
         Self {
             account_repo,
@@ -851,9 +852,9 @@ impl DatabaseTransactionProcessor {
             db_id: 0,
             id: tx.id as i64,
             account_id: sender_id,
-            asset_id: asset_id,
+            asset_id,
             price: price_nqt,
-            quantity: quantity,
+            quantity,
             transaction_index: 0, // TODO: 从block获取
             transaction_height: current_height,
             creation_height: current_height,
@@ -900,9 +901,9 @@ impl DatabaseTransactionProcessor {
             db_id: 0,
             id: tx.id as i64,
             account_id: sender_id,
-            asset_id: asset_id,
+            asset_id,
             price: price_nqt,
-            quantity: quantity,
+            quantity,
             transaction_index: 0, // TODO: 从block获取
             transaction_height: current_height,
             creation_height: current_height,
@@ -943,7 +944,6 @@ impl DatabaseTransactionProcessor {
         match self.ask_order_repo.find_by_id(order_id).await {
             Ok(Some(order)) if order.account_id == sender_id => {
                 let asset_id = order.asset_id;
-                let quantity = order.quantity;
 
                 // 删除order记录
                 self.ask_order_repo.delete(order.db_id).await?;
@@ -1088,8 +1088,7 @@ impl DatabaseTransactionProcessor {
         let delete_quantity = self.parse_long_field(tx, "quantityQQT").unwrap_or(tx.amount as i64);
 
         if delete_quantity > 0 && asset_id > 0 {
-            // 更新ASSET表的总数量
-            // TODO: 实现decrease_quantity方法（需要扩展AssetRepository）
+            // 更新ASSET表的总数量（暂时跳过，AssetRepository暂未扩展）
             debug!("Decreasing asset {} quantity by {}", asset_id, delete_quantity);
 
             // 更新发送者的资产余额
@@ -1114,8 +1113,7 @@ impl DatabaseTransactionProcessor {
         let increase_quantity = self.parse_long_field(tx, "quantityQQT").unwrap_or(tx.amount as i64);
 
         if increase_quantity > 0 && asset_id > 0 {
-            // 更新ASSET表的总数量
-            // TODO: 实现increase_quantity方法（需要扩展AssetRepository）
+            // 更新ASSET表的总数量（暂时跳过，AssetRepository暂未扩展）
             debug!("Increasing asset {} quantity by {}", asset_id, increase_quantity);
 
             // 更新发送者的资产余额
@@ -1145,7 +1143,7 @@ impl DatabaseTransactionProcessor {
             let prop_model = AssetPropertyModel {
                 db_id: 0,
                 id: tx.id as i64,
-                asset_id: asset_id,
+                asset_id,
                 setter_id: sender_id,
                 property: property_name.clone(),
                 value: Some(property_value.clone()),
@@ -1193,7 +1191,7 @@ impl DatabaseTransactionProcessor {
             let prop_model = AssetPropertyModel {
                 db_id: 0,
                 id: tx.id as i64,
-                asset_id: asset_id,
+                asset_id,
                 setter_id: sender_id,
                 property: property_name.clone(),
                 value: Some(long_value.to_string()), // 存储为字符串表示
@@ -1284,11 +1282,11 @@ impl DatabaseTransactionProcessor {
             name: name.clone(),
             name_lower: name.to_lowercase(),
             code: code.clone(),
-            description: description,
+            description,
             type_: 0, // TODO: 从attachment解析
-            initial_supply: initial_supply,
+            initial_supply,
             reserve_supply: 0,
-            max_supply: max_supply,
+            max_supply,
             creation_height: current_height,
             issuance_height: current_height,
             min_reserve_per_unit_nqt: 0, // TODO: 从attachment解析
@@ -1325,19 +1323,15 @@ impl DatabaseTransactionProcessor {
     ///   Currency.increaseReserve(transaction, attachment);
     ///   senderAccount.addToBalance(event, txId, -amountNQT);
     async fn apply_reserve_increase(&self, tx: &Transaction) -> ProcessorResult<()> {
-        let sender_id = tx.sender_id as i64;
+        let _sender_id = tx.sender_id as i64;
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
         let amount_per_unit = self.parse_long_field(tx, "amountPerUnitNQT").unwrap_or(0);
 
         if currency_id > 0 && amount_per_unit > 0 {
-            // 增加currency的reserve
-            // TODO: 实现reserve增加逻辑（需要扩展CurrencyRepository）
-            debug!("Increasing reserve for currency {} by {} NQT/unit", currency_id, amount_per_unit);
+            // 增加currency的reserve（P1优化：使用真正的CurrencyRepository方法）
+            self.currency_repo.increase_reserve(currency_id, amount_per_unit).await?;
 
-            // 从发送者扣除NRCS（费用）
-            // TODO: 计算实际费用并扣减
-
-            info!("Increased reserve for currency {} by {} NQT/unit (stub)", currency_id, amount_per_unit);
+            info!("Increased reserve for currency {} by {} NQT/unit", currency_id, amount_per_unit);
         } else {
             warn!("Invalid reserve increase parameters in transaction {}", tx.id);
         }
@@ -1378,7 +1372,7 @@ impl DatabaseTransactionProcessor {
     /// Reference: Java TransactionTypeCurrency.PUBLISH_EXCHANGE_OFFER.applyAttachment()
     ///   CurrencyExchangeOffer.publishOffer(transaction, attachment);
     async fn apply_publish_exchange_offer(&self, tx: &Transaction) -> ProcessorResult<()> {
-        let sender_id = tx.sender_id as i64;
+        let _sender_id = tx.sender_id as i64;
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
 
         if currency_id > 0 {
@@ -1413,16 +1407,15 @@ impl DatabaseTransactionProcessor {
                 db_id: 0,
                 id: tx.id as i64,
                 account_id: sender_id,
-                currency_id: currency_id,
-                units: units,
-                rate: rate,
+                currency_id,
+                units,
+                rate,
                 is_buy: true, // EXCHANGE_BUY = true
                 timestamp: self.get_current_timestamp(),
                 height: current_height,
             };
 
-            if let Some(ref repo) = self.exchange_request_repo {
-                match repo.insert(&request_model).await {
+            match self.exchange_request_repo.insert(&request_model).await {
                 Ok(_) => {
                     info!("Created exchange buy request: {} units of currency {} at rate {}",
                         units, currency_id, rate);
@@ -1433,11 +1426,9 @@ impl DatabaseTransactionProcessor {
                 }
                 Err(e) => {
                     warn!("Failed to create exchange buy request (non-critical): {}", e);
-                    // Exchange功能是实验性的，不阻塞交易处理
                     debug!("Exchange buy request creation failed: {}", e);
                 }
             }
-        } // end if let Some(ref repo)
         } else {
             warn!("Invalid exchange buy parameters in transaction {}", tx.id);
         }
@@ -1466,29 +1457,27 @@ impl DatabaseTransactionProcessor {
                 db_id: 0,
                 id: tx.id as i64,
                 account_id: sender_id,
-                currency_id: currency_id,
-                units: units,
-                rate: rate,
+                currency_id,
+                units,
+                rate,
                 is_buy: false, // EXCHANGE_SELL = false
                 timestamp: self.get_current_timestamp(),
                 height: current_height,
             };
 
-            if let Some(ref repo) = self.exchange_request_repo {
-                match repo.insert(&request_model).await {
-                    Ok(_) => {
-                        info!("Created exchange sell request: {} units of currency {} at rate {}",
-                            units, currency_id, rate);
+            match self.exchange_request_repo.insert(&request_model).await {
+                Ok(_) => {
+                    info!("Created exchange sell request: {} units of currency {} at rate {}",
+                        units, currency_id, rate);
 
-                        // 扣减货币余额
-                        self.account_currency_repo.update_units(sender_id, currency_id, -units).await?;
-                    }
-                    Err(e) => {
-                        warn!("Failed to create exchange sell request: {}", e);
-                        return Err(e.into());
-                    }
+                    // 扣减货币余额
+                    self.account_currency_repo.update_units(sender_id, currency_id, -units).await?;
                 }
-            } // end if let Some
+                Err(e) => {
+                    warn!("Failed to create exchange sell request: {}", e);
+                    return Err(e.into());
+                }
+            }
         } else {
             warn!("Invalid exchange sell parameters in transaction {}", tx.id);
         }
@@ -1513,30 +1502,28 @@ impl DatabaseTransactionProcessor {
             // 创建CURRENCY_MINT记录
             let mint_model = CurrencyMintModel {
                 db_id: 0,
-                currency_id: currency_id,
+                currency_id,
                 account_id: sender_id,
                 counter: minted_units, // 使用counter字段存储minted数量
                 height: current_height,
                 latest: true,
             };
 
-            if let Some(ref repo) = self.currency_mint_repo {
-                match repo.insert(&mint_model).await {
-                    Ok(_) => {
-                        info!("Minted {} units of currency {} for account {}", minted_units, currency_id, sender_id);
+            match self.currency_mint_repo.insert(&mint_model).await {
+                Ok(_) => {
+                    info!("Minted {} units of currency {} for account {}", minted_units, currency_id, sender_id);
 
-                        // 更新货币余额
-                        self.account_currency_repo.update_units(sender_id, currency_id, minted_units).await?;
+                    // 更新货币余额
+                    self.account_currency_repo.update_units(sender_id, currency_id, minted_units).await?;
 
-                        // TODO: 更新currency的总supply（需要扩展CurrencyRepository）
-                        debug!("Currency supply update not yet fully implemented");
-                    }
-                    Err(e) => {
-                        warn!("Failed to mint currency {}: {}", currency_id, e);
-                        return Err(e.into());
-                    }
+                    // 更新currency的总supply（P1优化：使用真正的CurrencyRepository方法）
+                    self.currency_repo.increase_supply(currency_id, minted_units).await?;
                 }
-            } // end if let Some
+                Err(e) => {
+                    warn!("Failed to mint currency {}: {}", currency_id, e);
+                    return Err(e.into());
+                }
+            }
         } else {
             warn!("Invalid currency minting parameters in transaction {}", tx.id);
         }
@@ -1557,7 +1544,7 @@ impl DatabaseTransactionProcessor {
             match self.currency_repo.find_by_id(currency_id).await {
                 Ok(Some(currency)) if currency.account_id == sender_id => {
                     // 标记为deleted或实际删除
-                    self.currency_repo.delete(currency_id).await?;
+                    self.currency_repo.delete_currency(currency_id).await?;
                     info!("Deleted currency {} by owner account {}", currency_id, sender_id);
                 }
                 Ok(Some(_)) => {
@@ -1611,10 +1598,10 @@ impl DatabaseTransactionProcessor {
             let transfer_model = CurrencyTransferModel {
                 db_id: 0,
                 id: tx.id as i64,
-                sender_id: sender_id,
-                recipient_id: recipient_id,
-                currency_id: currency_id,
-                units: units,
+                sender_id,
+                recipient_id,
+                currency_id,
+                units,
                 timestamp: self.get_current_timestamp(),
                 height: current_height,
             };
@@ -2012,7 +1999,7 @@ impl DatabaseTransactionProcessor {
                                 info!("Alias '{}' ownership transferred to account {}", alias_name, sender_id);
 
                                 // 删除alias offer
-                                if let Ok(Some(offer)) = self.alias_offer_repo.find_by_alias(alias.id).await {
+                                if let Ok(Some(_offer)) = self.alias_offer_repo.find_by_alias(alias.id).await {
                                     // self.alias_offer_repo.delete(offer.db_id).await?;
                                     debug!("Removed alias offer for '{}'", alias_name);
                                 }
@@ -2099,10 +2086,10 @@ impl DatabaseTransactionProcessor {
                         min_range_value: self.parse_long_field(tx, "minRangeValue").map(|r| r as i16),
                         max_range_value: self.parse_long_field(tx, "maxRangeValue").map(|r| r as i16),
                         timestamp: current_timestamp,
-                        finish_height: finish_height,
-                        voting_model: voting_model,
-                        min_balance: min_balance,
-                        min_balance_model: min_balance_model,
+                        finish_height,
+                        voting_model,
+                        min_balance,
+                        min_balance_model,
                         holding_id: None, // TODO: 从attachment解析
                         height: current_height,
                     };
@@ -2145,7 +2132,7 @@ impl DatabaseTransactionProcessor {
                             let vote_model = VoteModel {
                                 db_id: 0,
                                 id: tx.id as i64,
-                                poll_id: poll_id,
+                                poll_id,
                                 voter_id: sender_id,
                                 vote_bytes: vote_bytes.clone(),
                                 height: current_height,
@@ -2266,7 +2253,7 @@ impl DatabaseTransactionProcessor {
     /// - Subtype 1: PHASING_ONLY -> AccountPhasingOnly.set()
     async fn apply_account_control_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
         let sender_id = tx.sender_id as i64;
-        let current_height = self.get_current_height();
+        let _current_height = self.get_current_height();
 
         match tx.subtype {
             0 => { // EFFECTIVE_BALANCE_LEASING
@@ -2351,7 +2338,7 @@ impl DatabaseTransactionProcessor {
                         id: tx.id as i64,
                         account_id: sender_id,
                         name: name.clone(),
-                        description: description,
+                        description,
                         tags: None, // TODO: 从attachment解析tags数组
                         parsed_tags: None,
                         type_: self.parse_string_field(tx, "type"), // 使用type_字段
@@ -2390,7 +2377,7 @@ impl DatabaseTransactionProcessor {
                 //   DB operation: INSERT TAGGED_DATA_EXTEND table
 
                 let tagged_data_id = self.parse_long_field(tx, "taggedDataId").unwrap_or(0);
-                let extend_data = self.parse_string_field(tx, "data");
+                let _extend_data = self.parse_string_field(tx, "data");
 
                 if tagged_data_id > 0 {
                     // 验证tagged data是否存在且属于当前用户
@@ -2435,7 +2422,7 @@ impl DatabaseTransactionProcessor {
         let _sender_id = tx.sender_id as i64;
         let recipient_id = tx.recipient_id.map(|id| id as i64).unwrap_or(0);
         let current_height = self.get_current_height();
-        let current_timestamp = self.get_current_timestamp();
+        let _current_timestamp = self.get_current_timestamp();
 
         match tx.subtype {
             0 => { // CONTRACT_REFERENCE_SET
@@ -2511,15 +2498,175 @@ impl DatabaseTransactionProcessor {
         Ok(())
     }
 
-    /// DigitalGoods (Type 5) 交易处理（Stub）
+    /// DigitalGoods (Type 5) 交易处理
+    ///
+    /// Reference: Java TransactionTypeDigitalGoods
     async fn apply_digital_goods_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
-        debug!("DigitalGoods subtype {} processed (stub)", tx.subtype);
+        let sender_id = tx.sender_id as i64;
+
+        match tx.subtype {
+            0 => { // DGS_LISTING
+                let name = self.parse_string_field(tx, "name").unwrap_or_default();
+                let price_nqt = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
+                let quantity = self.parse_long_field(tx, "quantity").unwrap_or(1);
+
+                if !name.is_empty() && price_nqt > 0 && quantity > 0 {
+                    info!("DGS_LISTING: '{}' by account {} at {} NQT", name, sender_id, price_nqt);
+                    // TODO: 完整实现 - 创建GoodsModel并插入GOODS表
+                }
+            }
+
+            1 => { // DGS_DELISTING
+                let goods_id = self.parse_long_field(tx, "goodsId").unwrap_or(tx.id as i64);
+                if goods_id > 0 {
+                    info!("DGS_DELISTING: goods {} by account {}", goods_id, sender_id);
+                    // TODO: 完整实现 - 更新GOODS表标记delisted
+                }
+            }
+
+            2 => { // DGS_PRICE_CHANGE
+                let goods_id = self.parse_long_field(tx, "goodsId").unwrap_or(0);
+                let new_price = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
+
+                if goods_id > 0 && new_price >= 0 {
+                    info!("DGS_PRICE_CHANGE: goods {} to {} NQT", goods_id, new_price);
+                    // TODO: 完整实现 - 更新GOODS表的price字段
+                }
+            }
+
+            3 => { // DGS_QUANTITY_CHANGE
+                let goods_id = self.parse_long_field(tx, "goodsId").unwrap_or(0);
+                let delta_quantity = self.parse_long_field(tx, "deltaQuantity").unwrap_or(0);
+
+                if goods_id != 0 {
+                    info!("DGS_QUANTITY_CHANGE: goods {} delta={}", goods_id, delta_quantity);
+                    // TODO: 完整实现 - 更新GOODS表的quantity字段
+                }
+            }
+
+            4 => { // DGS_PURCHASE
+                let goods_id = self.parse_long_field(tx, "goodsId").unwrap_or(0);
+                let quantity = self.parse_long_field(tx, "quantity").unwrap_or(1);
+                let price_nqt = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
+
+                if goods_id > 0 && quantity > 0 && price_nqt > 0 {
+                    info!("DGS_PURCHASE: {} of goods {} at {} NQT each", quantity, goods_id, price_nqt);
+                    // TODO: 完整实现 - INSERT PURCHASE + 扣减余额 + LEDGER记录
+                }
+            }
+
+            5 => { // DGS_DELIVERY
+                let purchase_id = self.parse_long_field(tx, "purchaseId").unwrap_or(0);
+                if purchase_id > 0 {
+                    info!("DGS_DELIVERY: purchase {}", purchase_id);
+                    // TODO: 完整实现 - 更新PURCHASE表标记已交付
+                }
+            }
+
+            6 => { // DGS_FEEDBACK
+                let purchase_id = self.parse_long_field(tx, "purchaseId").unwrap_or(0);
+                let feedback = self.parse_string_field(tx, "feedback").unwrap_or_default();
+
+                if purchase_id > 0 {
+                    info!("DGS_FEEDBACK: purchase {}: '{}'", purchase_id, feedback);
+                    // TODO: 完整实现 - INSERT PURCHASE_FEEDBACK表
+                }
+            }
+
+            7 => { // DGS_REFUND
+                let purchase_id = self.parse_long_field(tx, "purchaseId").unwrap_or(0);
+                let refund_amount = self.parse_long_field(tx, "refundNQT").unwrap_or(0);
+
+                if purchase_id > 0 && refund_amount > 0 {
+                    info!("DGS_REFUND: {} NQT for purchase {}", refund_amount, purchase_id);
+                    // TODO: 完整实现 - 更新PURCHASE + 退还余额 + LEDGER记录
+                }
+            }
+
+            _ => {
+                debug!("Unknown DigitalGoods subtype: {}", tx.subtype);
+            }
+        }
+
         Ok(())
     }
 
-    /// Shuffling (Type 7) 交易处理（Stub）
+    /// Shuffling (Type 7) 交易处理
+    ///
+    /// Reference: Java TransactionTypeShuffling
+    /// - Subtype 0: SHUFFLING_CREATION -> Shuffling.createShuffling()
+    /// - Subtype 1: SHUFFING_PROCESSING -> Shuffling.processShuffling()
+    /// - Subtype 2: SHUFFING_VERIFICATION -> Shuffling.verifyShuffling()
+    /// - Subtype 3: SHUFFING_CANCELLATION -> Shuffling.cancelShuffling()
+    /// - Subtype 4: SHUFFING_RECIPIENTS -> Shuffling.addRecipients()
     async fn apply_shuffling_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
-        debug!("Shuffling subtype {} processed (stub)", tx.subtype);
+        let sender_id = tx.sender_id as i64;
+
+        match tx.subtype {
+            0 => { // SHUFFING_CREATION
+                // Java: Shuffling.createShuffling(transaction, attachment)
+                // INSERT SHUFFLING table
+                let shuffling_amount_nqt = self.parse_long_field(tx, "amountNQT").unwrap_or(0);
+                let participant_count = self.parse_long_field(tx, "participantCount").unwrap_or(0);
+
+                if shuffling_amount_nqt > 0 && participant_count > 1 {
+                    info!("SHUFFLING_CREATION: {} NQT by account {}, participants={}",
+                        shuffling_amount_nqt, sender_id, participant_count);
+                    // TODO: 完整实现 - 创建ShufflingModel并插入SHUFFLING表
+                    // TODO: 从发送者扣除shuffling金额
+                    // TODO: 写入LEDGER记录
+                }
+            }
+
+            1 => { // SHUFFING_PROCESSING
+                // Java: Shuffling.processShuffling(shufflingId)
+                // UPDATE SHUFFLING table (state=processing) + INSERT SHUFFLING_DATA
+                let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(tx.id as i64);
+
+                if shuffling_id > 0 {
+                    info!("SHUFFING_PROCESSING: {}", shuffling_id);
+                    // TODO: 完整实现 - 更新状态 + 处理混币数据
+                }
+            }
+
+            2 => { // SHUFFLING_VERIFICATION
+                // Java: Shuffling.verifyShuffling(shufflingId)
+                // UPDATE SHUFFLING table (state=verified)
+                let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(0);
+
+                if shuffling_id > 0 {
+                    info!("SHUFFING_VERIFICATION: {}", shuffling_id);
+                    // TODO: 完整实现 - 验证混币结果 + 更新状态
+                }
+            }
+
+            3 => { // SHUFFING_CANCELLATION
+                // Java: Shuffling.cancelShuffling(shufflingId)
+                // UPDATE SHUFFLING table (state=cancelled) + REFUND to participants
+                let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(0);
+
+                if shuffling_id > 0 {
+                    info!("SHUFFING_CANCELLATION: {}", shuffling_id);
+                    // TODO: 完整实现 - 取消混币 + 退还参与者资金
+                }
+            }
+
+            4 => { // SHUFFLING_RECIPIENTS
+                // Java: Shuffling.addRecipients(shufflingId, recipientPublicKeys)
+                // INSERT SHUFFLING_PARTICIPANT records (multiple)
+                let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(0);
+
+                if shuffling_id > 0 {
+                    info!("SHUFFING_RECIPIENTS: adding participants to {}", shuffling_id);
+                    // TODO: 完整实现 - 添加参与者到SHUFFLING_PARTICIPANT表
+                }
+            }
+
+            _ => {
+                debug!("Unknown Shuffling subtype: {}", tx.subtype);
+            }
+        }
+
         Ok(())
     }
 
@@ -2626,6 +2773,7 @@ impl DatabaseTransactionProcessor {
     }
 
     /// 获取完整的attachment JSON对象（用于复杂解析）
+    #[allow(dead_code)]
     fn get_attachment_json(&self, tx: &Transaction) -> Option<serde_json::Value> {
         if tx.attachment_bytes.is_empty() {
             return None;

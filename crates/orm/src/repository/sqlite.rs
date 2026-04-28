@@ -2272,6 +2272,60 @@ impl CurrencyRepository for SqliteCurrencyRepository {
         .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
+
+    // P1新增方法实现
+
+    async fn increase_supply(&self, currency_id: i64, delta: i64) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE currency SET initial_supply = initial_supply + ?, latest = 1
+            WHERE id = ? AND latest = 1
+            "#,
+        )
+        .bind(delta)
+        .bind(currency_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn increase_reserve(&self, currency_id: i64, amount_per_unit: i64) -> RepositoryResult<()> {
+        // 计算总reserve增加量：amount_per_unit * current supply
+        let (current_supply,): (i64,) = sqlx::query_as(
+            "SELECT COALESCE(initial_supply, 0) FROM currency WHERE id = ? AND latest = 1"
+        )
+        .bind(currency_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+
+        let total_increase = amount_per_unit * current_supply;
+
+        sqlx::query(
+            r#"
+            UPDATE currency SET reserve_supply = reserve_supply + ?, latest = 1
+            WHERE id = ? AND latest = 1
+            "#,
+        )
+        .bind(total_increase)
+        .bind(currency_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete_currency(&self, currency_id: i64) -> RepositoryResult<()> {
+        // 标记为deleted（软删除）或硬删除
+        // 这里使用硬删除，因为NRCS Java也是直接删除
+        sqlx::query("DELETE FROM currency WHERE id = ?")
+            .bind(currency_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -3937,5 +3991,198 @@ impl AccountGuaranteedBalanceRepository for SqliteAccountGuaranteedBalanceReposi
         .await
         .map_err(RepositoryError::DbError)?;
         Ok(total)
+    }
+}
+
+// ==================== ExchangeRequest Repository ====================
+
+pub struct SqliteExchangeRequestRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteExchangeRequestRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<ExchangeRequestModel> for SqliteExchangeRequestRepository {
+    async fn insert(&self, request: &ExchangeRequestModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO exchange_request (id, account_id, currency_id, units, rate, is_buy, timestamp, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(request.id)
+        .bind(request.account_id)
+        .bind(request.currency_id)
+        .bind(request.units)
+        .bind(request.rate)
+        .bind(request.is_buy)
+        .bind(request.timestamp)
+        .bind(request.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<ExchangeRequestModel>> {
+        let record = sqlx::query_as::<_, ExchangeRequestModel>(
+            "SELECT * FROM exchange_request WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, request: &ExchangeRequestModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE exchange_request SET
+                account_id = ?, currency_id = ?, units = ?, rate = ?,
+                is_buy = ?, timestamp = ?, height = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(request.account_id)
+        .bind(request.currency_id)
+        .bind(request.units)
+        .bind(request.rate)
+        .bind(request.is_buy)
+        .bind(request.timestamp)
+        .bind(request.height)
+        .bind(request.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM exchange_request WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<ExchangeRequestModel>> {
+        let records = sqlx::query_as::<_, ExchangeRequestModel>(
+            "SELECT * FROM exchange_request ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM exchange_request")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+// ==================== CurrencyMint Repository ====================
+
+pub struct SqliteCurrencyMintRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteCurrencyMintRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<CurrencyMintModel> for SqliteCurrencyMintRepository {
+    async fn insert(&self, mint: &CurrencyMintModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO currency_mint (currency_id, account_id, counter, height, latest)
+            VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(mint.currency_id)
+        .bind(mint.account_id)
+        .bind(mint.counter)
+        .bind(mint.height)
+        .bind(mint.latest)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<CurrencyMintModel>> {
+        let record = sqlx::query_as::<_, CurrencyMintModel>(
+            "SELECT * FROM currency_mint WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, mint: &CurrencyMintModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE currency_mint SET
+                currency_id = ?, account_id = ?, counter = ?,
+                height = ?, latest = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(mint.currency_id)
+        .bind(mint.account_id)
+        .bind(mint.counter)
+        .bind(mint.height)
+        .bind(mint.latest)
+        .bind(mint.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM currency_mint WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<CurrencyMintModel>> {
+        let records = sqlx::query_as::<_, CurrencyMintModel>(
+            "SELECT * FROM currency_mint ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM currency_mint")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
     }
 }

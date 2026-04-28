@@ -219,9 +219,11 @@ async fn main() -> Result<()> {
             let account_currency_repo: Arc<dyn AccountCurrencyRepository> = Arc::new(orm::SqliteAccountCurrencyRepository::new(pool.clone()));
             let currency_transfer_repo: Arc<dyn CurrencyTransferRepository> = Arc::new(orm::SqliteCurrencyTransferRepository::new(pool.clone()));
             let asset_property_repo: Arc<dyn AssetPropertyRepository> = Arc::new(orm::SqliteAssetPropertyRepository::new(pool.clone()));
-            // Exchange和Mint使用通用Repository（临时方案，后续可优化为专用实现）
-            let exchange_request_repo: Option<Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>> = None;  // 暂时禁用
-            let currency_mint_repo: Option<Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>> = None;  // 暂时禁用
+            // Exchange和Mint使用专用Repository（P1优化完成）
+            let exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>> =
+                Arc::new(orm::SqliteExchangeRequestRepository::new(pool.clone()));
+            let currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>> =
+                Arc::new(orm::SqliteCurrencyMintRepository::new(pool.clone()));
 
             // 确保创世区块存在
             orm::genesis::ensure_genesis(
@@ -268,9 +270,9 @@ async fn start_node(
     account_currency_repo: Arc<dyn AccountCurrencyRepository>,
     currency_transfer_repo: Arc<dyn CurrencyTransferRepository>,
     asset_property_repo: Arc<dyn AssetPropertyRepository>,
-    // 新增：Exchange和Mint
-    exchange_request_repo: Option<Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>>,
-    currency_mint_repo: Option<Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>>,
+    // 新增：Exchange和Mint（P1优化完成）
+    exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
+    currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
 ) -> Result<()> {
     // 创建交易处理器（完整版本 - 支持所有交易类型）
     let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(

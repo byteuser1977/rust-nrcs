@@ -183,6 +183,10 @@ pub trait CurrencyRepository: Repository<CurrencyModel> {
     async fn find_by_code(&self, code: &str) -> RepositoryResult<Option<CurrencyModel>>;
     async fn find_by_owner(&self, account_id: i64) -> RepositoryResult<Vec<CurrencyModel>>;
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<CurrencyModel>>;
+    // P1新增方法
+    async fn increase_supply(&self, currency_id: i64, delta: i64) -> RepositoryResult<()>;
+    async fn increase_reserve(&self, currency_id: i64, amount_per_unit: i64) -> RepositoryResult<()>;
+    async fn delete_currency(&self, currency_id: i64) -> RepositoryResult<()>;
 }
 
 #[async_trait]
