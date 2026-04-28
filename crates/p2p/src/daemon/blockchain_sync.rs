@@ -755,9 +755,12 @@ impl BlockchainSyncDaemon {
         let mut transactions = Vec::new();
         for (tx_idx, tx_json) in transactions_json.iter().enumerate() {
             match Transaction::from_json(tx_json) {
-                Ok(tx) => {
-                    info!("Transaction[{}] in block {}: id={}, type={:?}, sender={}, recipient={:?}, amount={}, fee={}", 
-                          tx_idx, block_height, tx.id, tx.type_id, tx.sender_id, tx.recipient_id, tx.amount, tx.fee);
+                Ok(mut tx) => {
+                    // 对应 Java: transaction.setBlock(this) → this.setBlockTimestamp(block.getTimestamp())
+                    // block_timestamp 必须设置为所属区块的 timestamp
+                    tx.block_timestamp = block.timestamp;
+                    info!("Transaction[{}] in block {}: id={}, type={:?}, sender={}, recipient={:?}, amount={}, fee={}, block_ts={}", 
+                          tx_idx, block_height, tx.id, tx.type_id, tx.sender_id, tx.recipient_id, tx.amount, tx.fee, tx.block_timestamp);
                     transactions.push(tx);
                 }
                 Err(e) => {

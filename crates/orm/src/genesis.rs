@@ -265,8 +265,8 @@ pub async fn ensure_genesis(
             has_public_key_announcement: false,
             has_prunable_message: false,
             has_prunable_attachment: false,
-            ec_block_height: Some(0),
-            ec_block_id: Some(0),
+            ec_block_height: None,
+            ec_block_id: None,
             has_encrypttoself_message: false,
             has_prunable_encrypted_message: false,
         };

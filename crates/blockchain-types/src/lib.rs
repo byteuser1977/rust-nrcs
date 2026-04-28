@@ -26,6 +26,7 @@ pub use constants::*;
 
 pub mod block;
 pub mod transaction;
+pub mod attachment_serde;
 pub mod account;
 pub mod asset;
 pub mod currency;

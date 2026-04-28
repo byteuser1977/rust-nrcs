@@ -86,6 +86,7 @@ pub fn create_genesis_block() -> Result<Block, Box<dyn std::error::Error>> {
             has_message: false,
             has_encrypted_message: false,
             has_public_key_announcement: false,
+            has_prunable_message: false,
             has_prunable_attachment: false,
             ec_block_height: None,
             ec_block_id: None,

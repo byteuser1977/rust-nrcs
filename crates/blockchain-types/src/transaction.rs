@@ -268,6 +268,8 @@ pub struct Transaction {
     #[serde(default)]
     pub has_public_key_announcement: bool,
     #[serde(default)]
+    pub has_prunable_message: bool,
+    #[serde(default)]
     pub has_prunable_attachment: bool,
     #[serde(alias = "ecBlockHeight", default)]
     pub ec_block_height: Option<u32>,
@@ -305,6 +307,7 @@ impl Default for Transaction {
             has_message: false,
             has_encrypted_message: false,
             has_public_key_announcement: false,
+            has_prunable_message: false,
             has_prunable_attachment: false,
             ec_block_height: None,
             ec_block_id: None,
@@ -348,6 +351,7 @@ impl Transaction {
             has_message: false,
             has_encrypted_message: false,
             has_public_key_announcement: false,
+            has_prunable_message: false,
             has_prunable_attachment: false,
             ec_block_height: None,
             ec_block_id: None,
@@ -480,36 +484,34 @@ impl Transaction {
             .and_then(|v| v.as_u64())
             .map(|v| v as u32);
         let ec_block_id = obj.get("ecBlockId")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<u64>().ok());
+            .and_then(|v| {
+                // Java 中 ecBlockId 是 long 类型，JSON 中可能是字符串也可能是数字
+                v.as_str()
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .or_else(|| v.as_u64())
+            });
 
-        let attachment_bytes: Vec<u8> = match type_byte {
-            0 => match subtype {
-                0 => vec![],
-                _ => match obj.get("attachment") {
-                    Some(serde_json::Value::Object(att)) => {
-                        serde_json::to_vec(att).unwrap_or_default()
-                    }
-                    _ => vec![],
-                },
-            },
-            _ => match obj.get("attachment") {
-                Some(serde_json::Value::Object(att)) => {
-                    serde_json::to_vec(att).unwrap_or_default()
-                }
-                _ => vec![],
-            },
+        let att_obj = obj.get("attachment")
+            .and_then(|a| a.as_object())
+            .cloned();
+
+        // 使用二进制协议序列化 attachment_bytes（与 Java NRCS 一致）
+        // 优先使用 JSON 中的 attachmentBytes 字段（hex 编码），否则从 attachment 对象生成
+        let attachment_bytes = if let Some(hex_str) = obj.get("attachmentBytes")
+            .and_then(|v| v.as_str())
+        {
+            hex::decode(hex_str).unwrap_or_default()
+        } else {
+            crate::attachment_serde::build_attachment_bytes_from_json(
+                type_byte, subtype, version, att_obj.as_ref(),
+            )
         };
 
-        let has_message = obj.get("attachment")
-            .and_then(|a| a.get("message"))
-            .is_some();
-        let has_encrypted_message = obj.get("attachment")
-            .and_then(|a| a.get("encryptedMessage"))
-            .is_some();
-        let has_public_key_announcement = obj.get("attachment")
-            .and_then(|a| a.get("recipientPublicKey"))
-            .is_some();
+        // 检测各 appendix 标志（与 Java getFlags() 位图一致）
+        let (has_message, has_encrypted_message, has_public_key_announcement,
+             has_encrypttoself_message, phased, has_prunable_message,
+             has_prunable_encrypted_message) =
+            crate::attachment_serde::detect_appendix_flags(att_obj.as_ref());
 
         let mut tx = Self {
             id: 0,
@@ -531,15 +533,16 @@ impl Transaction {
             full_hash,
             referenced_transaction_full_hash,
             attachment_bytes,
-            phased: false,
+            phased,
             has_message,
             has_encrypted_message,
             has_public_key_announcement,
-            has_prunable_attachment: false,
+            has_prunable_message,
+            has_prunable_attachment: has_prunable_message || has_prunable_encrypted_message,
             ec_block_height,
             ec_block_id,
-            has_encrypttoself_message: false,
-            has_prunable_encrypted_message: false,
+            has_encrypttoself_message,
+            has_prunable_encrypted_message,
         };
 
         if tx.full_hash.0 == [0u8; 32] {
@@ -658,13 +661,22 @@ impl Transaction {
     }
 
     fn get_flags(&self) -> u32 {
+        // 对应 Java Transaction.getFlags() 的位图定义：
+        // bit 0 (1): message
+        // bit 1 (2): encryptedMessage
+        // bit 2 (4): publicKeyAnnouncement
+        // bit 3 (8): encryptToSelfMessage
+        // bit 4 (16): phasing
+        // bit 5 (32): prunablePlainMessage
+        // bit 6 (64): prunableEncryptedMessage
         let mut flags: u32 = 0;
         if self.has_message { flags |= 1; }
         if self.has_encrypted_message { flags |= 2; }
         if self.has_public_key_announcement { flags |= 4; }
-        if self.has_prunable_attachment { flags |= 8; }
-        if self.has_prunable_encrypted_message { flags |= 32; }
-        if self.has_encrypttoself_message { flags |= 64; }
+        if self.has_encrypttoself_message { flags |= 8; }
+        if self.phased { flags |= 16; }
+        if self.has_prunable_attachment { flags |= 32; }
+        if self.has_prunable_encrypted_message { flags |= 64; }
         flags
     }
 
