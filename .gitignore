@@ -85,3 +85,4 @@ run_sqlx_prepare.sh
 setup_db.sh
 test_db_connection.sh
 .env
+nrcs.db-journal

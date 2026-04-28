@@ -477,7 +477,13 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         self.apply_attachment(tx).await?;
 
         // === Step 4: Update guaranteed balance ===
-        self.update_guaranteed_balance(tx).await?;
+        // Reference: Java Account.addToBalance() calls addToGuaranteedBalance(totalAmountNQT)
+        //   where totalAmountNQT = amountNQT + feeNQT
+        //   addToGuaranteedBalance only records when totalAmountNQT > 0 (balance increases)
+        //
+        // For sender: totalAmountNQT = -(amount + fee) → negative → NOT recorded
+        // For recipient: totalAmountNQT = +amount → positive → RECORDED
+        self.update_guaranteed_balance_for_recipient(tx).await?;
 
         // === Step 5: Log ledger entries ===
         self.log_ledger_entry(tx).await?;
@@ -721,20 +727,29 @@ impl DatabaseTransactionProcessor {
         Ok(())
     }
 
-    /// Update guaranteed balance
+    /// Update guaranteed balance for recipient (balance increase)
     ///
-    /// Reference: Java Account.addToGuaranteedBalance()
-    /// Called by addToBalance() after balance update.
-    /// Only records additions (positive totalAmountNQT).
-    async fn update_guaranteed_balance(&self, tx: &Transaction) -> ProcessorResult<()> {
-        let sender_id = tx.sender_id;
+    /// Reference: Java Account.addToGuaranteedBalance(long amountNQT):
+    ///   if (amountNQT <= 0) return;
+    ///   AccountGuaranteedBalanceRepository.save(accountId, additions, height);
+    ///
+    /// Called by addToBalance() and addToBalanceAndUnconfirmedBalance()
+    /// with totalAmountNQT = amountNQT + feeNQT.
+    /// Only records when totalAmountNQT > 0 (i.e., balance increases).
+    ///
+    /// In practice:
+    /// - Sender: totalAmountNQT = -(amount + fee) → negative → skip
+    /// - Recipient: totalAmountNQT = +amount → positive → record
+    async fn update_guaranteed_balance_for_recipient(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let recipient_id = tx.recipient_id.unwrap_or(0);
+        let amount_nqt = tx.amount as i64;
 
-        if tx.type_id == TransactionType::Payment && tx.amount > 0 {
+        if recipient_id != 0 && amount_nqt > 0 {
             let current_height = self.get_current_height();
             self.guaranteed_balance_repo.upsert_additions(
-                sender_id as i64,
+                recipient_id as i64,
                 current_height,
-                tx.amount as i64
+                amount_nqt
             ).await?;
         }
 

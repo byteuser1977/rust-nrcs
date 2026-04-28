@@ -580,13 +580,19 @@ impl BlockchainSyncDaemon {
             let peer_addr = peer_addrs[segment_idx % peer_count];
             let common_block_id = chain_block_ids.first().copied().unwrap_or(0);
             
-            let (prev_block_id, id_start_idx) = if start_idx == 0 {
-                (common_block_id, 1)
-            } else {
-                (chain_block_ids.get(start_idx - 1).copied().unwrap_or(common_block_id), start_idx)
-            };
+            // Reference: Java GetNextBlocks.call() line 82:
+            //   for (int i = start + 1; i <= stop; i++) {
+            //       idList.add(Long.toUnsignedString(blockIds.get(i)));
+            //   }
+            //   request.put("blockId", Long.toUnsignedString(blockIds.get(start)));
+            //
+            // Java requests blockIds[start+1..stop] with blockId=blockIds[start]
+            // So we need to request chain_block_ids[start_idx+1..stop_idx]
+            // with blockId=chain_block_ids[start_idx]
+            let prev_block_id = chain_block_ids.get(start_idx).copied().unwrap_or(common_block_id);
+            let id_start_idx = start_idx + 1;
 
-            let id_list: Vec<serde_json::Value> = (id_start_idx..stop_idx)
+            let id_list: Vec<serde_json::Value> = (id_start_idx..=stop_idx)
                 .filter_map(|i| chain_block_ids.get(i).copied())
                 .map(|id| serde_json::Value::String(id.to_string()))
                 .collect();
@@ -689,8 +695,6 @@ impl BlockchainSyncDaemon {
             None => block_data.clone(),
         };
 
-        info!("Raw block JSON at height {}: {}", block_height, serde_json::to_string(&block_json).unwrap_or_default());
-
         let transactions_json = block_json.get("transactions")
             .and_then(|v| v.as_array())
             .cloned()
@@ -710,11 +714,37 @@ impl BlockchainSyncDaemon {
             }
         };
 
-        info!("Deserialized block at height {}: version={}, timestamp={}, prev_block_id={:?}, total_amount={}, total_fee={}, payload_length={}, base_target={}, generator_id={:?}", 
-              block_height, block.version, block.timestamp, block.previous_block_id, 
-              block.total_amount, block.total_fee, block.payload_length, block.base_target, block.generator_id);
+        // Reference: Java Block.setPrevious(Block block):
+        //   if (block != null) {
+        //       this.setHeight(block.getHeight() + 1);
+        //   } else {
+        //       this.setHeight(0);
+        //   }
+        //
+        // Java calculates height from the PREVIOUS BLOCK's height + 1,
+        // using previousBlockId to look up the previous block.
+        let calculated_height = if let Some(prev_id) = block.previous_block_id.filter(|&id| id != 0) {
+            match block_verifier.get_block_height(prev_id).await {
+                Ok(Some(prev_height)) => prev_height + 1,
+                Ok(None) => {
+                    warn!("Previous block {} not found in DB, falling back to index height {}", prev_id, block_height);
+                    block_height
+                }
+                Err(e) => {
+                    warn!("Error querying previous block {} height: {}, falling back to index height {}", prev_id, e, block_height);
+                    block_height
+                }
+            }
+        } else {
+            0
+        };
 
-        block.height = block_height;
+        if calculated_height != block_height {
+            warn!("Height mismatch: calculated={} (prev_block+1), expected={}. Using calculated height.",
+                  calculated_height, block_height);
+        }
+
+        block.height = calculated_height;
 
         if block.generator_id.is_none() {
             if let Some(pub_key) = &block.generator_public_key {

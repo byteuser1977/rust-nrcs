@@ -202,6 +202,7 @@ async fn main() -> Result<()> {
                 &*account_repo,
                 &*tx_repo,
                 &*ledger_repo,
+                &*guaranteed_balance_repo,
             ).await.context("Failed to create genesis block")?;
             info!("Genesis block ensured");
 
