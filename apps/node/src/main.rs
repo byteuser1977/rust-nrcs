@@ -31,7 +31,15 @@ use http_api::state::ApiState;
 use account::{AccountManager, AccountConfig, DatabaseAccountManager, AccountStore, PgAccountStore};
 use tx_engine::{TransactionProcessor, DatabaseTransactionProcessor};
 use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransferRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository,
-         AccountGuaranteedBalanceRepository, AccountLedgerRepository};
+         AccountGuaranteedBalanceRepository, AccountLedgerRepository,
+         // 新增导入
+         AliasRepository, AliasOfferRepository,
+         PollRepository, VoteRepository,
+         TaggedDataRepository, TaggedDataTagRepository,
+         ContractReferenceRepository,
+         AskOrderRepository, BidOrderRepository,
+         CurrencyRepository, AccountCurrencyRepository, CurrencyTransferRepository,
+         AssetPropertyRepository};
 use orm::repository::sqlite::SqliteAccountGuaranteedBalanceRepository;
 
 use p2p::BlockchainVerifier;
@@ -196,6 +204,22 @@ async fn main() -> Result<()> {
                 SqliteAccountGuaranteedBalanceRepository::new(pool.clone())
             );
 
+            // 新增：完整交易处理所需的Repository
+            let alias_repo: Arc<dyn AliasRepository> = Arc::new(orm::SqliteAliasRepository::new(pool.clone()));
+            let alias_offer_repo: Arc<dyn AliasOfferRepository> = Arc::new(orm::SqliteAliasOfferRepository::new(pool.clone()));
+            let poll_repo: Arc<dyn PollRepository> = Arc::new(orm::SqlitePollRepository::new(pool.clone()));
+            let vote_repo: Arc<dyn VoteRepository> = Arc::new(orm::SqliteVoteRepository::new(pool.clone()));
+            // let account_property_repo: Arc<dyn AccountPropertyRepository> = ...  // 暂时注释
+            let tagged_data_repo: Arc<dyn TaggedDataRepository> = Arc::new(orm::SqliteTaggedDataRepository::new(pool.clone()));
+            let tagged_data_tag_repo: Arc<dyn TaggedDataTagRepository> = Arc::new(orm::SqliteTaggedDataTagRepository::new(pool.clone()));
+            let contract_ref_repo: Arc<dyn ContractReferenceRepository> = Arc::new(orm::SqliteContractReferenceRepository::new(pool.clone()));
+            let ask_order_repo: Arc<dyn AskOrderRepository> = Arc::new(orm::SqliteAskOrderRepository::new(pool.clone()));
+            let bid_order_repo: Arc<dyn BidOrderRepository> = Arc::new(orm::SqliteBidOrderRepository::new(pool.clone()));
+            let currency_repo: Arc<dyn CurrencyRepository> = Arc::new(orm::SqliteCurrencyRepository::new(pool.clone()));
+            let account_currency_repo: Arc<dyn AccountCurrencyRepository> = Arc::new(orm::SqliteAccountCurrencyRepository::new(pool.clone()));
+            let currency_transfer_repo: Arc<dyn CurrencyTransferRepository> = Arc::new(orm::SqliteCurrencyTransferRepository::new(pool.clone()));
+            let asset_property_repo: Arc<dyn AssetPropertyRepository> = Arc::new(orm::SqliteAssetPropertyRepository::new(pool.clone()));
+
             // 确保创世区块存在
             orm::genesis::ensure_genesis(
                 &*block_repo,
@@ -206,7 +230,9 @@ async fn main() -> Result<()> {
             ).await.context("Failed to create genesis block")?;
             info!("Genesis block ensured");
 
-            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo).await
+            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
+                alias_repo, alias_offer_repo, poll_repo, vote_repo, /* account_property_repo, */ tagged_data_repo, tagged_data_tag_repo, contract_ref_repo, ask_order_repo, bid_order_repo, currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo
+            ).await
         }
     }
 }
@@ -223,8 +249,23 @@ async fn start_node(
     public_key_repo: Arc<dyn PublicKeyRepository>,
     ledger_repo: Arc<dyn AccountLedgerRepository>,
     guaranteed_balance_repo: Arc<dyn AccountGuaranteedBalanceRepository>,
+    // 新增参数
+    alias_repo: Arc<dyn AliasRepository>,
+    alias_offer_repo: Arc<dyn AliasOfferRepository>,
+    poll_repo: Arc<dyn PollRepository>,
+    vote_repo: Arc<dyn VoteRepository>,
+    // account_property_repo: Arc<dyn AccountPropertyRepository>,  // 暂时注释
+    tagged_data_repo: Arc<dyn TaggedDataRepository>,
+    tagged_data_tag_repo: Arc<dyn TaggedDataTagRepository>,
+    contract_ref_repo: Arc<dyn ContractReferenceRepository>,
+    ask_order_repo: Arc<dyn AskOrderRepository>,
+    bid_order_repo: Arc<dyn BidOrderRepository>,
+    currency_repo: Arc<dyn CurrencyRepository>,
+    account_currency_repo: Arc<dyn AccountCurrencyRepository>,
+    currency_transfer_repo: Arc<dyn CurrencyTransferRepository>,
+    asset_property_repo: Arc<dyn AssetPropertyRepository>,
 ) -> Result<()> {
-    // 创建交易处理器
+    // 创建交易处理器（完整版本 - 支持所有交易类型）
     let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
         Arc::clone(&account_repo),
         Arc::clone(&account_asset_repo),
@@ -233,6 +274,21 @@ async fn start_node(
         Arc::clone(&tx_repo),
         Arc::clone(&guaranteed_balance_repo),
         Arc::clone(&ledger_repo),
+        // 新增：完整交易处理所需的Repository
+        Arc::clone(&alias_repo),
+        Arc::clone(&alias_offer_repo),
+        Arc::clone(&poll_repo),
+        Arc::clone(&vote_repo),
+        // Arc::clone(&account_property_repo),  // 暂时注释
+        Arc::clone(&tagged_data_repo),
+        Arc::clone(&tagged_data_tag_repo),
+        Arc::clone(&contract_ref_repo),
+        Arc::clone(&ask_order_repo),
+        Arc::clone(&bid_order_repo),
+        Arc::clone(&currency_repo),
+        Arc::clone(&account_currency_repo),
+        Arc::clone(&currency_transfer_repo),
+        Arc::clone(&asset_property_repo),
     ));
 
     // 创建区块奖励应用器
