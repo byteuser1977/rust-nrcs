@@ -11,6 +11,120 @@
 use super::transaction::*;
 use serde_json::Map;
 
+/// 获取 attachment 的版本号
+/// 从 JSON 中读取 `version.{AttachmentName}` 字段
+/// 如果没有找到，返回默认版本 1
+fn get_attachment_version(type_byte: u8, subtype: u8, att_map: &Map<String, serde_json::Value>) -> u8 {
+    let version_key = match type_byte {
+        TYPE_PAYMENT => match subtype {
+            SUBTYPE_PAYMENT_ORDINARY_PAYMENT => "version.OrdinaryPayment",
+            _ => "version.Payment",
+        },
+        TYPE_MESSAGING => match subtype {
+            SUBTYPE_MESSAGING_ARBITRARY_MESSAGE => "version.ArbitraryMessage",
+            SUBTYPE_MESSAGING_ALIAS_ASSIGNMENT => "version.AliasAssignment",
+            SUBTYPE_MESSAGING_POLL_CREATION => "version.PollCreation",
+            SUBTYPE_MESSAGING_VOTE_CASTING => "version.VoteCasting",
+            SUBTYPE_MESSAGING_HUB_ANNOUNCEMENT => "version.HubAnnouncement",
+            SUBTYPE_MESSAGING_ACCOUNT_INFO => "version.AccountInfo",
+            SUBTYPE_MESSAGING_ALIAS_SELL => "version.AliasSell",
+            SUBTYPE_MESSAGING_ALIAS_BUY => "version.AliasBuy",
+            SUBTYPE_MESSAGING_ALIAS_DELETE => "version.AliasDelete",
+            SUBTYPE_MESSAGING_PHASING_VOTE_CASTING => "version.PhasingVoteCasting",
+            SUBTYPE_MESSAGING_ACCOUNT_PROPERTY => "version.AccountProperty",
+            _ => "version.Messaging",
+        },
+        TYPE_COLORED_COINS => match subtype {
+            SUBTYPE_COLORED_COINS_ASSET_ISSUANCE => "version.AssetIssuance",
+            SUBTYPE_COLORED_COINS_ASSET_TRANSFER => "version.AssetTransfer",
+            SUBTYPE_COLORED_COINS_ASK_ORDER_PLACEMENT => "version.AskOrderPlacement",
+            SUBTYPE_COLORED_COINS_BID_ORDER_PLACEMENT => "version.BidOrderPlacement",
+            SUBTYPE_COLORED_COINS_ASK_ORDER_CANCELLATION => "version.AskOrderCancellation",
+            SUBTYPE_COLORED_COINS_BID_ORDER_CANCELLATION => "version.BidOrderCancellation",
+            SUBTYPE_COLORED_COINS_DIVIDEND_PAYMENT => "version.DividendPayment",
+            SUBTYPE_COLORED_COINS_ASSET_DELETE => "version.AssetDelete",
+            SUBTYPE_COLORED_COINS_ASSET_INCREASE => "version.AssetIncrease",
+            SUBTYPE_COLORED_COINS_PROPERTY_SET => "version.AssetProperty",
+            _ => "version.ColoredCoins",
+        },
+        TYPE_DIGITAL_GOODS => match subtype {
+            SUBTYPE_DIGITAL_GOODS_LISTING => "version.DigitalGoodsListing",
+            SUBTYPE_DIGITAL_GOODS_DELISTING => "version.DigitalGoodsDelisting",
+            SUBTYPE_DIGITAL_GOODS_PRICE_CHANGE => "version.DigitalGoodsPriceChange",
+            SUBTYPE_DIGITAL_GOODS_QUANTITY_CHANGE => "version.DigitalGoodsQuantityChange",
+            SUBTYPE_DIGITAL_GOODS_PURCHASE => "version.DigitalGoodsPurchase",
+            SUBTYPE_DIGITAL_GOODS_DELIVERY => "version.DigitalGoodsDelivery",
+            SUBTYPE_DIGITAL_GOODS_FEEDBACK => "version.DigitalGoodsFeedback",
+            SUBTYPE_DIGITAL_GOODS_REFUND => "version.DigitalGoodsRefund",
+            _ => "version.DigitalGoods",
+        },
+        TYPE_ACCOUNT_CONTROL => match subtype {
+            SUBTYPE_ACCOUNT_CONTROL_EFFECTIVE_BALANCE_LEASING => "version.EffectiveBalanceLeasing",
+            SUBTYPE_ACCOUNT_CONTROL_PHASING_ONLY => "version.PhaserOnly",
+            _ => "version.AccountControl",
+        },
+        TYPE_MONETARY_SYSTEM => match subtype {
+            SUBTYPE_MONETARY_SYSTEM_CURRENCY_ISSUANCE => "version.CurrencyIssuance",
+            SUBTYPE_MONETARY_SYSTEM_RESERVE_INCREASE => "version.ReserveIncrease",
+            SUBTYPE_MONETARY_SYSTEM_RESERVE_CLAIM => "version.ReserveClaim",
+            SUBTYPE_MONETARY_SYSTEM_CURRENCY_TRANSFER => "version.CurrencyTransfer",
+            SUBTYPE_MONETARY_SYSTEM_PUBLISH_EXCHANGE_OFFER => "version.PublishExchangeOffer",
+            SUBTYPE_MONETARY_SYSTEM_EXCHANGE_BUY => "version.ExchangeBuy",
+            SUBTYPE_MONETARY_SYSTEM_EXCHANGE_SELL => "version.ExchangeSell",
+            SUBTYPE_MONETARY_SYSTEM_CURRENCY_MINTING => "version.CurrencyMinting",
+            SUBTYPE_MONETARY_SYSTEM_CURRENCY_DELETION => "version.CurrencyDeletion",
+            _ => "version.MonetarySystem",
+        },
+        TYPE_DATA => match subtype {
+            SUBTYPE_DATA_TAGGED_DATA_UPLOAD => "version.TaggedDataUpload",
+            SUBTYPE_DATA_TAGGED_DATA_EXTEND => "version.TaggedDataExtend",
+            _ => "version.Data",
+        },
+        TYPE_SHUFFLING => "version.Shuffling",
+        TYPE_ALIASES => match subtype {
+            SUBTYPE_ALIASES_ALIAS_ASSIGNMENT => "version.AliasAssignment",
+            SUBTYPE_ALIASES_ALIAS_SELL => "version.AliasSell",
+            SUBTYPE_ALIASES_ALIAS_BUY => "version.AliasBuy",
+            SUBTYPE_ALIASES_ALIAS_DELETE => "version.AliasDelete",
+            _ => "version.Aliases",
+        },
+        TYPE_VOTING => match subtype {
+            SUBTYPE_VOTING_POLL_CREATION => "version.PollCreation",
+            SUBTYPE_VOTING_VOTE_CASTING => "version.VoteCasting",
+            SUBTYPE_VOTING_PHASING_VOTE_CASTING => "version.PhasingVoteCasting",
+            _ => "version.Voting",
+        },
+        TYPE_ACCOUNT_PROPERTY => match subtype {
+            SUBTYPE_ACCOUNT_PROPERTY_SET => "version.AccountPropertySet",
+            _ => "version.AccountProperty",
+        },
+        TYPE_COIN_EXCHANGE => match subtype {
+            SUBTYPE_COIN_EXCHANGE_ORDER_ISSUE => "version.CoinExchangeOrderIssue",
+            SUBTYPE_COIN_EXCHANGE_ORDER_CANCEL => "version.CoinExchangeOrderCancel",
+            _ => "version.CoinExchange",
+        },
+        TYPE_LIGHT_CONTRACT => match subtype {
+            SUBTYPE_LIGHT_CONTRACT_REFERENCE_SET => "version.ContractReferenceSet",
+            SUBTYPE_LIGHT_CONTRACT_REFERENCE_DELETE => "version.ContractReferenceDelete",
+            _ => "version.LightContract",
+        },
+        _ => "version.Unknown",
+    };
+
+    att_map.get(version_key)
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u8)
+        .unwrap_or(1)
+}
+
+/// 获取 appendix 的版本号
+fn get_appendix_version(version_key: &str, att_map: &Map<String, serde_json::Value>) -> u8 {
+    att_map.get(version_key)
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u8)
+        .unwrap_or(1)
+}
+
 /// 从 JSON attachment 对象构建完整的二进制 attachment_bytes
 ///
 /// 完整结构：
@@ -19,27 +133,31 @@ use serde_json::Map;
 pub fn build_attachment_bytes_from_json(
     type_byte: u8,
     subtype: u8,
-    version: u8,
+    _version: u8,
     att_obj: Option<&Map<String, serde_json::Value>>,
 ) -> Vec<u8> {
     let mut result = Vec::new();
 
-    // === 1. 序列化 Attachment 部分 ===
-    let att_bytes = serialize_attachment(type_byte, subtype, version, att_obj);
-    if !att_bytes.is_empty() {
-        put_version_and_data(&mut result, version, |buf| {
-            put_bytes(buf, &att_bytes);
-        });
-    }
-
-    // === 2. 序列化各 Appendix 部分（从 attachment JSON 中检测） ===
     let att_map = match att_obj {
         Some(m) => m,
         None => return result,
     };
 
+    // === 1. 序列化 Attachment 部分 ===
+    // 从 JSON 中读取 attachment 的版本号
+    let att_version = get_attachment_version(type_byte, subtype, att_map);
+    let att_bytes = serialize_attachment(type_byte, subtype, att_version, att_obj);
+    if !att_bytes.is_empty() {
+        put_version_and_data(&mut result, att_version, |buf| {
+            put_bytes(buf, &att_bytes);
+        });
+    }
+
+    // === 2. 序列化各 Appendix 部分（从 attachment JSON 中检测） ===
+
     // Message appendix（对应 Java: AppendixMessage）
     if let Some(msg_val) = att_map.get("message") {
+        let msg_version = get_appendix_version("version.Message", att_map);
         let message_str = msg_val.as_str().unwrap_or("");
         let message_bytes = message_str.as_bytes();
         let is_text = true;
@@ -48,7 +166,7 @@ pub fn build_attachment_bytes_from_json(
         } else {
             message_bytes.len() as i32
         };
-        put_version_and_data(&mut result, version, |buf| {
+        put_version_and_data(&mut result, msg_version, |buf| {
             put_i32(buf, len_with_flag);
             put_bytes(buf, message_bytes);
         });
@@ -57,6 +175,7 @@ pub fn build_attachment_bytes_from_json(
     // EncryptedMessage appendix（对应 Java: EncryptedMessage）
     if let Some(enc_msg) = att_map.get("encryptedMessage") {
         if let Some(enc_obj) = enc_msg.as_object() {
+            let enc_version = get_appendix_version("version.EncryptedMessage", att_map);
             let data_hex = enc_obj.get("data")
                 .and_then(|v| v.as_str())
                 .and_then(|s| hex::decode(s).ok())
@@ -73,7 +192,7 @@ pub fn build_attachment_bytes_from_json(
             } else {
                 data_hex.len() as i32
             };
-            put_version_and_data(&mut result, version, |buf| {
+            put_version_and_data(&mut result, enc_version, |buf| {
                 put_i32(buf, len_with_flag);
                 put_bytes(buf, &data_hex);
                 put_bytes(buf, &nonce_hex);
@@ -84,6 +203,7 @@ pub fn build_attachment_bytes_from_json(
     // EncryptToSelfMessage appendix（对应 Java: EncryptToSelfMessage）
     if let Some(ets_msg) = att_map.get("encryptToSelfMessage") {
         if let Some(ets_obj) = ets_msg.as_object() {
+            let ets_version = get_appendix_version("version.EncryptToSelfMessage", att_map);
             let data_hex = ets_obj.get("data")
                 .and_then(|v| v.as_str())
                 .and_then(|s| hex::decode(s).ok())
@@ -100,7 +220,7 @@ pub fn build_attachment_bytes_from_json(
             } else {
                 data_hex.len() as i32
             };
-            put_version_and_data(&mut result, version, |buf| {
+            put_version_and_data(&mut result, ets_version, |buf| {
                 put_i32(buf, len_with_flag);
                 put_bytes(buf, &data_hex);
                 put_bytes(buf, &nonce_hex);
@@ -112,7 +232,8 @@ pub fn build_attachment_bytes_from_json(
     if let Some(pk_val) = att_map.get("recipientPublicKey") {
         if let Some(pk_str) = pk_val.as_str() {
             if let Ok(pk_bytes) = hex::decode(pk_str) {
-                put_version_and_data(&mut result, version, |buf| {
+                let pk_version = get_appendix_version("version.PublicKeyAnnouncement", att_map);
+                put_version_and_data(&mut result, pk_version, |buf| {
                     put_bytes(buf, &pk_bytes);
                 });
             }
@@ -124,7 +245,8 @@ pub fn build_attachment_bytes_from_json(
     if att_map.get("phasingFinishHeight").is_some()
         || att_map.get("phased").and_then(|v| v.as_bool()).unwrap_or(false)
     {
-        serialize_phasing_appendix(&mut result, version, att_map);
+        let phasing_version = get_appendix_version("version.Phasing", att_map);
+        serialize_phasing_appendix(&mut result, phasing_version, att_map);
     }
 
     // PrunablePlainMessage appendix（对应 Java: PrunablePlainMessage）
@@ -136,13 +258,13 @@ pub fn build_attachment_bytes_from_json(
         .and_then(|s| hex::decode(s).ok());
 
     if let Some(hash_bytes) = ppm_hash {
-        put_version_and_data(&mut result, version, |buf| {
+        let ppm_version = get_appendix_version("version.PrunablePlainMessage", att_map);
+        put_version_and_data(&mut result, ppm_version, |buf| {
             put_bytes(buf, &hash_bytes);
         });
     } else if att_map.get("version.PrunablePlainMessage").is_some() {
-        // 有 version.PrunablePlainMessage 但没有 messageHash，尝试从 message 计算
-        // 简化处理：写入 32 字节零
-        put_version_and_data(&mut result, version, |buf| {
+        let ppm_version = get_appendix_version("version.PrunablePlainMessage", att_map);
+        put_version_and_data(&mut result, ppm_version, |buf| {
             put_bytes(buf, &[0u8; 32]);
         });
     }
@@ -154,11 +276,13 @@ pub fn build_attachment_bytes_from_json(
         .and_then(|s| hex::decode(s).ok());
 
     if let Some(hash_bytes) = pem_hash {
-        put_version_and_data(&mut result, version, |buf| {
+        let pem_version = get_appendix_version("version.PrunableEncryptedMessage", att_map);
+        put_version_and_data(&mut result, pem_version, |buf| {
             put_bytes(buf, &hash_bytes);
         });
     } else if att_map.get("version.PrunableEncryptedMessage").is_some() {
-        put_version_and_data(&mut result, version, |buf| {
+        let pem_version = get_appendix_version("version.PrunableEncryptedMessage", att_map);
+        put_version_and_data(&mut result, pem_version, |buf| {
             put_bytes(buf, &[0u8; 32]);
         });
     }
@@ -316,6 +440,17 @@ where
         put_byte(buf, version);
     }
     put_fn(buf);
+}
+
+/// 从 JSON Value 中解析可能超出 i64 范围的 u64 值
+/// Java long 是有符号的，但 JSON API 返回无符号字符串
+/// 字节表示上 i64 和 u64 是相同的（8 字节 LE）
+fn parse_u64_as_i64(val: &serde_json::Value) -> i64 {
+    val.as_str()
+        .and_then(|s| s.parse::<u64>().ok().map(|u| u as i64))
+        .or_else(|| val.as_u64().map(|u| u as i64))
+        .or_else(|| val.as_i64())
+        .unwrap_or(0)
 }
 
 // ============================================================
@@ -592,33 +727,6 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
                 put_i64(&mut buf, 0);
             }
         }
-        SUBTYPE_COLORED_COINS_PROPERTY_SET => {
-            // 对应 Java: AssetPropertyAttachment.putMyBytes()
-            // Java 源码 (AssetPropertyAttachment.java:50-54):
-            //   buffer.putLong(assetId);
-            //   PROPERTY_NAME_RW.writeToBuffer(property, buffer);  // BYTE prefix
-            //   PROPERTY_VALUE_RW.writeToBuffer(value, buffer);    // UBYTE prefix
-            if let Some(asset) = att_map.get("asset") {
-                put_i64(&mut buf, asset.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| asset.as_i64())
-                    .unwrap_or(0));
-            } else {
-                put_i64(&mut buf, 0);
-            }
-            if let Some(prop) = att_map.get("property").and_then(|v| v.as_str()) {
-                put_byte(&mut buf, prop.as_bytes().len() as u8);
-                put_string(&mut buf, prop);
-            } else {
-                put_byte(&mut buf, 0);
-            }
-            if let Some(val) = att_map.get("value").and_then(|v| v.as_str()) {
-                put_byte(&mut buf, val.as_bytes().len() as u8);
-                put_string(&mut buf, val);
-            } else {
-                put_byte(&mut buf, 0);
-            }
-        }
         _ => {}
     }
 
@@ -648,11 +756,9 @@ fn serialize_data_attachment(subtype: u8, att_map: &Map<String, serde_json::Valu
             // 对应 Java: TaggedDataExtendAttachment.putMyBytes()
             // Java 源码 (TaggedDataExtendAttachment.java:56-58):
             //   buffer.putLong(taggedDataId);  // 8 bytes
+            // JSON 字段名: "taggedData" (不是 "taggedDataId")
             if let Some(tagged_data) = att_map.get("taggedData") {
-                put_i64(&mut buf, tagged_data.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| tagged_data.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(tagged_data));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -714,11 +820,9 @@ fn serialize_light_contract_attachment(subtype: u8, att_map: &Map<String, serde_
             // 对应 Java: ContractReferenceDeleteAttachment.putMyBytes()
             // Java 源码 (ContractReferenceDeleteAttachment.java:39-41):
             //   buffer.putLong(contractReferenceId);  // 8 bytes
+            // JSON 字段名: "contractReference" (不是 "contractReferenceId")
             if let Some(ref_id) = att_map.get("contractReference") {
-                put_i64(&mut buf, ref_id.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| ref_id.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(ref_id));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1445,18 +1549,12 @@ fn serialize_colored_coins_attachment(subtype: u8, att_map: &Map<String, serde_j
             // Java: buffer.putLong(assetId) + buffer.putLong(quantityQNT)
             //       [+ bufferShort(commentLen) + comment if version==0]
             if let Some(asset) = att_map.get("asset") {
-                put_i64(&mut buf, asset.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| asset.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(asset));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(qty) = att_map.get("quantityQNT") {
-                put_i64(&mut buf, qty.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| qty.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(qty));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1475,26 +1573,17 @@ fn serialize_colored_coins_attachment(subtype: u8, att_map: &Map<String, serde_j
             // 对应 Java: ColoredCoinsOrderPlacementAttachment.putMyBytes()
             // Java: buffer.putLong(assetId) + buffer.putLong(quantityQNT) + buffer.putLong(priceNQT)
             if let Some(asset) = att_map.get("asset") {
-                put_i64(&mut buf, asset.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| asset.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(asset));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(qty) = att_map.get("quantityQQT").or_else(|| att_map.get("quantityQNT")) {
-                put_i64(&mut buf, qty.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| qty.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(qty));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(price) = att_map.get("priceNQT") {
-                put_i64(&mut buf, price.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| price.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(price));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1504,10 +1593,7 @@ fn serialize_colored_coins_attachment(subtype: u8, att_map: &Map<String, serde_j
             // 对应 Java: ColoredCoinsOrderCancellationAttachment.putMyBytes()
             // Java: buffer.putLong(orderId)
             if let Some(order) = att_map.get("order") {
-                put_i64(&mut buf, order.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| order.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(order));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1517,10 +1603,7 @@ fn serialize_colored_coins_attachment(subtype: u8, att_map: &Map<String, serde_j
             // Java: buffer.putLong(assetId) + buffer.putInt(height) + buffer.putLong(amountNQTPerQNT)
             // 注意: height 用的是 putInt() 即 i32，不是 u32！
             if let Some(asset) = att_map.get("asset") {
-                put_i64(&mut buf, asset.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| asset.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(asset));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1545,18 +1628,12 @@ fn serialize_colored_coins_attachment(subtype: u8, att_map: &Map<String, serde_j
             // 对应 Java: ColoredCoinsAssetDelete.putMyBytes()
             // Java: buffer.putLong(assetId) + buffer.putLong(quantityQNT)
             if let Some(asset) = att_map.get("asset") {
-                put_i64(&mut buf, asset.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| asset.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(asset));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(qty) = att_map.get("quantityQNT") {
-                put_i64(&mut buf, qty.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| qty.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(qty));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1565,20 +1642,38 @@ fn serialize_colored_coins_attachment(subtype: u8, att_map: &Map<String, serde_j
             // 对应 Java: AssetIncreaseAttachment (extends AssetQuantityAttachment)
             // Java: buffer.putLong(assetId) + buffer.putLong(quantityDeltaQNT)
             if let Some(asset) = att_map.get("asset") {
-                put_i64(&mut buf, asset.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| asset.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(asset));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(qty) = att_map.get("quantityDeltaQNT") {
-                put_i64(&mut buf, qty.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| qty.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(qty));
             } else {
                 put_i64(&mut buf, 0);
+            }
+        }
+        SUBTYPE_COLORED_COINS_PROPERTY_SET => {
+            // 对应 Java: AssetPropertyAttachment.putMyBytes()
+            // Java 源码 (AssetPropertyAttachment.java:50-54):
+            //   buffer.putLong(assetId);
+            //   PROPERTY_NAME_RW.writeToBuffer(property, buffer);  // BYTE prefix
+            //   PROPERTY_VALUE_RW.writeToBuffer(value, buffer);    // UBYTE prefix
+            if let Some(asset) = att_map.get("asset") {
+                put_i64(&mut buf, parse_u64_as_i64(asset));
+            } else {
+                put_i64(&mut buf, 0);
+            }
+            if let Some(prop) = att_map.get("property").and_then(|v| v.as_str()) {
+                put_byte(&mut buf, prop.as_bytes().len() as u8);
+                put_string(&mut buf, prop);
+            } else {
+                put_byte(&mut buf, 0);
+            }
+            if let Some(val) = att_map.get("value").and_then(|v| v.as_str()) {
+                put_byte(&mut buf, val.as_bytes().len() as u8);
+                put_string(&mut buf, val);
+            } else {
+                put_byte(&mut buf, 0);
             }
         }
         _ => {}
@@ -1924,5 +2019,307 @@ mod tests {
 
         // 验证这个 fullHash 正好是上一笔交易（资产发行+Phasing）的 fullHash
         // 这确认了投票关系正确建立
+    }
+
+    /// 测试真实交易数据：type=2(subtype=2) AskOrderPlacement（卖单挂单）
+    ///
+    /// 这笔交易来自 Java NRCS 区块高度 239，transactionIndex=0
+    /// 关键特征：
+    /// - type=2, subtype=2: ColoredCoins.AskOrderPlacement
+    /// - version.AskOrderPlacement: 1
+    /// - asset: "16132763665229324019"
+    /// - quantityQNT: "1"
+    /// - priceNQT: "1000000000000"
+    /// - 期望 ATTACHMENT_BYTES: 01f39e52171417e3df01000000000000000010a5d4e8000000 (25 bytes)
+    #[test]
+    fn test_real_transaction_ask_order_placement() {
+        let json_str = r#"{
+            "version.AskOrderPlacement": 1,
+            "quantityQNT": "1",
+            "priceNQT": "1000000000000",
+            "asset": "16132763665229324019"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        // === 1. 序列化 attachment_bytes ===
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_COLORED_COINS,
+            SUBTYPE_COLORED_COINS_ASK_ORDER_PLACEMENT,
+            1,
+            Some(att_map),
+        );
+
+        // 预期结构：
+        // version(1B) + assetId(8B) + quantityQNT(8B) + priceNQT(8B) = 25 bytes
+        assert_eq!(bytes.len(), 25, "Expected 25 bytes for ask order placement, got {}", bytes.len());
+
+        // 验证 version
+        assert_eq!(bytes[0], 1, "Version should be 1");
+
+        // 验证 assetId (小端序)
+        let asset_id = u64::from_le_bytes([
+            bytes[1], bytes[2], bytes[3], bytes[4],
+            bytes[5], bytes[6], bytes[7], bytes[8],
+        ]);
+        assert_eq!(asset_id, 16132763665229324019, "Asset ID mismatch");
+
+        // 验证 quantityQNT (小端序)
+        let quantity = u64::from_le_bytes([
+            bytes[9], bytes[10], bytes[11], bytes[12],
+            bytes[13], bytes[14], bytes[15], bytes[16],
+        ]);
+        assert_eq!(quantity, 1, "Quantity should be 1");
+
+        // 验证 priceNQT (小端序)
+        let price = u64::from_le_bytes([
+            bytes[17], bytes[18], bytes[19], bytes[20],
+            bytes[21], bytes[22], bytes[23], bytes[24],
+        ]);
+        assert_eq!(price, 1000000000000, "Price should be 1000000000000");
+
+        // 验证完整的 hex 字符串
+        let expected_hex = "01f39e52171417e3df01000000000000000010a5d4e8000000";
+        assert_eq!(hex::encode(&bytes), expected_hex, "Attachment bytes mismatch");
+    }
+
+    /// 测试真实交易数据：type=2(subtype=6) DividendPayment（股息支付）
+    ///
+    /// 这笔交易来自 Java NRCS 区块高度 245
+    /// 关键特征：
+    /// - type=2, subtype=6: ColoredCoins.DividendPayment
+    /// - version.DividendPayment: 1
+    /// - asset: "16132763665229324019"
+    /// - height: 243
+    /// - amountNQTPerQNT: "100000000"
+    /// - 数据库 ATTACHMENT_BYTES: 01f39e52171417e3dff300000000e1f50500000000 (21 bytes)
+    #[test]
+    fn test_real_transaction_dividend_payment() {
+        let json_str = r#"{
+            "version.DividendPayment": 1,
+            "amountNQTPerQNT": "100000000",
+            "asset": "16132763665229324019",
+            "height": 243
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_COLORED_COINS,
+            SUBTYPE_COLORED_COINS_DIVIDEND_PAYMENT,
+            1,
+            Some(att_map),
+        );
+
+        // 预期结构：
+        // version(1B) + assetId(8B) + height(4B) + amountNQTPerQNT(8B) = 21 bytes
+        assert_eq!(bytes.len(), 21, "Expected 21 bytes for dividend payment, got {}", bytes.len());
+
+        // 验证 version
+        assert_eq!(bytes[0], 1, "Version should be 1");
+
+        // 验证 assetId (小端序)
+        let asset_id = u64::from_le_bytes([
+            bytes[1], bytes[2], bytes[3], bytes[4],
+            bytes[5], bytes[6], bytes[7], bytes[8],
+        ]);
+        assert_eq!(asset_id, 16132763665229324019, "Asset ID mismatch");
+
+        // 验证 height (小端序 i32)
+        let height = i32::from_le_bytes([
+            bytes[9], bytes[10], bytes[11], bytes[12],
+        ]);
+        assert_eq!(height, 243, "Height should be 243");
+
+        // 验证 amountNQTPerQNT (小端序)
+        let amount = u64::from_le_bytes([
+            bytes[13], bytes[14], bytes[15], bytes[16],
+            bytes[17], bytes[18], bytes[19], bytes[20],
+        ]);
+        assert_eq!(amount, 100000000, "Amount should be 100000000");
+
+        // 验证完整的 hex 字符串
+        let expected_hex = "01f39e52171417e3dff300000000e1f50500000000";
+        assert_eq!(hex::encode(&bytes), expected_hex, "Attachment bytes mismatch");
+    }
+
+    /// 测试真实交易数据：type=1(subtype=0) ArbitraryMessage + PrunableEncryptedMessage
+    ///
+    /// DB_ID=23, 数据库 ATTACHMENT_BYTES: 0120a26df7b6c94b475f3c20ce9bdb1ef8409f3079a0a5dc1b3cf246f485309c87 (33 bytes)
+    /// 注意：version.ArbitraryMessage=0 意味着 ArbitraryMessage 没有数据（version=0 不写入）
+    #[test]
+    fn test_real_transaction_arbitrary_message_with_prunable_encrypted() {
+        let json_str = r#"{
+            "version.ArbitraryMessage": 0,
+            "version.PrunableEncryptedMessage": 1,
+            "encryptedMessageHash": "20a26df7b6c94b475f3c20ce9bdb1ef8409f3079a0a5dc1b3cf246f485309c87"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_MESSAGING,
+            SUBTYPE_MESSAGING_ARBITRARY_MESSAGE,
+            1,
+            Some(att_map),
+        );
+
+        // 预期结构：只有 PrunableEncryptedMessage
+        // version(1B) + hash(32B) = 33 bytes
+        assert_eq!(bytes.len(), 33, "Expected 33 bytes, got {}", bytes.len());
+
+        // 验证 version
+        assert_eq!(bytes[0], 1, "Version should be 1");
+
+        // 验证 hash
+        let expected_hash = "20a26df7b6c94b475f3c20ce9bdb1ef8409f3079a0a5dc1b3cf246f485309c87";
+        assert_eq!(&hex::encode(&bytes[1..33]), expected_hash, "Hash mismatch");
+    }
+
+    /// 测试真实交易数据：type=6(subtype=1) TaggedDataExtend
+    ///
+    /// DB_ID=43, 数据库 ATTACHMENT_BYTES: 0115930917a7e0eabd (9 bytes)
+    #[test]
+    fn test_real_transaction_tagged_data_extend() {
+        let json_str = r#"{
+            "version.TaggedDataExtend": 1,
+            "taggedData": "13684997425969337109"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_DATA,
+            SUBTYPE_DATA_TAGGED_DATA_EXTEND,
+            1,
+            Some(att_map),
+        );
+
+        // 预期结构：version(1B) + taggedDataId(8B) = 9 bytes
+        assert_eq!(bytes.len(), 9, "Expected 9 bytes, got {}", bytes.len());
+
+        // 验证 version
+        assert_eq!(bytes[0], 1, "Version should be 1");
+
+        // 验证 taggedDataId (小端序)
+        let tagged_data_id = u64::from_le_bytes([
+            bytes[1], bytes[2], bytes[3], bytes[4],
+            bytes[5], bytes[6], bytes[7], bytes[8],
+        ]);
+        assert_eq!(tagged_data_id, 13684997425969337109, "TaggedDataId mismatch");
+
+        // 验证完整的 hex 字符串
+        let expected_hex = "0115930917a7e0eabd";
+        assert_eq!(hex::encode(&bytes), expected_hex, "Attachment bytes mismatch");
+    }
+
+    /// 测试真实交易数据：type=0(subtype=0) OrdinaryPayment + PrunableEncryptedMessage
+    ///
+    /// DB_ID=55, 数据库 ATTACHMENT_BYTES: 0179f3221c559eaabf7d96163188bc256a05fa0907e29b1a3a6e487e706b6e9d93 (33 bytes)
+    /// 注意：version.OrdinaryPayment=0 意味着 OrdinaryPayment 没有数据（version=0 不写入）
+    #[test]
+    fn test_real_transaction_ordinary_payment_with_prunable_encrypted() {
+        let json_str = r#"{
+            "version.OrdinaryPayment": 0,
+            "version.PrunableEncryptedMessage": 1,
+            "encryptedMessageHash": "79f3221c559eaabf7d96163188bc256a05fa0907e29b1a3a6e487e706b6e9d93"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_PAYMENT,
+            SUBTYPE_PAYMENT_ORDINARY_PAYMENT,
+            1,
+            Some(att_map),
+        );
+
+        // 预期结构：只有 PrunableEncryptedMessage
+        // version(1B) + hash(32B) = 33 bytes
+        assert_eq!(bytes.len(), 33, "Expected 33 bytes, got {}", bytes.len());
+
+        // 验证 version
+        assert_eq!(bytes[0], 1, "Version should be 1");
+
+        // 验证 hash
+        let expected_hash = "79f3221c559eaabf7d96163188bc256a05fa0907e29b1a3a6e487e706b6e9d93";
+        assert_eq!(&hex::encode(&bytes[1..33]), expected_hash, "Hash mismatch");
+    }
+
+    /// 测试真实交易数据：type=2(subtype=10) AssetPropertySet + PublicKeyAnnouncement
+    ///
+    /// DB_ID=58, 数据库 ATTACHMENT_BYTES: 01f39e52171417e3df026e6f06313233343536012d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c (57 bytes)
+    #[test]
+    fn test_real_transaction_asset_property_set_with_public_key() {
+        let json_str = r#"{
+            "version.AssetProperty": 1,
+            "asset": "16132763665229324019",
+            "property": "no",
+            "value": "123456",
+            "version.PublicKeyAnnouncement": 1,
+            "recipientPublicKey": "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_COLORED_COINS,
+            SUBTYPE_COLORED_COINS_PROPERTY_SET,
+            1,
+            Some(att_map),
+        );
+
+        // 预期结构：
+        // AssetPropertySet: version(1B) + assetId(8B) + property(var) + value(var)
+        // PublicKeyAnnouncement: version(1B) + publicKey(32B)
+        // = 1 + 8 + (1+2) + (1+6) + 1 + 32 = 52 bytes
+        // 但数据库是 57 bytes，让我重新计算...
+        // 实际上 property 和 value 使用的是 SHORT 前缀 (2 bytes)，不是 1 byte
+        // 所以：1 + 8 + (2+2) + (2+6) + 1 + 32 = 54 bytes? 还是不对
+        
+        // 让我先验证实际长度
+        println!("Generated bytes: {}", hex::encode(&bytes));
+        println!("Length: {}", bytes.len());
+        
+        // 预期 hex
+        let expected_hex = "01f39e52171417e3df026e6f06313233343536012d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c";
+        assert_eq!(hex::encode(&bytes), expected_hex, "Attachment bytes mismatch");
+    }
+
+    /// 测试真实交易数据：type=12(subtype=1) ContractReferenceDelete
+    ///
+    /// DB_ID=65, 数据库 ATTACHMENT_BYTES: 01e5c6099a6a80f8e0 (9 bytes)
+    #[test]
+    fn test_real_transaction_contract_reference_delete() {
+        let json_str = r#"{
+            "version.ContractReferenceDelete": 1,
+            "contractReference": "16210848054059321061"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_LIGHT_CONTRACT,
+            SUBTYPE_LIGHT_CONTRACT_REFERENCE_DELETE,
+            1,
+            Some(att_map),
+        );
+
+        // 预期结构：version(1B) + contractReference(8B) = 9 bytes
+        assert_eq!(bytes.len(), 9, "Expected 9 bytes, got {}", bytes.len());
+
+        // 验证 version
+        assert_eq!(bytes[0], 1, "Version should be 1");
+
+        // 验证 contractReference (小端序)
+        let contract_ref = u64::from_le_bytes([
+            bytes[1], bytes[2], bytes[3], bytes[4],
+            bytes[5], bytes[6], bytes[7], bytes[8],
+        ]);
+        assert_eq!(contract_ref, 16210848054059321061, "ContractReference mismatch");
+
+        // 验证完整的 hex 字符串
+        let expected_hex = "01e5c6099a6a80f8e0";
+        assert_eq!(hex::encode(&bytes), expected_hex, "Attachment bytes mismatch");
     }
 }
