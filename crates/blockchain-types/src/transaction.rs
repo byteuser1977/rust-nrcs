@@ -661,21 +661,21 @@ impl Transaction {
     }
 
     fn get_flags(&self) -> u32 {
-        // 对应 Java Transaction.getFlags() 的位图定义：
-        // bit 0 (1): message
-        // bit 1 (2): encryptedMessage
-        // bit 2 (4): publicKeyAnnouncement
-        // bit 3 (8): encryptToSelfMessage
-        // bit 4 (16): phasing
-        // bit 5 (32): prunablePlainMessage
-        // bit 6 (64): prunableEncryptedMessage
+        // 对应 Java Transaction.getFlags() 的位图定义（严格匹配 Java 源码）：
+        // bit 0 (1): message != null
+        // bit 1 (2): encryptedMessage != null
+        // bit 2 (4): publicKeyAnnouncement != null
+        // bit 3 (8): encryptToSelfMessage != null
+        // bit 4 (16): phasing != null
+        // bit 5 (32): prunablePlainMessage != null
+        // bit 6 (64): prunableEncryptedMessage != null
         let mut flags: u32 = 0;
         if self.has_message { flags |= 1; }
         if self.has_encrypted_message { flags |= 2; }
         if self.has_public_key_announcement { flags |= 4; }
         if self.has_encrypttoself_message { flags |= 8; }
         if self.phased { flags |= 16; }
-        if self.has_prunable_attachment { flags |= 32; }
+        if self.has_prunable_message { flags |= 32; }
         if self.has_prunable_encrypted_message { flags |= 64; }
         flags
     }

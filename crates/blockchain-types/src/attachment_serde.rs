@@ -2322,4 +2322,196 @@ mod tests {
         let expected_hex = "01e5c6099a6a80f8e0";
         assert_eq!(hex::encode(&bytes), expected_hex, "Attachment bytes mismatch");
     }
+
+    /// 完整端到端测试：DB_ID=23 (type=1:0 ArbitraryMessage + PrunableEncryptedMessage)
+    ///
+    /// 验证完整交易解析流程，包括 flags 计算和 attachment_bytes 生成
+    #[test]
+    fn test_e2e_db_id_23_full_hash() {
+        use crate::transaction::Transaction;
+        
+        let json_str = r#"{
+            "type": 1,
+            "subtype": 0,
+            "timestamp": 16075,
+            "deadline": 1440,
+            "senderPublicKey": "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c",
+            "recipient": "14411432778108101696",
+            "amountNQT": "0",
+            "feeNQT": "100000000",
+            "signature": "e2e54690c709d2af13302113ba7d4d57250f255d9fd40303c46e18accb474b0f39becfa2b4555046cfc41f4dbd19e818ae63f1d7b53c8e57cfdc185a96a93c75",
+            "fullHash": "a546e8db59204007db3b0cb08312f001155a17140039b8aa51b8317d44248a82",
+            "attachment": {
+                "version.ArbitraryMessage": 0,
+                "version.PrunableEncryptedMessage": 1,
+                "encryptedMessageHash": "20a26df7b6c94b475f3c20ce9bdb1ef8409f3079a0a5dc1b3cf246f485309c87"
+            },
+            "ecBlockHeight": 0,
+            "ecBlockId": "3488276486778630462",
+            "version": 1,
+            "blockTimestamp": 16083
+        }"#;
+        
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let tx = Transaction::from_json(&val).expect("Failed to parse transaction");
+        
+        // 调试输出各字段值
+        println!("DB_ID=23 Debug:");
+        println!("  has_message: {}", tx.has_message);
+        println!("  has_encrypted_message: {}", tx.has_encrypted_message);
+        println!("  has_public_key_announcement: {}", tx.has_public_key_announcement);
+        println!("  has_encrypttoself_message: {}", tx.has_encrypttoself_message);
+        println!("  phased: {}", tx.phased);
+        println!("  has_prunable_attachment: {}", tx.has_prunable_attachment);
+        println!("  has_prunable_encrypted_message: {}", tx.has_prunable_encrypted_message);
+        
+        // 验证 attachment_bytes
+        assert_eq!(hex::encode(&tx.attachment_bytes), 
+                   "0120a26df7b6c94b475f3c20ce9bdb1ef8409f3079a0a5dc1b3cf246f485309c87",
+                   "Attachment bytes mismatch for DB_ID=23");
+        
+        // 验证 fullHash - 这是最关键的测试
+        let expected_full_hash = "a546e8db59204007db3b0cb08312f001155a17140039b8aa51b8317d44248a82";
+        println!("  calculated full_hash: {}", hex::encode(&tx.full_hash.0));
+        println!("  expected full_hash: {}", expected_full_hash);
+        assert_eq!(hex::encode(&tx.full_hash.0), expected_full_hash, 
+                   "FullHash mismatch for DB_ID=23! This is the critical bug.");
+    }
+
+    /// 完整端到端测试：DB_ID=55 (type=0:0 OrdinaryPayment + PrunableEncryptedMessage)
+    #[test]
+    fn test_e2e_db_id_55_full_hash() {
+        use crate::transaction::Transaction;
+        
+        let json_str = r#"{
+            "type": 0,
+            "subtype": 0,
+            "timestamp": 126006,
+            "deadline": 1440,
+            "senderPublicKey": "ccb796af901297bfaf80113cd1f3e4e7e6adc45419c8339f5bac38295d65963e",
+            "recipient": "996325769485053218",
+            "amountNQT": "10000000000",
+            "feeNQT": "100000000",
+            "signature": "74f4f89bfe5d42d9f5368cb1167b3787190f903ce3b6935fea124c01c7f0b30458f04f0b71a4a3402fa803baeb52cd1a75b7fc72e0c42e31c1408b4fc838e4a5",
+            "fullHash": "ca5d746307ed0cf1945e49e626a9d9ff180084b54bc267b703080af320e1ef57",
+            "attachment": {
+                "version.OrdinaryPayment": 0,
+                "version.PrunableEncryptedMessage": 1,
+                "encryptedMessageHash": "79f3221c559eaabf7d96163188bc256a05fa0907e29b1a3a6e487e706b6e9d93"
+            },
+            "ecBlockHeight": 0,
+            "ecBlockId": "3488276486778630462",
+            "version": 1,
+            "blockTimestamp": 126070
+        }"#;
+        
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let tx = Transaction::from_json(&val).expect("Failed to parse transaction");
+        
+        // 验证 fullHash
+        let expected_full_hash = "ca5d746307ed0cf1945e49e626a9d9ff180084b54bc267b703080af320e1ef57";
+        println!("\nDB_ID=55 Debug:");
+        println!("  has_prunable_attachment: {}", tx.has_prunable_attachment);
+        println!("  has_prunable_encrypted_message: {}", tx.has_prunable_encrypted_message);
+        println!("  attachment_bytes: {}", hex::encode(&tx.attachment_bytes));
+        println!("  calculated full_hash: {}", hex::encode(&tx.full_hash.0));
+        println!("  expected full_hash: {}", expected_full_hash);
+        
+        assert_eq!(hex::encode(&tx.full_hash.0), expected_full_hash, 
+                   "FullHash mismatch for DB_ID=55!");
+    }
+
+    /// 模拟 P2P 同步场景：没有 fullHash 字段（Java getJSONObject 不返回 fullHash）
+    /// 验证 Rust 能正确计算 fullHash
+    #[test]
+    fn test_e2e_p2p_no_fullhash_field() {
+        use crate::transaction::Transaction;
+        
+        // 模拟 P2P GetNextBlocks 返回的交易格式（无 fullHash 字段）
+        let json_str = r#"{
+            "type": 1,
+            "subtype": 0,
+            "timestamp": 16075,
+            "deadline": 1440,
+            "senderPublicKey": "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c",
+            "recipient": "14411432778108101696",
+            "amountNQT": "0",
+            "feeNQT": "100000000",
+            "signature": "e2e54690c709d2af13302113ba7d4d57250f255d9fd40303c46e18accb474b0f39becfa2b4555046cfc41f4dbd19e818ae63f1d7b53c8e57cfdc185a96a93c75",
+            "attachment": {
+                "version.ArbitraryMessage": 0,
+                "version.PrunableEncryptedMessage": 1,
+                "encryptedMessageHash": "20a26df7b6c94b475f3c20ce9bdb1ef8409f3079a0a5dc1b3cf246f485309c87"
+            },
+            "ecBlockHeight": 0,
+            "ecBlockId": "3488276486778630462",
+            "version": 1
+        }"#;
+        
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let tx = Transaction::from_json(&val).expect("Failed to parse transaction");
+        
+        // 详细诊断序列化输出
+        let signing_bytes = tx.serialize_for_signing();
+        let full_hash_bytes = tx.serialize_for_full_hash();
+        
+        println!("\nP2P No FullHash Detailed Debug:");
+        println!("=== serialize_for_signing ({} bytes) ===", signing_bytes.len());
+        println!("  type: {} (0x{:02x})", signing_bytes[0], signing_bytes[0]);
+        println!("  version|subtype: {} (0x{:02x})", signing_bytes[1], signing_bytes[1]);
+        println!("  timestamp: {} (LE i32)", i32::from_le_bytes([signing_bytes[2], signing_bytes[3], signing_bytes[4], signing_bytes[5]]));
+        println!("  deadline: {} (LE i16)", i16::from_le_bytes([signing_bytes[6], signing_bytes[7]]));
+        println!("  senderPublicKey: {}", hex::encode(&signing_bytes[8..40]));
+        println!("  recipient: {} (LE u64)", u64::from_le_bytes([
+            signing_bytes[40], signing_bytes[41], signing_bytes[42], signing_bytes[43],
+            signing_bytes[44], signing_bytes[45], signing_bytes[46], signing_bytes[47]
+        ]));
+        println!("  amount: {}", i64::from_le_bytes([
+            signing_bytes[48], signing_bytes[49], signing_bytes[50], signing_bytes[51],
+            signing_bytes[52], signing_bytes[53], signing_bytes[54], signing_bytes[55]
+        ]));
+        println!("  fee: {}", i64::from_le_bytes([
+            signing_bytes[56], signing_bytes[57], signing_bytes[58], signing_bytes[59],
+            signing_bytes[60], signing_bytes[61], signing_bytes[62], signing_bytes[63]
+        ]));
+        println!("  refTxHash: {}", hex::encode(&signing_bytes[64..96]));
+        
+        println!("\n=== serialize_for_full_hash ({} bytes) ===", full_hash_bytes.len());
+        println!("  [signing part]: {} bytes", signing_bytes.len());
+        println!("  zeroSignature: {} bytes of zeros @ offset {}", 64, signing_bytes.len());
+        
+        let flags_offset = signing_bytes.len() + 64;
+        println!("  flags: {} (LE u32) @ offset {}", 
+                  u32::from_le_bytes([
+                      full_hash_bytes[flags_offset], full_hash_bytes[flags_offset+1],
+                      full_hash_bytes[flags_offset+2], full_hash_bytes[flags_offset+3]
+                  ]), flags_offset);
+        println!("  ecBlockHeight: {} @ offset {}", 
+                  u32::from_le_bytes([
+                      full_hash_bytes[flags_offset+4], full_hash_bytes[flags_offset+5],
+                      full_hash_bytes[flags_offset+6], full_hash_bytes[flags_offset+7]
+                  ]), flags_offset + 4);
+        println!("  ecBlockId: {} @ offset {}",
+                  u64::from_le_bytes([
+                      full_hash_bytes[flags_offset+8], full_hash_bytes[flags_offset+9],
+                      full_hash_bytes[flags_offset+10], full_hash_bytes[flags_offset+11],
+                      full_hash_bytes[flags_offset+12], full_hash_bytes[flags_offset+13],
+                      full_hash_bytes[flags_offset+14], full_hash_bytes[flags_offset+15]
+                  ]), flags_offset + 8);
+        
+        let att_offset = flags_offset + 16;
+        println!("  attachmentBytes: {} bytes @ offset {}", 
+                  full_hash_bytes.len() - att_offset, att_offset);
+        println!("  attachmentBytes hex: {}", hex::encode(&full_hash_bytes[att_offset..]));
+        
+        println!("\n=== Summary ===");
+        println!("  total serialize_for_full_hash size: {} bytes", full_hash_bytes.len());
+        println!("  calculated full_hash: {}", hex::encode(&tx.full_hash.0));
+        println!("  expected full_hash: a546e8db59204007db3b0cb08312f001155a17140039b8aa51b8317d44248a82");
+        
+        // 预期值
+        let expected_full_hash = "a546e8db59204007db3b0cb08312f001155a17140039b8aa51b8317d44248a82";
+        assert_eq!(hex::encode(&tx.full_hash.0), expected_full_hash, 
+                   "FullHash mismatch in P2P no-fullHash scenario!");
+    }
 }
