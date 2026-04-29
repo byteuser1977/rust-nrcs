@@ -6,7 +6,7 @@ use crate::protocol::{PeerRequest, RequestType};
 
 #[test]
 fn test_protocol_parameter_required() {
-    let mut request = PeerRequest::new(RequestType::GetCumulativeDifficulty, 1);
+    let request = PeerRequest::new(RequestType::GetCumulativeDifficulty, 1);
     assert_eq!(request.protocol, 1);
     
     let json = serde_json::to_string(&request).unwrap();

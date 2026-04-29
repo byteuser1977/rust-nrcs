@@ -69,7 +69,7 @@ mod tests {
         let handler = GetPeersHandler::new(Arc::clone(&peers));
 
         // 无分页：默认 limit=1000，应返回全部 10 个
-        let mut request = PeerRequest::new(crate::protocol::RequestType::GetPeers, 1);
+        let request = PeerRequest::new(crate::protocol::RequestType::GetPeers, 1);
         let response = handler.handle(request, Arc::clone(&peers)).await;
         let peers_arr = response.as_object().unwrap().get("peers").unwrap().as_array().unwrap();
         assert_eq!(peers_arr.len(), 10);

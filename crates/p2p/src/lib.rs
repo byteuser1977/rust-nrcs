@@ -14,6 +14,11 @@ pub mod blacklist;
 pub mod verifier;
 pub mod noop_verifier;
 pub mod block_apply;
+pub mod connection_pool;
+pub mod broadcast;
+pub mod hallmark;
+pub mod persistence;
+pub mod dos_filter;
 
 #[cfg(test)]
 mod protocol_test;

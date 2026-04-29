@@ -163,25 +163,30 @@ pub const SHUFFLING_DEPOSIT_NQT: u64 = 1000 * ONE_NRCS;
 // ============ P2P网络常量 ============
 
 pub const MAX_KNOWN_PEERS: usize = 2000;
-pub const MIN_KNOWN_PEERS: usize = 100;
+pub const MIN_KNOWN_PEERS: usize = 1000;        // Java: nrcs.minNumberOfKnownPeers=1000
 pub const MAX_CONNECTIONS: usize = 20;
-pub const MAX_INBOUND_CONNECTIONS: usize = 100;
-pub const MAX_OUTBOUND_CONNECTIONS: usize = 20;
+pub const MAX_INBOUND_CONNECTIONS: usize = 100;   // Java: nrcs.maxNumberOfInboundConnections=100
+pub const MAX_OUTBOUND_CONNECTIONS: usize = 20;   // Java: nrcs.maxNumberOfOutboundConnections=20
 pub const MAX_REQUEST_SIZE: usize = 64 * 1024 * 1024;
 pub const MAX_RESPONSE_SIZE: usize = 64 * 1024 * 1024;
 pub const MAX_MESSAGE_SIZE: usize = 40 * 1024 * 1024;
-pub const MIN_COMPRESS_SIZE: usize = 256;
+pub const MIN_COMPRESS_SIZE: usize = 256;           // Java: nrcs.minCompressSize=256
 
-pub const MAX_VERSION_LENGTH: usize = 10;
-pub const MAX_APPLICATION_LENGTH: usize = 20;
-pub const MAX_PLATFORM_LENGTH: usize = 30;
-pub const MAX_ANNOUNCED_ADDRESS_LENGTH: usize = 100;
+pub const MAX_VERSION_LENGTH: usize = 10;            // Java: MAX_VERSION_LENGTH=10
+pub const MAX_APPLICATION_LENGTH: usize = 20;       // Java: MAX_APPLICATION_LENGTH=20
+pub const MAX_PLATFORM_LENGTH: usize = 30;          // Java: MAX_PLATFORM_LENGTH=30
+pub const MAX_ANNOUNCED_ADDRESS_LENGTH: usize = 100;// Java: MAX_ANNOUNCED_ADDRESS_LENGTH=100
 
-pub const CONNECT_TIMEOUT_MS: u64 = 4000;
-pub const READ_TIMEOUT_MS: u64 = 4000;
-pub const WEBSOCKET_IDLE_TIMEOUT_SECS: u64 = 300;
-pub const BLACKLISTING_PERIOD_SECS: i64 = 3600;
+pub const CONNECT_TIMEOUT_MS: u64 = 2000;            // Java: nrcs.connectTimeout=2000 (原4000有误)
+pub const READ_TIMEOUT_MS: u64 = 4000;              // Java: nrcs.readTimeout=4000
+pub const WEBSOCKET_IDLE_TIMEOUT_SECS: u64 = 300;    // Java: peerServerIdleTimeout/1000
+pub const BLACKLISTING_PERIOD_SECS: i64 = 600;      // Java: blacklistingPeriod=600000ms → 600s (原3600有误)
 pub const BLACKLISTING_THRESHOLD: i32 = 10;
+
+// API 端口配置（用于 myPeerInfo 响应）
+pub const DEFAULT_API_PORT: u16 = 7876;             // Java: API.openAPIPort (主网)
+pub const DEFAULT_API_SSL_PORT: u16 = 7877;         // Java: API.openAPISSLPORT (主网)
+pub const API_IDLE_TIMEOUT_MS: u64 = 30000;         // Java: apiServerIdleTimeout=30000;
 
 pub const CONNECTION_DAEMON_INTERVAL_SECS: u64 = 5;
 pub const DISCOVERY_DAEMON_INTERVAL_SECS: u64 = 30;

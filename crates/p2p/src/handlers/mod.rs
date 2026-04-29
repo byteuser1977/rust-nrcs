@@ -82,7 +82,7 @@ impl Handler {
             get_unconfirmed_transactions: Arc::new(GetTransactionsHandler::new()),
             process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier)),
             process_transactions: Arc::new(ProcessTransactionsHandler::new(Arc::clone(&peers))),
-            bundler_rate: Arc::new(BundlerRateHandler {}),
+            bundler_rate: Arc::new(BundlerRateHandler::new()),
         }
     }
 
@@ -105,7 +105,7 @@ impl Handler {
             get_unconfirmed_transactions: Arc::new(GetTransactionsHandler::new()),
             process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier)),
             process_transactions: Arc::new(ProcessTransactionsHandler::with_tx_processor(Arc::clone(&peers), tx_processor)),
-            bundler_rate: Arc::new(BundlerRateHandler {}),
+            bundler_rate: Arc::new(BundlerRateHandler::new()),
         }
     }
 

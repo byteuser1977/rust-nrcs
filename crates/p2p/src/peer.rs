@@ -178,6 +178,254 @@ impl Peer {
         self.blacklisting_time > 0
     }
 
+    /// 发送请求到远程节点（WebSocket 优先 + HTTP 回退）
+    ///
+    /// 对应 Java: Peer.send(JSONObject request, int maxResponseSize)
+    pub async fn send(
+        &self,
+        request: &crate::protocol::PeerRequest,
+        config: &crate::config::P2PConfig,
+    ) -> Result<serde_json::Value, crate::error::P2PError> {
+        use crate::error::P2PError;
+
+        // 1. 检查黑名单状态
+        if self.is_blacklisted() {
+            return Err(P2PError::blacklisted("Peer is blacklisted"));
+        }
+
+        // 2. 如果启用 WebSocket 且节点支持，优先使用 WebSocket
+        if config.use_websockets {
+            match Self::send_via_websocket(&self.address, request, config).await {
+                Ok(response) => {
+                    debug!("[Peer.send] WebSocket success to {}", self.address);
+                    return Ok(response);
+                }
+                Err(e) => {
+                    warn!("[Peer.send] WebSocket failed to {}: {}, falling back to HTTP", self.address, e);
+                    // 继续尝试 HTTP
+                }
+            }
+        }
+
+        // 3. 回退到 HTTP POST
+        Self::send_via_http(&self.address, request, config).await
+    }
+
+    /// 通过 WebSocket 发送请求（单次连接）
+    async fn send_via_websocket(
+        addr: &SocketAddr,
+        request: &crate::protocol::PeerRequest,
+        config: &crate::config::P2PConfig,
+    ) -> Result<serde_json::Value, crate::error::P2PError> {
+        use crate::error::{ErrorCode, P2PError};
+        use crate::protocol::FrameCodec;
+        use futures_util::{SinkExt, StreamExt};
+        use tokio_tungstenite::tungstenite::Message;
+        use tokio::time::timeout;
+
+        let url = format!("ws://{}/nrcs", addr);
+
+        // 连接超时
+        let (ws_stream, _) = timeout(
+            std::time::Duration::from_millis(config.connect_timeout_ms),
+            tokio_tungstenite::connect_async(&url),
+        ).await
+        .map_err(|_| P2PError::connection_timeout())?
+        .map_err(|e| P2PError::from_str(ErrorCode::ConnectionFailed, e.to_string()))?;
+
+        let (mut write, mut read) = ws_stream.split();
+        let codec = FrameCodec;
+
+        // 序列化并发送请求
+        let payload = serde_json::to_vec(request)
+            .map_err(|e| P2PError::serialization_error(format!("{}", e)))?;
+
+        // 判断是否压缩
+        let should_compress = config.gzip_enabled && payload.len() >= config.min_compress_size;
+        let frame = codec.encode(&payload, should_compress);
+
+        write.send(Message::Binary(frame)).await
+            .map_err(|e| P2PError::from_str(ErrorCode::WriteFailed, format!("{}", e)))?;
+
+        // 等待响应
+        let response_result = timeout(
+            std::time::Duration::from_millis(config.read_timeout_ms),
+            read.next(),
+        ).await;
+
+        let response_body = match response_result {
+            Ok(Some(Ok(msg))) => msg,
+            Ok(Some(Err(e))) => return Err(P2PError::from_str(ErrorCode::ConnectionClosed, format!("{}", e))),
+            Ok(None) => return Err(P2PError::connection_closed()),
+            Err(_) => return Err(P2PError::read_timeout()),
+        };
+
+        match response_body {
+            Message::Binary(data) => {
+                match codec.decode(&data) {
+                    Ok((_header, body)) => {
+                        serde_json::from_slice::<serde_json::Value>(&body)
+                            .map_err(|e| P2PError::deserialization_error(format!("{}", e)))
+                    }
+                    Err(e) => Err(P2PError::from_str(ErrorCode::ProtocolError, format!("{}", e)))
+                }
+            }
+            Message::Text(text) => {
+                let data = text.into_bytes();
+                match codec.decode(&data) {
+                    Ok((_header, body)) => {
+                        serde_json::from_slice::<serde_json::Value>(&body)
+                            .map_err(|e| P2PError::deserialization_error(format!("{}", e)))
+                    }
+                    Err(e) => Err(P2PError::from_str(ErrorCode::ProtocolError, format!("{}", e)))
+                }
+            }
+            _ => Err(P2PError::unexpected_message_type())
+        }
+    }
+
+    /// 通过 HTTP POST 发送请求
+    async fn send_via_http(
+        addr: &SocketAddr,
+        request: &crate::protocol::PeerRequest,
+        config: &crate::config::P2PConfig,
+    ) -> Result<serde_json::Value, crate::error::P2PError> {
+        use crate::error::P2PError;
+        use reqwest::Client;
+        use tokio::time::timeout;
+
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_millis(config.read_timeout_ms))
+            .build()
+            .map_err(|e| P2PError::internal(format!("{}", e)))?;
+
+        let url = format!("http://{}/nrcs", addr);
+
+        let resp = timeout(
+            std::time::Duration::from_millis(config.connect_timeout_ms + config.read_timeout_ms),
+            client.post(&url).json(request).send(),
+        ).await
+        .map_err(|_| P2PError::request_timeout())?
+        .map_err(|e| P2PError::http_error(format!("{}", e)))?;
+
+        if !resp.status().is_success() {
+            return Err(P2PError::http_status(resp.status().as_u16()));
+        }
+
+        let body = resp.bytes().await
+            .map_err(|e| P2PError::read_failed(format!("{}", e)))?;
+
+        serde_json::from_slice::<serde_json::Value>(&body)
+            .map_err(|e| P2PError::deserialization_error(format!("{}", e)))
+    }
+
+    /// 连接到远程节点并交换信息（完整握手流程）
+    ///
+    /// 对应 Java: Peer.connect()
+    pub async fn connect(
+        &mut self,
+        config: &crate::config::P2PConfig,
+    ) -> Result<serde_json::Value, crate::error::P2PError> {
+        use crate::protocol::{PeerRequest, RequestType};
+
+        // 1. 更新最后连接尝试时间
+        self.last_connect_attempt = current_timestamp();
+
+        // 2. 构建 getInfo 请求
+        let request = PeerRequest::new(RequestType::GetInfo, 1);
+
+        // 3. 发送请求
+        let response = self.send(&request, config).await?;
+
+        // 4. 检查错误响应
+        if response.get("error").is_some() {
+            self.state = PeerState::NonConnected;
+            return Err(crate::error::P2PError::peer_error(
+                response.get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown error")
+            ));
+        }
+
+        // 5. 更新 Peer 属性
+        self.update_from_getinfo_response(&response, config);
+
+        // 6. 设置为已连接状态
+        self.state = PeerState::Connected;
+        self.last_updated = current_timestamp();
+
+        Ok(response)
+    }
+
+    /// 从 getInfo 响应中更新属性
+    ///
+    /// 对应 Java: Peer.connect() 中的属性更新逻辑
+    fn update_from_getinfo_response(
+        &mut self,
+        response: &serde_json::Value,
+        _config: &crate::config::P2PConfig,
+    ) {
+        // services
+        if let Some(services) = response.get("services").and_then(|v| v.as_i64()) {
+            self.services = services as u64;
+        }
+
+        // application
+        if let Some(app) = response.get("application").and_then(|v| v.as_str()) {
+            self.application = Some(app.to_string());
+        }
+
+        // version
+        if let Some(ver) = response.get("version").and_then(|v| v.as_str()) {
+            self.version = Some(ver.to_string());
+        }
+
+        // platform
+        if let Some(plat) = response.get("platform").and_then(|v| v.as_str()) {
+            self.platform = Some(plat.to_string());
+        }
+
+        // hallmark（可选）
+        if let Some(hallmark) = response.get("hallmark").and_then(|v| v.as_str()) {
+            // TODO: 实现 analyze_hallmark() 解析验证
+            debug!("Received hallmark from peer {}: {}", self.address, hallmark);
+        }
+
+        // announcedAddress（可能变更）
+        if let Some(new_addr) = response.get("announcedAddress").or_else(|| response.get("announced_address"))
+            .and_then(|v| v.as_str())
+        {
+            if self.announced_address.as_deref() != Some(new_addr) && !_config.ignore_announced_address {
+                self.set_announced_address(new_addr.to_string());
+            }
+        }
+
+        // apiPort / apiSSLPort
+        if let Some(port) = response.get("apiPort").or_else(|| response.get("api_port"))
+            .and_then(|v| v.as_u64())
+        {
+            self.api_port = Some(port as u16);
+        }
+        if let Some(port) = response.get("apiSSLPort").or_else(|| response.get("api_ssl_port"))
+            .and_then(|v| v.as_u64())
+        {
+            self.api_ssl_port = Some(port as u16);
+        }
+
+        // shareAddress
+        if let Some(share) = response.get("shareAddress").or_else(|| response.get("share_address"))
+            .and_then(|v| v.as_bool())
+        {
+            self.share_address = share;
+        }
+
+        debug!("Updated peer {} from getInfo: app={}, ver={}, svc={}",
+               self.address,
+               self.application.as_deref().unwrap_or("?"),
+               self.version.as_deref().unwrap_or("?"),
+               self.services);
+    }
+
     pub fn update_metadata(
         &mut self,
         version: Option<String>,
@@ -240,6 +488,46 @@ impl Peer {
 
         serde_json::Value::Object(map)
     }
+
+    /// 转换为完整的 Java 兼容 PeerInfo 响应格式（包含所有字段）
+    ///
+    /// 对应 Java: Peers.getMyPeerInfoResponse()
+    pub fn to_peer_info_full(&self, config: &crate::config::P2PConfig) -> serde_json::Value {
+        use serde_json::{Map as JsonMap, Value};
+
+        // 获取基础信息
+        let base = self.to_peer_info();
+        let mut map: JsonMap<String, Value> = match base {
+            Value::Object(m) => m,
+            _ => return base,
+        };
+
+        // 补充 myPeerInfo 特有字段
+        map.insert("shareAddress".to_string(),
+                  Value::Bool(config.share_my_address));
+
+        // blockchainState（动态状态）
+        if let Ok(state) = config.blockchain_state.try_read() {
+            map.insert("blockchainState".to_string(),
+                      Value::Number(serde_json::Number::from(*state)));
+        }
+
+        // apiServerIdleTimeout
+        map.insert("apiServerIdleTimeout".to_string(),
+                  Value::Number(serde_json::Number::from(config.api_idle_timeout_ms)));
+
+        // hallmark（如果设置了）
+        if let Some(ref hallmark) = config.my_hallmark {
+            map.insert("hallmark".to_string(),
+                      Value::String(hallmark.clone()));
+        }
+
+        // disabledAPIs（可选，暂返回空数组）
+        map.insert("disabledAPIs".to_string(),
+                  Value::Array(vec![]));
+
+        Value::Object(map)
+    }
 }
 
 /// 活跃连接跟踪
@@ -299,6 +587,12 @@ impl Peers {
         my_info.to_peer_info()
     }
 
+    /// 获取完整版的 PeerInfo（包含所有字段，对应 Java getMyPeerInfoResponse）
+    pub async fn get_my_peer_info_full(&self, config: &crate::config::P2PConfig) -> serde_json::Value {
+        let my_info = self.my_peer_info.read().await;
+        my_info.to_peer_info_full(config)
+    }
+
     /// 更新自己节点信息
     pub async fn update_my_peer_info(&self, peer: Peer) {
         let mut my_info = self.my_peer_info.write().await;
@@ -342,6 +636,36 @@ impl Peers {
     pub async fn connection_count(&self) -> usize {
         let conns = self.active_connections.lock().await;
         conns.count()
+    }
+
+    /// 获取当前出站连接数
+    ///
+    /// 对应 Java: Peers.getNumberOfOutboundConnections()
+    pub async fn outbound_connection_count(&self) -> usize {
+        let active = self.get_active_peers().await;
+        active.iter().filter(|p| !p.is_inbound).count()
+    }
+
+    /// 获取当前入站连接数
+    ///
+    /// 对应 Java: Peers.getNumberOfInboundConnections()
+    pub async fn inbound_connection_count(&self) -> usize {
+        let active = self.get_active_peers().await;
+        active.iter().filter(|p| p.is_inbound).count()
+    }
+
+    /// 检查是否可以建立新的出站连接
+    ///
+    /// 对应 Java: Peers.canAddOutboundConnection()
+    pub async fn can_add_outbound(&self, config: &crate::config::P2PConfig) -> bool {
+        self.outbound_connection_count().await < config.max_outbound_connections
+    }
+
+    /// 检查是否可以接受新的入站连接
+    ///
+    /// 对应 Java: Peers.canAcceptInboundConnection()
+    pub async fn can_accept_inbound(&self, config: &crate::config::P2PConfig) -> bool {
+        self.inbound_connection_count().await < config.max_inbound_connections
     }
 
     /// 获取所有已知节点列表

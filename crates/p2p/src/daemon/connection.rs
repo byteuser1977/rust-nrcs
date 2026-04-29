@@ -95,7 +95,7 @@ impl ConnectionDaemon {
         Self::prune_known_peers(peers, config, now).await?;
 
         // 5. 连接知名节点
-        // TODO: 实现知名节点连接
+        Self::connect_well_known_peers(peers, config).await?;
 
         Ok(())
     }
@@ -182,18 +182,60 @@ impl ConnectionDaemon {
         Ok(())
     }
 
-    /// Connect to a single peer
+    /// Connect to a single peer（完整实现）
+    ///
+    /// 对应 Java: Peers.connectPeer(Peer peer)
     async fn connect_peer(peers: &Arc<Peers>, peer: &Peer) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // 使用 WebSocket 或 HTTP 连接
+        use crate::error::ErrorCode;
+
+        // 1. 黑名单检查
         if peers.is_blacklisted_addr(&peer.address).await {
             return Err("Peer is blacklisted".into());
         }
 
-        // TODO: 实现实际的连接逻辑
-        // 这里应该调用 websocket.rs 或 http.rs 中的连接方法
-        
-        debug!("Connecting to peer: {}", peer.address);
-        Ok(())
+        // 2. 检查离线模式
+        let config = P2PConfig::default();
+        if config.offline_mode {
+            debug!("[ConnectionDaemon] Offline mode, skipping connection to {}", peer.address);
+            return Ok(());
+        }
+
+        // 3. 获取可变引用并调用 Peer.connect()
+        if let Some(peer_ref) = peers.get_peer(&peer.address).await {
+            let mut p = peer_ref.lock().await;
+
+            // 4. 调用完整的连接握手流程
+            match p.connect(&config).await {
+                Ok(response) => {
+                    info!("[ConnectionDaemon] Successfully connected to {}: app={}, ver={}",
+                          peer.address,
+                          p.application.as_deref().unwrap_or("?"),
+                          p.version.as_deref().unwrap_or("?"));
+
+                    // 5. 注册活跃连接
+                    peers.add_connection(peer.address).await;
+
+                    debug!("[ConnectionDaemon] Connect response from {}: {:?}", peer.address, response);
+                    Ok(())
+                }
+                Err(e) => {
+                    warn!("[ConnectionDaemon] Failed to connect to peer {}: {}", peer.address, e);
+
+                    // 6. 连接失败处理（根据错误类型决定是否加入黑名单）
+                    let error_code = e.code;
+                    if matches!(error_code, ErrorCode::ConnectionTimeout | ErrorCode::ReadTimeout) {
+                        p.blacklist(format!("Connection failed (timeout): {}", e));
+                    } else if matches!(error_code, ErrorCode::Blacklisted) {
+                        // 已经在黑名单中，不需要再次操作
+                    } else {
+                        p.deactivate();
+                    }
+                    Err(format!("Connect failed: {}", e).into())
+                }
+            }
+        } else {
+            Err("Peer not found in registry".into())
+        }
     }
 
     /// Reconnect stale peers
@@ -218,30 +260,138 @@ impl ConnectionDaemon {
         Ok(())
     }
 
-    /// Cleanup inbound connections
-    /// 
-    /// 对应 NRCS Java: 清理 lastInboundRequest 过期的连接
-    async fn cleanup_inbound_connections(_peers: &Arc<Peers>, _config: &P2PConfig, _now: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // TODO: 实现入站连接清理
+    /// Cleanup inbound connections（完整实现）
+    ///
+    /// 对应 NRCS Java: 清理 lastInboundRequest > 3600 秒的入站连接
+    async fn cleanup_inbound_connections(peers: &Arc<Peers>, _config: &P2PConfig, now: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let active_peers = peers.get_active_peers().await;
+        let mut cleaned = 0usize;
+
+        for peer in active_peers {
+            // 如果是入站连接且超过 3600 秒没有活动，断开
+            if peer.is_inbound && (peer.last_inbound_request == 0 || now - peer.last_inbound_request > 3600) {
+                peers.remove_connection(&peer.address).await;
+
+                // 更新 peer 状态
+                if let Some(peer_ref) = peers.get_peer(&peer.address).await {
+                    let mut p = peer_ref.lock().await;
+                    p.deactivate();
+                }
+
+                debug!("[ConnectionDaemon] Cleaned up stale inbound connection from {}", peer.address);
+                cleaned += 1;
+            }
+        }
+
+        if cleaned > 0 {
+            debug!("[ConnectionDaemon] Cleaned up {} stale inbound connections", cleaned);
+        }
+
         Ok(())
     }
 
-    /// Prune known peers
-    /// 
+    /// Prune known peers（完整实现）
+    ///
     /// 对应 NRCS Java: 删除过多的已知节点
     async fn prune_known_peers(peers: &Arc<Peers>, config: &P2PConfig, now: i64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let count = peers.known_peers_count().await;
-        
+
         if config.too_many_known_peers(count) && Self::has_enough_connected_peers(peers, config).await {
             let all_peers = peers.get_known_peers().await;
-            
-            // 删除 lastUpdated > 24 小时的节点
+            let mut pruned_count = 0usize;
+
+            // 删除 lastUpdated > 24 小时的非连接节点
             for peer in all_peers {
-                if now - peer.last_updated > 24 * 3600 {
-                    // TODO: 实现节点删除
-                    debug!("Pruning old peer: {}", peer.address);
+                if peer.state != PeerState::Connected && now - peer.last_updated > 24 * 3600 {
+                    // 实现节点删除
+                    debug!("[ConnectionDaemon] Pruning old peer: {}", peer.address);
+                    peers.remove_peer(&peer.address).await;
+                    pruned_count += 1;
                 }
             }
+
+            if pruned_count > 0 {
+                info!("[ConnectionDaemon] Pruned {} old peers", pruned_count);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Connect to well-known peers（完整实现）
+    ///
+    /// 对应 NRCS Java: 连接 wellKnownPeers 配置中的节点
+    async fn connect_well_known_peers(
+        peers: &Arc<Peers>,
+        config: &P2PConfig,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // 获取知名节点列表（从配置）
+        let well_known_addrs = &config.well_known_peers;
+
+        if well_known_addrs.is_empty() {
+            return Ok(());
+        }
+
+        let mut connected_count = 0usize;
+
+        for addr_str in well_known_addrs {
+            // 解析地址
+            match addr_str.parse::<std::net::SocketAddr>() {
+                Ok(addr) => {
+                    // 检查是否已存在
+                    if !peers.contains_peer(&addr).await {
+                        // 检查是否在黑名单中
+                        if peers.is_blacklisted_addr(&addr).await {
+                            debug!("[ConnectionDaemon] Well-known peer {} is blacklisted, skipping", addr);
+                            continue;
+                        }
+
+                        // 创建并注册新节点
+                        let mut new_peer = Peer::new(addr, false); // outbound connection
+                        new_peer.services |= 0x01; // 标记为知名节点
+
+                        peers.register_peer(new_peer).await;
+
+                        debug!("[ConnectionDaemon] Registered well-known peer: {}", addr);
+
+                        // 尝试连接
+                        if let Some(peer_ref) = peers.get_peer(&addr).await {
+                            let peer_snapshot = peer_ref.lock().await.clone();
+                            drop(peer_ref);
+
+                            if let Err(e) = Self::connect_peer(peers, &peer_snapshot).await {
+                                debug!("[ConnectionDaemon] Failed to connect well-known peer {}: {}", addr, e);
+                            } else {
+                                connected_count += 1;
+                            }
+                        }
+                    } else {
+                        // 节点已存在，检查是否需要重连
+                        if let Some(peer_ref) = peers.get_peer(&addr).await {
+                            let peer = peer_ref.lock().await;
+                            if peer.state != PeerState::Connected {
+                                drop(peer);
+                                let peer_snapshot = peer_ref.lock().await.clone();
+                                drop(peer_ref);
+
+                                if let Err(e) = Self::connect_peer(peers, &peer_snapshot).await {
+                                    debug!("[ConnectionDaemon] Failed to reconnect well-known peer {}: {}", addr, e);
+                                } else {
+                                    connected_count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!("[ConnectionDaemon] Invalid well-known peer address '{}': {}", addr_str, e);
+                }
+            }
+        }
+
+        if connected_count > 0 {
+            debug!("[ConnectionDaemon] Connected to {}/{} well-known peers",
+                   connected_count, well_known_addrs.len());
         }
 
         Ok(())

@@ -6,6 +6,7 @@
 //! - 管理所有节点
 //! - 管理守护进程
 //! - 提供统一的 P2P 接口
+//! - 整合连接池、广播、持久化等模块
 
 use crate::config::P2PConfig;
 use crate::daemon::{ConnectionDaemon, DiscoveryDaemon, TransactionDaemon, UnblacklistDaemon};
@@ -17,11 +18,11 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 /// P2P Manager
-/// 
+///
 /// 对应 NRCS Java: Peers.java
 pub struct P2PManager {
     /// 配置
-    config: P2PConfig,
+    config: Arc<P2PConfig>,
     /// 节点管理器
     peers: Arc<Peers>,
     /// 连接守护进程
@@ -39,6 +40,7 @@ pub struct P2PManager {
 impl P2PManager {
     /// Create a new P2P manager
     pub fn new(config: P2PConfig) -> Self {
+        let config = Arc::new(config);
         let my_peer = Peer::new(config.listen_addr, false);
         let peers = Arc::new(Peers::new(my_peer));
 
@@ -54,7 +56,7 @@ impl P2PManager {
     }
 
     /// Initialize P2P manager
-    /// 
+    ///
     /// 对应 NRCS Java: Peers.init()
     pub async fn init(&mut self) -> P2PResult<()> {
         info!("Initializing P2P manager...");
@@ -62,28 +64,32 @@ impl P2PManager {
         // 验证配置
         self.config.validate().map_err(P2PError::internal)?;
 
+        // 加载种子节点到内存
+        self.config.init_bootstrap_peers(&self.peers).await;
+
         // 创建守护进程
         self.connection_daemon = Some(ConnectionDaemon::new(
             Arc::clone(&self.peers),
-            self.config.clone(),
+            (*self.config).clone(),
         ));
 
         self.discovery_daemon = Some(DiscoveryDaemon::new(
             Arc::clone(&self.peers),
-            self.config.clone(),
+            (*self.config).clone(),
         ));
 
         self.unblacklist_daemon = Some(UnblacklistDaemon::new(
             Arc::clone(&self.peers),
-            self.config.clone(),
+            (*self.config).clone(),
         ));
 
         self.transaction_daemon = Some(TransactionDaemon::new(
             Arc::clone(&self.peers),
-            self.config.clone(),
+            (*self.config).clone(),
         ));
 
-        info!("P2P manager initialized");
+        info!("P2P manager initialized with {} bootstrap peers",
+              self.peers.known_peers_count().await);
         Ok(())
     }
 
@@ -208,21 +214,55 @@ impl P2PManager {
     }
 
     /// Broadcast transaction
-    /// 
+    ///
     /// 对应 NRCS Java: Peers.broadcast(Transaction transaction)
-    pub async fn broadcast_transaction(&self, _transaction: &[u8]) -> P2PResult<()> {
-        // TODO: 实现交易广播
-        debug!("Broadcasting transaction");
+    pub async fn broadcast_transactions(&self, transactions_json: &[serde_json::Value]) -> P2PResult<()> {
+        use crate::broadcast::BroadcastManager;
+
+        if transactions_json.is_empty() {
+            return Ok(());
+        }
+
+        let manager = BroadcastManager::new(Arc::clone(&self.config));
+        manager.broadcast_transactions(transactions_json, &self.peers).await;
+        debug!("Broadcasting {} transactions", transactions_json.len());
         Ok(())
     }
 
     /// Send request to some peers
-    /// 
+    ///
     /// 对应 NRCS Java: Peers.sendToSomePeers(JSONObject request)
-    pub async fn send_to_some_peers(&self, _request: &PeerRequest) -> P2PResult<()> {
-        // TODO: 实现请求发送
-        debug!("Sending request to some peers");
+    pub async fn send_to_some_peers(&self, request: &PeerRequest) -> P2PResult<Vec<crate::broadcast::BroadcastResult>> {
+        use crate::broadcast::BroadcastManager;
+
+        let manager = BroadcastManager::new(Arc::clone(&self.config));
+        let results = manager.send_to_some_peers(request, &self.peers).await;
+        debug!("Sent request to {} peers", results.len());
+        Ok(results)
+    }
+
+    /// Broadcast block
+    ///
+    /// 对应 NRCS Java: Peers.broadcastBlock(IBlock block)
+    pub async fn broadcast_block(
+        &self,
+        block_json: &serde_json::Value,
+        previous_block_id: u64,
+        timestamp: i64,
+    ) -> P2PResult<()> {
+        use crate::broadcast::BroadcastManager;
+
+        let manager = BroadcastManager::new(Arc::clone(&self.config));
+        manager.broadcast_block(block_json, previous_block_id, timestamp, &self.peers).await;
+        info!("Broadcasting block (prev={})", previous_block_id);
         Ok(())
+    }
+
+    /// Get my peer info (完整版，包含所有字段)
+    ///
+    /// 对应 NRCS Java: Peers.getMyPeerInfoResponse()
+    pub async fn get_my_peer_info_full(&self) -> serde_json::Value {
+        self.peers.get_my_peer_info_full(&self.config).await
     }
 
     /// Get my peer info

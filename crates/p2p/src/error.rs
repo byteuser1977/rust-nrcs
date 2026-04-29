@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 /// P2P Error Codes
-/// 
+///
 /// 对应 NRCS Java: Errors.java
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorCode {
@@ -64,6 +64,36 @@ pub enum ErrorCode {
     /// 数据库错误
     DatabaseError = 16,
 
+    /// 连接失败
+    ConnectionFailed = 17,
+
+    /// 写入失败
+    WriteFailed = 18,
+
+    /// 读取失败
+    ReadFailed = 19,
+
+    /// HTTP 错误
+    HttpError = 20,
+
+    /// 请求超时
+    RequestTimeout = 21,
+
+    /// 序列化错误
+    SerializationError = 22,
+
+    /// 反序列化错误
+    DeserializationError = 23,
+
+    /// 协议错误
+    ProtocolError = 24,
+
+    /// 连接已关闭
+    ConnectionClosed = 25,
+
+    /// 意外的消息类型
+    UnexpectedMessageType = 26,
+
     /// 内部错误
     InternalError = 99,
 }
@@ -88,6 +118,16 @@ impl ErrorCode {
             ErrorCode::InvalidBlock => "Invalid block",
             ErrorCode::InvalidTransaction => "Invalid transaction",
             ErrorCode::DatabaseError => "Database error",
+            ErrorCode::ConnectionFailed => "Connection failed",
+            ErrorCode::WriteFailed => "Write failed",
+            ErrorCode::ReadFailed => "Read failed",
+            ErrorCode::HttpError => "HTTP error",
+            ErrorCode::RequestTimeout => "Request timeout",
+            ErrorCode::SerializationError => "Serialization error",
+            ErrorCode::DeserializationError => "Deserialization error",
+            ErrorCode::ProtocolError => "Protocol error",
+            ErrorCode::ConnectionClosed => "Connection closed",
+            ErrorCode::UnexpectedMessageType => "Unexpected message type",
             ErrorCode::InternalError => "Internal error",
         }
     }
@@ -196,6 +236,61 @@ impl P2PError {
     /// Create internal error
     pub fn internal(details: impl Into<String>) -> Self {
         Self::with_description(ErrorCode::InternalError, details)
+    }
+
+    /// 使用指定错误码和消息创建错误
+    pub fn from_str(code: ErrorCode, message: impl Into<String>) -> Self {
+        Self::with_message(code, message)
+    }
+
+    /// 节点返回的错误
+    pub fn peer_error(message: impl Into<String>) -> Self {
+        Self::with_message(ErrorCode::InternalError, message)
+    }
+
+    /// 序列化错误
+    pub fn serialization_error(details: impl Into<String>) -> Self {
+        Self::with_description(ErrorCode::SerializationError, details)
+    }
+
+    /// 反序列化错误
+    pub fn deserialization_error(details: impl Into<String>) -> Self {
+        Self::with_description(ErrorCode::DeserializationError, details)
+    }
+
+    /// HTTP 错误
+    pub fn http_error(details: impl Into<String>) -> Self {
+        Self::with_description(ErrorCode::HttpError, details)
+    }
+
+    /// HTTP 状态码错误
+    pub fn http_status(status: u16) -> Self {
+        Self::with_description(ErrorCode::HttpError, format!("HTTP {}", status))
+    }
+
+    /// 读取失败
+    pub fn read_failed(details: impl Into<String>) -> Self {
+        Self::with_description(ErrorCode::ReadFailed, details)
+    }
+
+    /// 请求超时
+    pub fn request_timeout() -> Self {
+        Self::new(ErrorCode::RequestTimeout)
+    }
+
+    /// 意外的消息类型
+    pub fn unexpected_message_type() -> Self {
+        Self::new(ErrorCode::UnexpectedMessageType)
+    }
+
+    /// 连接已关闭
+    pub fn connection_closed() -> Self {
+        Self::new(ErrorCode::ConnectionClosed)
+    }
+
+    /// 协议错误
+    pub fn protocol_error(details: impl Into<String>) -> Self {
+        Self::with_description(ErrorCode::ProtocolError, details)
     }
 }
 

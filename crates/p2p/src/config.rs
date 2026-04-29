@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use blockchain_types::constants::*;
 
 /// P2P Configuration
@@ -210,6 +212,58 @@ pub struct P2PConfig {
     /// NRCS: BUNDLER_RATE_BROADCAST_INTERVAL = 30 * 60
     #[serde(default = "default_bundler_rate_broadcast_interval_secs")]
     pub bundler_rate_broadcast_interval_secs: u64,
+
+    // ===== 新增配置项（对齐 Java NRCS） =====
+
+    // --- API 端口配置（用于 myPeerInfo 响应） ---
+    /// API 端口（对应 Java: API.openAPIPort）
+    #[serde(default = "default_api_port")]
+    pub api_port: u16,
+
+    /// API SSL 端口（对应 Java: API.openAPISSLPort）
+    #[serde(default = "default_api_ssl_port")]
+    pub api_ssl_port: u16,
+
+    /// API 服务器空闲超时毫秒（对应 Java: nrcs.apiServerIdleTimeout）
+    #[serde(default = "default_api_idle_timeout_ms")]
+    pub api_idle_timeout_ms: u64,
+
+    // --- 协议增强配置 ---
+    /// 是否启用 GZIP 压缩（对应 Java: nrcs.isGzipEnabled）
+    #[serde(default = "default_gzip_enabled")]
+    pub gzip_enabled: bool,
+
+    // --- 安全与隐私配置 ---
+    /// 是否忽略节点公告地址变更（对应 Java: nrcs.ignorePeerAnnouncedAddress）
+    #[serde(default)]
+    pub ignore_announced_address: bool,
+
+    /// 是否隐藏错误详情（对应 Java: nrcs.hideErrorDetails）
+    #[serde(default)]
+    pub hide_error_details: bool,
+
+    // --- 运行模式配置 ---
+    /// 离线模式（对应 Java: nrcs.offline，不连接任何节点）
+    #[serde(default)]
+    pub offline_mode: bool,
+
+    // --- 种子节点与黑名单预加载 ---
+    /// 默认初始节点列表（对应 Java: nrcs.defaultPeers）
+    #[serde(default)]
+    pub default_peers: Vec<String>,
+
+    /// 知名节点列表（对应 Java: nrcs.wellKnownPeers，保持常连接）
+    #[serde(default)]
+    pub well_known_peers: Vec<String>,
+
+    /// 已知黑名单节点（对应 Java: nrcs.knownBlacklistedPeers）
+    #[serde(default)]
+    pub known_blacklisted_peers: Vec<String>,
+
+    // --- 动态状态（不序列化） ---
+    /// 区块链状态（动态更新，不持久化）
+    #[serde(skip)]
+    pub blockchain_state: Arc<RwLock<i32>>,
 }
 
 // ============ 默认值函数（引用全局常量） ============
@@ -255,6 +309,10 @@ fn default_unblacklist_daemon_interval_secs() -> u64 { UNBLACKLIST_DAEMON_INTERV
 fn default_transaction_daemon_interval_secs() -> u64 { TRANSACTION_DAEMON_INTERVAL_SECS }
 fn default_send_transactions_batch_size() -> usize { SEND_TRANSACTIONS_BATCH_SIZE }
 fn default_bundler_rate_broadcast_interval_secs() -> u64 { BUNDLER_RATE_BROADCAST_INTERVAL_SECS }
+fn default_api_port() -> u16 { DEFAULT_API_PORT }
+fn default_api_ssl_port() -> u16 { DEFAULT_API_SSL_PORT }
+fn default_api_idle_timeout_ms() -> u64 { API_IDLE_TIMEOUT_MS }
+fn default_gzip_enabled() -> bool { true }
 
 impl Default for P2PConfig {
     fn default() -> Self {
@@ -297,6 +355,17 @@ impl Default for P2PConfig {
             transaction_daemon_interval_secs: default_transaction_daemon_interval_secs(),
             send_transactions_batch_size: default_send_transactions_batch_size(),
             bundler_rate_broadcast_interval_secs: default_bundler_rate_broadcast_interval_secs(),
+            api_port: default_api_port(),
+            api_ssl_port: default_api_ssl_port(),
+            api_idle_timeout_ms: default_api_idle_timeout_ms(),
+            gzip_enabled: default_gzip_enabled(),
+            ignore_announced_address: false,
+            hide_error_details: false,
+            offline_mode: false,
+            default_peers: Vec::new(),
+            well_known_peers: Vec::new(),
+            known_blacklisted_peers: Vec::new(),
+            blockchain_state: Arc::new(RwLock::new(0)),
         }
     }
 }
@@ -367,6 +436,47 @@ impl P2PConfig {
     pub fn too_many_inbound_connections(&self, count: usize) -> bool {
         count >= self.max_inbound_connections
     }
+
+    /// 加载种子节点并初始化到 Peers（对应 Java: Peers.init()）
+    ///
+    /// 从 defaultPeers、wellKnownPeers、knownBlacklistedPeers 配置加载
+    pub async fn init_bootstrap_peers(&self, peers: &crate::peer::Peers) {
+        // 1. 从 defaultPeers 加载种子节点
+        for addr_str in &self.default_peers {
+            if let Ok(addr) = addr_str.parse::<SocketAddr>() {
+                if !peers.contains_peer(&addr).await {
+                    let peer = crate::peer::Peer::new(addr, false);
+                    peers.register_peer(peer).await;
+                }
+            }
+        }
+
+        // 2. 从 wellKnownPeers 加载（标记为知名节点）
+        for addr_str in &self.well_known_peers {
+            if let Ok(addr) = addr_str.parse::<SocketAddr>() {
+                if !peers.contains_peer(&addr).await {
+                    let mut peer = crate::peer::Peer::new(addr, false);
+                    // 标记为知名节点（services bit 0）
+                    peer.services = 0x01;
+                    peers.register_peer(peer).await;
+                }
+            }
+        }
+
+        // 3. 预加载黑名单
+        for addr_str in &self.known_blacklisted_peers {
+            if let Ok(addr) = addr_str.parse::<SocketAddr>() {
+                peers.blacklist(addr).await;
+            }
+        }
+
+        tracing::info!(
+            "Loaded {} bootstrap peers, {} well-known peers, {} blacklisted",
+            self.default_peers.len(),
+            self.well_known_peers.len(),
+            self.known_blacklisted_peers.len()
+        );
+    }
 }
 
 #[cfg(test)]
@@ -395,14 +505,15 @@ mod tests {
     #[test]
     fn test_peer_count_checks() {
         let config = P2PConfig::default();
-        
+
         assert!(config.has_enough_connected_peers(20));
         assert!(!config.has_enough_connected_peers(10));
-        
+
         assert!(config.too_many_known_peers(3000));
         assert!(!config.too_many_known_peers(100));
-        
-        assert!(config.too_few_known_peers(50));
-        assert!(!config.too_few_known_peers(150));
+
+        // MIN_KNOWN_PEERS=1000 (对齐 Java: nrcs.minNumberOfKnownPeers)
+        assert!(config.too_few_known_peers(500));   // 500 < 1000
+        assert!(!config.too_few_known_peers(1500)); // 1500 >= 1000
     }
 }
