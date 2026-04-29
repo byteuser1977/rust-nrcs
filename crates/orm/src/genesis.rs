@@ -283,6 +283,12 @@ mod tests {
     use sqlx::SqlitePool;
     use crate::repository::{SqliteBlockRepository, SqliteAccountRepository, SqliteTransactionRepository, SqliteAccountLedgerRepository};
 
+    /// 创建测试所需的表
+    ///
+    /// 测试使用内联 SQL 而非 migration 文件，原因：
+    /// 1. 测试应与外部文件解耦（隔离性）
+    /// 2. migration 使用 PostgreSQL 语法 (BIGSERIAL)，不适合 SQLite 内存库
+    /// 3. 测试只创建所需表，更快更清晰
     async fn setup_repos() -> (
         SqliteBlockRepository,
         SqliteAccountRepository,
@@ -293,7 +299,7 @@ mod tests {
         let pool = SqlitePool::connect("sqlite::memory:")
             .await
             .expect("Failed to create pool");
-        
+
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS block (
                 DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -391,6 +397,18 @@ mod tests {
         .execute(&pool)
         .await
         .expect("Failed to create transaction table");
+
+        sqlx::query(r#"
+            CREATE TABLE IF NOT EXISTS account_guaranteed_balance (
+                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                ACCOUNT_ID INTEGER NOT NULL,
+                ADDITIONS INTEGER NOT NULL,
+                HEIGHT INTEGER NOT NULL
+            )
+        "#)
+        .execute(&pool)
+        .await
+        .expect("Failed to create account_guaranteed_balance table");
 
         (
             SqliteBlockRepository::new(pool.clone()),

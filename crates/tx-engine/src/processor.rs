@@ -464,6 +464,81 @@ impl DatabaseTransactionProcessor {
             _ => None,
         }
     }
+
+    /// Calculate baseline fee for a transaction type
+    ///
+    /// Reference: Java TransactionType.getBaselineFee() overrides
+    /// Returns the minimum fee in NQT for the given transaction
+    #[allow(dead_code)]
+    fn calculate_baseline_fee(&self, tx: &Transaction) -> i64 {
+        use blockchain_types::constants::ONE_NRCS;
+
+        match tx.type_id {
+            TransactionType::ColoredCoins => {
+                match tx.subtype {
+                    0 => {
+                        // ASSET_ISSUANCE: 1000 NRCS (or 1 NRCS for singletons)
+                        let is_singleton = self.parse_bool_field(tx, "isSingleton").unwrap_or(false);
+                        if is_singleton {
+                            ONE_NRCS as i64 // 1 NRCS
+                        } else {
+                            1000 * ONE_NRCS as i64 // 1000 NRCS
+                        }
+                    }
+                    9 => {
+                        // ASSET_INCREASE: 10 NRCS
+                        10 * ONE_NRCS as i64
+                    }
+                    10 | 11 => {
+                        // ASSET_PROPERTY_SET / ASSET_PROPERTY_DELETE: SizeBasedFee(0.1 NRCS, 0.1 NRCS, 32)
+                        let size = tx.attachment_bytes.len().max(1) as i64;
+                        let base = ONE_NRCS as i64 / 10; // 0.1 NRCS
+                        base + (size * base / 32)
+                    }
+                    _ => {
+                        // Default asset fee: 1 NRCS
+                        ONE_NRCS as i64
+                    }
+                }
+            }
+            TransactionType::MonetarySystem => {
+                match tx.subtype {
+                    0 => {
+                        // CURRENCY_ISSUANCE: fee based on code length
+                        let code = self.parse_string_field(tx, "code").unwrap_or_default();
+                        match code.len() {
+                            3 => 25000 * ONE_NRCS as i64, // 25000 NRCS for 3-letter
+                            4 => 1000 * ONE_NRCS as i64,  // 1000 NRCS for 4-letter
+                            5 => 40 * ONE_NRCS as i64,     // 40 NRCS for 5-letter
+                            _ => ONE_NRCS as i64,           // Default
+                        }
+                    }
+                    7 => {
+                        // CURRENCY_MINTING: 1 NRCS (CURRENCY_MINT_FEE)
+                        ONE_NRCS as i64
+                    }
+                    _ => {
+                        // Default currency fee: 1 NRCS
+                        ONE_NRCS as i64
+                    }
+                }
+            }
+            _ => {
+                // Default fee for all other types: 1 NRCS
+                ONE_NRCS as i64
+            }
+        }
+    }
+
+    /// Calculate back fees for a transaction (fee splits to referrers)
+    ///
+    /// Reference: Java TransactionType.getBackFees()
+    /// Returns array of [30%, 20%, 10%] of the fee
+    #[allow(dead_code)]
+    fn calculate_back_fees(&self, tx: &Transaction) -> [i64; 3] {
+        let fee = tx.fee as i64;
+        [fee * 3 / 10, fee * 2 / 10, fee / 10]
+    }
 }
 
 #[async_trait]
@@ -1182,11 +1257,26 @@ impl DatabaseTransactionProcessor {
             return Ok(());
         }
 
-        // 获取所有资产持有者
-        // TODO: 实现find_all_by_asset方法（需要扩展AccountAssetRepository）
+        // Java: long quantityQNT = asset.getQuantity() - senderAccount.getAssetBalanceQNT(assetId);
+        // Calculate total shares excluding sender's shares
+        let asset = self.asset_repo.find_by_asset_id(asset_id).await?
+            .ok_or_else(|| ProcessorError::Validation(format!("Asset {} not found", asset_id)))?;
+        let sender_shares = self.account_asset_repo.find_by_account_and_asset(sender_id, asset_id).await
+            .ok()
+            .flatten()
+            .map(|aa| aa.quantity)
+            .unwrap_or(0);
+        let total_dividend_shares = asset.quantity - sender_shares;
+
+        // Java: senderAccount.addToBalance(event, txId, -(quantityQNT * amountNQTPerQNT));
+        let total_dividend_amount = total_dividend_shares * dividend_per_share;
+        self.account_repo.add_to_balance(sender_id, -total_dividend_amount).await?;
+
+        // 获取所有资产持有者并分配红利
         match self.account_asset_repo.find_by_asset(asset_id).await {
             Ok(holders) => {
-                info!("Paying dividend on asset {} to {} holders", asset_id, holders.len());
+                info!("Paying dividend on asset {} to {} holders (total={} NQT, excluded sender shares={})",
+                    asset_id, holders.len(), total_dividend_amount, sender_shares);
 
                 for holder in holders {
                     let holder_id = holder.account_id;
@@ -1194,7 +1284,7 @@ impl DatabaseTransactionProcessor {
                     let dividend_amount = dividend_per_share * shares;
 
                     if dividend_amount > 0 && holder_id != sender_id {
-                        // 更新接收者余额
+                        // Java: recipientAccount.addToBalanceAndUnconfirmedBalance(event, txId, dividend);
                         self.account_repo.add_to_balance(holder_id, dividend_amount).await?;
 
                         // 写入LEDGER记录
@@ -1202,7 +1292,7 @@ impl DatabaseTransactionProcessor {
                         let ledger_entry = AccountLedgerModel {
                             db_id: 0,
                             account_id: holder_id,
-                            event_type: ledger_event::ASSET_DIVIDEND_PAYMENT, // 正确的event type
+                            event_type: ledger_event::ASSET_DIVIDEND_PAYMENT,
                             event_id: tx.id as i64,
                             holding_type: ledger_holding::NRCS_BALANCE,
                             holding_id: None,
@@ -1419,6 +1509,7 @@ impl DatabaseTransactionProcessor {
     ///   senderAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, currencyId, initialSupply);
     async fn apply_currency_issuance(&self, tx: &Transaction) -> ProcessorResult<()> {
         use orm::models::CurrencyModel;
+        use blockchain_types::constants::{MIN_CURRENCY_NAME_LENGTH, MAX_CURRENCY_NAME_LENGTH, MIN_CURRENCY_CODE_LENGTH, MAX_CURRENCY_CODE_LENGTH, MAX_CURRENCY_TOTAL_SUPPLY};
 
         let sender_id = tx.sender_id as i64;
         let current_height = self.get_current_height();
@@ -1430,6 +1521,63 @@ impl DatabaseTransactionProcessor {
         let description = self.parse_string_field(tx, "description");
         let initial_supply = self.parse_long_field(tx, "initialSupply").unwrap_or(0);
         let max_supply = self.parse_long_field(tx, "maxSupply").unwrap_or(initial_supply);
+        let decimals = self.parse_long_field(tx, "decimals").unwrap_or(0) as i16;
+        let type_ = self.parse_long_field(tx, "type").unwrap_or(0) as i32;
+        let min_reserve_per_unit_nqt = self.parse_long_field(tx, "minReservePerUnitNQT").unwrap_or(0);
+        let min_difficulty = self.parse_long_field(tx, "minDifficulty").unwrap_or(0) as i16;
+        let max_difficulty = self.parse_long_field(tx, "maxDifficulty").unwrap_or(0) as i16;
+        let ruleset = self.parse_long_field(tx, "ruleset").unwrap_or(0) as i16;
+        let algorithm = self.parse_long_field(tx, "algorithm").unwrap_or(0) as i16;
+        let reserve_supply = self.parse_long_field(tx, "reserveSupply").unwrap_or(0);
+        let issuance_height = self.parse_long_field(tx, "issuanceHeight").unwrap_or(current_height as i64) as i32;
+
+        // Java: CurrencyType.validate() - naming rules
+        if name.len() < MIN_CURRENCY_NAME_LENGTH || name.len() > MAX_CURRENCY_NAME_LENGTH {
+            return Err(ProcessorError::Validation(
+                format!("Currency name length must be {}-{}, got {}", MIN_CURRENCY_NAME_LENGTH, MAX_CURRENCY_NAME_LENGTH, name.len())
+            ));
+        }
+
+        if code.len() < MIN_CURRENCY_CODE_LENGTH || code.len() > MAX_CURRENCY_CODE_LENGTH {
+            return Err(ProcessorError::Validation(
+                format!("Currency code length must be {}-{}, got {}", MIN_CURRENCY_CODE_LENGTH, MAX_CURRENCY_CODE_LENGTH, code.len())
+            ));
+        }
+
+        // Java: validateCurrencyNaming() - code must be uppercase letters only
+        if !code.chars().all(|c| c.is_ascii_uppercase()) {
+            return Err(ProcessorError::Validation(
+                format!("Currency code must be uppercase letters only, got '{}'", code)
+            ));
+        }
+
+        // Java: decimals must be 0-8
+        if decimals < 0 || decimals > 8 {
+            return Err(ProcessorError::Validation(
+                format!("Currency decimals must be 0-8, got {}", decimals)
+            ));
+        }
+
+        // Java: maxSupply must be > 0 and <= MAX_CURRENCY_TOTAL_SUPPLY
+        if max_supply <= 0 || max_supply > MAX_CURRENCY_TOTAL_SUPPLY as i64 {
+            return Err(ProcessorError::Validation(
+                format!("Currency max supply must be 1-{}, got {}", MAX_CURRENCY_TOTAL_SUPPLY, max_supply)
+            ));
+        }
+
+        // Java: initialSupply must be <= maxSupply
+        if initial_supply > max_supply {
+            return Err(ProcessorError::Validation(
+                format!("Currency initial supply ({}) cannot exceed max supply ({})", initial_supply, max_supply)
+            ));
+        }
+
+        // Java: isDuplicate() check - currency name must be unique
+        if let Ok(Some(_)) = self.currency_repo.find_by_code(&code).await {
+            return Err(ProcessorError::Validation(
+                format!("Currency with code '{}' already exists", code)
+            ));
+        }
 
         // 创建CURRENCY记录
         let currency_model = CurrencyModel {
@@ -1440,18 +1588,18 @@ impl DatabaseTransactionProcessor {
             name_lower: name.to_lowercase(),
             code: code.clone(),
             description,
-            type_: 0, // TODO: 从attachment解析
+            type_,
             initial_supply,
-            reserve_supply: 0,
+            reserve_supply,
             max_supply,
             creation_height: current_height,
-            issuance_height: current_height,
-            min_reserve_per_unit_nqt: 0, // TODO: 从attachment解析
-            min_difficulty: 0,
-            max_difficulty: 0,
-            ruleset: 0,
-            algorithm: 0,
-            decimals: 0, // TODO: 从attachment解析
+            issuance_height,
+            min_reserve_per_unit_nqt,
+            min_difficulty,
+            max_difficulty,
+            ruleset,
+            algorithm,
+            decimals,
             height: current_height,
             latest: true,
         };
@@ -1460,9 +1608,10 @@ impl DatabaseTransactionProcessor {
             Ok(_) => {
                 info!("Issued currency '{}' (ID={}) with initial supply {}", name, currency_id, initial_supply);
 
-                // 更新发送者的货币余额
+                // Java: senderAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, currencyId, initialSupply);
                 if initial_supply > 0 {
                     self.account_currency_repo.update_units(sender_id, currency_id, initial_supply).await?;
+                    self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, initial_supply).await?;
                 }
             }
             Err(e) => {
@@ -2956,6 +3105,33 @@ impl DatabaseTransactionProcessor {
                                 // 尝试解析为u64再转换（处理大正数）
                                 s.parse::<u64>().ok().map(|v| v as i64)
                             })
+                    }
+                    _ => None,
+                }
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// 从Transaction的attachment JSON bytes中解析Bool字段
+    fn parse_bool_field(&self, tx: &Transaction, field_name: &str) -> Option<bool> {
+        if tx.attachment_bytes.is_empty() {
+            return None;
+        }
+
+        match serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes) {
+            Ok(json) => {
+                match json.get(field_name) {
+                    Some(serde_json::Value::Bool(b)) => Some(*b),
+                    Some(serde_json::Value::Number(n)) => {
+                        n.as_i64().map(|v| v != 0)
+                    }
+                    Some(serde_json::Value::String(s)) => {
+                        match s.as_str() {
+                            "true" | "1" | "yes" => Some(true),
+                            "false" | "0" | "no" => Some(false),
+                            _ => None,
+                        }
                     }
                     _ => None,
                 }
