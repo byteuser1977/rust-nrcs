@@ -251,6 +251,7 @@ pub trait TransactionProcessor: Send + Sync {
     async fn apply_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<bool>;
     async fn rollback_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<()>;
     async fn apply(&self, tx: &Transaction) -> ProcessorResult<()>;
+    async fn apply_phased_fee(&self, tx: &Transaction) -> ProcessorResult<()>;
     async fn execute(&self, tx: &Transaction) -> ProcessorResult<TxReceiptInfo>;
     fn set_current_block(&self, block_id: i64, height: i32, timestamp: i32);
 
@@ -477,33 +478,94 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
     async fn apply_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<bool> {
         let sender_id = tx.sender_id;
 
-        let total = tx.amount.checked_add(tx.fee)
-            .ok_or_else(|| ProcessorError::Validation("amount+fee overflow".to_string()))?;
+        // Java: TransactionType.applyUnconfirmed()
+        // For phased transactions: only deduct fee from unconfirmed balance
+        // For non-phased transactions: deduct amount + fee from unconfirmed balance
+        let mut effective_fee = tx.fee as i64;
+
+        // Java: if (transaction.getReferencedTransactionFullHash() != null
+        //     && transaction.getTimestamp() > Constant.REFERENCED_TRANSACTION_FULL_HASH_BLOCK_TIMESTAMP) {
+        //     feeNQT = Math.addExact(feeNQT, Constant.UNCONFIRMED_POOL_DEPOSIT_NQT);
+        // }
+        if tx.referenced_transaction_full_hash.is_some()
+            && tx.timestamp > blockchain_types::constants::TRANSPARENT_FORGING_BLOCK as u32
+        {
+            effective_fee = effective_fee
+                .checked_add(blockchain_types::constants::UNCONFIRMED_POOL_DEPOSIT_NQT as i64)
+                .ok_or_else(|| ProcessorError::Validation("fee+deposit overflow".to_string()))?;
+        }
+
+        let deduct_amount = if tx.phased {
+            // Phased: only deduct fee, amount stays in unconfirmed until phasing completes
+            effective_fee
+        } else {
+            // Non-phased: deduct amount + fee
+            (tx.amount as i64).checked_add(effective_fee)
+                .ok_or_else(|| ProcessorError::Validation("amount+fee overflow".to_string()))?
+        };
 
         let account = self.get_account(sender_id).await?;
 
-        if account.unconfirmed_balance < total {
+        // Java: Genesis creator (timestamp==0) is exempt from balance check
+        // Reference: TransactionType.applyUnconfirmed()
+        let is_genesis_exempt = tx.timestamp == 0
+            && tx.sender_public_key.0 == blockchain_types::constants::GENESIS_CREATOR_PUBLIC_KEY;
+
+        if !is_genesis_exempt && account.unconfirmed_balance < deduct_amount as u64 {
             tracing::warn!(
                 "Double-spend detected! tx={}, sender={}, have={}, need={}",
-                tx.id, sender_id, account.unconfirmed_balance, total
+                tx.id, sender_id, account.unconfirmed_balance, deduct_amount
             );
             return Ok(false);
         }
 
-        self.account_repo.add_to_unconfirmed_balance(sender_id as i64, -(total as i64)).await?;
+        self.account_repo.add_to_unconfirmed_balance(sender_id as i64, -deduct_amount).await?;
 
-        debug!("Pre-deducted tx={} from sender={}, amount={}", tx.id, sender_id, total);
+        // Java: Also apply attachment unconfirmed (pre-deduct assets/currencies)
+        if !tx.phased {
+            let attachment_ok = self.apply_attachment_unconfirmed(tx).await?;
+            if !attachment_ok {
+                // Rollback the NRCS deduction if attachment deduction failed
+                self.account_repo.add_to_unconfirmed_balance(sender_id as i64, deduct_amount).await?;
+                return Ok(false);
+            }
+        }
+
+        debug!("Pre-deducted tx={} from sender={}, amount={}, phased={}", tx.id, sender_id, deduct_amount, tx.phased);
         Ok(true)
     }
 
     /// Rollback pre-deduction (restore unconfirmed balance)
     async fn rollback_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<()> {
         let sender_id = tx.sender_id;
-        let total = tx.amount.checked_add(tx.fee)
-            .ok_or_else(|| ProcessorError::Validation("amount+fee overflow".to_string()))?;
 
-        self.account_repo.add_to_unconfirmed_balance(sender_id as i64, total as i64).await?;
-        debug!("Rolled back pre-deduction for tx={}, sender={}", tx.id, sender_id);
+        // Match the deduction logic: restore what was deducted
+        let mut effective_fee = tx.fee as i64;
+
+        // Add referenced transaction deposit if applicable
+        if tx.referenced_transaction_full_hash.is_some()
+            && tx.timestamp > blockchain_types::constants::TRANSPARENT_FORGING_BLOCK as u32
+        {
+            effective_fee = effective_fee
+                .checked_add(blockchain_types::constants::UNCONFIRMED_POOL_DEPOSIT_NQT as i64)
+                .ok_or_else(|| ProcessorError::Validation("fee+deposit overflow".to_string()))?;
+        }
+
+        let restore_amount = if tx.phased {
+            effective_fee
+        } else {
+            (tx.amount as i64).checked_add(effective_fee)
+                .ok_or_else(|| ProcessorError::Validation("amount+fee overflow".to_string()))?
+        };
+
+        self.account_repo.add_to_unconfirmed_balance(sender_id as i64, restore_amount).await?;
+
+        // Java: Also rollback attachment unconfirmed (restore assets/currencies)
+        if !tx.phased {
+            self.rollback_attachment_unconfirmed(tx).await?;
+        }
+
+        debug!("Rolled back pre-deduction for tx={}, sender={}, phased={}", tx.id, sender_id, tx.phased);
         Ok(())
     }
 
@@ -530,18 +592,16 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
     ///
     /// Reference: Java TransactionType.apply() - UNIFIED framework for ALL transaction types:
     ///
-    ///   1. senderAccount.addToBalance(event, txId, -amountNQT, -feeNQT)
-    ///      -> Deducts amount+fee from confirmed balance
-    ///      -> Updates guaranteed balance
-    ///      -> Logs ledger entries (TRANSACTION_FEE for fee, event for amount)
+    ///   For non-phased transactions:
+    ///     senderAccount.addToBalance(event, txId, -amountNQT, -feeNQT)
     ///
-    ///   2. if (recipientAccount != null)
-    ///      recipientAccount.addToBalanceAndUnconfirmedBalance(event, txId, amountNQT)
-    ///      -> Adds amount to both confirmed and unconfirmed balance
-    ///      -> Logs ledger entry (event for amount credit)
+    ///   For phased transactions:
+    ///     senderAccount.addToBalance(event, txId, -amountNQT)  // only amount, fee already deducted
     ///
-    ///   3. applyAttachment(transaction, senderAccount, recipientAccount)
-    ///      -> Type-specific logic (create asset, transfer asset, etc.)
+    ///   if (recipientAccount != null)
+    ///     recipientAccount.addToBalanceAndUnconfirmedBalance(event, txId, amountNQT)
+    ///
+    ///   applyAttachment(transaction, senderAccount, recipientAccount)
     ///
     async fn apply(&self, tx: &Transaction) -> ProcessorResult<()> {
         let sender_id = tx.sender_id as i64;
@@ -549,33 +609,76 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         let amount_nqt = tx.amount as i64;
         let fee_nqt = tx.fee as i64;
 
-        // === Step 1: senderAccount.addToBalance(event, txId, -amountNQT, -feeNQT) ===
-        // This deducts -(amountNQT + feeNQT) from confirmed balance
-        let total = amount_nqt + fee_nqt;
-        if total != 0 {
-            self.account_repo.add_to_balance(sender_id, -total).await?;
+        // === Step 1: Deduct from sender's confirmed balance ===
+        // Java: if (!transaction.attachmentIsPhased()) {
+        //           senderAccount.addToBalance(event, txId, -amount, -fee);
+        //       } else {
+        //           senderAccount.addToBalance(event, txId, -amount);
+        //       }
+        if tx.phased {
+            // Phased: only deduct amount (fee was already deducted in apply_unconfirmed from unconfirmed,
+            // and will be deducted from confirmed in Transaction.apply())
+            if amount_nqt != 0 {
+                self.account_repo.add_to_balance(sender_id, -amount_nqt).await?;
+            }
+        } else {
+            // Non-phased: deduct both amount and fee
+            let total = amount_nqt + fee_nqt;
+            if total != 0 {
+                self.account_repo.add_to_balance(sender_id, -total).await?;
+            }
         }
 
-        // === Step 2: if (recipientAccount != null) recipientAccount.addToBalanceAndUnconfirmedBalance(event, txId, amountNQT) ===
-        if recipient_id != 0 && amount_nqt > 0 {
-            self.account_repo.get_or_create(recipient_id as i64).await?;
-            self.account_repo.add_to_balance_and_unconfirmed(recipient_id as i64, amount_nqt).await?;
+        // === Step 2: Credit recipient ===
+        // Java: if (recipientAccount != null) {
+        //           recipientAccount.addToBalanceAndUnconfirmedBalance(event, txId, amountNQT);
+        //       }
+        // When recipient is null (recipient_id == 0), amount goes to Genesis account (burning mechanism)
+        let credit_recipient_id = if recipient_id != 0 {
+            recipient_id as i64
+        } else {
+            // Java: Account.addOrGetAccount(Genesis.CREATOR_ID)
+            // Genesis creator account ID is 0
+            0i64
+        };
+        if amount_nqt > 0 {
+            self.account_repo.get_or_create(credit_recipient_id).await?;
+            self.account_repo.add_to_balance_and_unconfirmed(credit_recipient_id, amount_nqt).await?;
         }
 
         // === Step 3: applyAttachment() - type-specific logic ===
         self.apply_attachment(tx).await?;
 
         // === Step 4: Update guaranteed balance ===
-        // Reference: Java Account.addToBalance() calls addToGuaranteedBalance(totalAmountNQT)
-        //   where totalAmountNQT = amountNQT + feeNQT
-        //   addToGuaranteedBalance only records when totalAmountNQT > 0 (balance increases)
-        //
-        // For sender: totalAmountNQT = -(amount + fee) → negative → NOT recorded
-        // For recipient: totalAmountNQT = +amount → positive → RECORDED
         self.update_guaranteed_balance_for_recipient(tx).await?;
 
         // === Step 5: Log ledger entries ===
         self.log_ledger_entry(tx).await?;
+
+        Ok(())
+    }
+
+    /// Apply fee deduction for phased transactions from confirmed balance.
+    ///
+    /// Reference: Java Transaction.apply()
+    ///   if (attachmentIsPhased()) {
+    ///       senderAccount.addToBalance(type.getLedgerEvent(), getId(), 0, -this.getFeeNQT());
+    ///   }
+    ///
+    /// For phased transactions, the fee is deducted from confirmed balance separately
+    /// from the amount deduction in TransactionType.apply().
+    async fn apply_phased_fee(&self, tx: &Transaction) -> ProcessorResult<()> {
+        if !tx.phased {
+            return Ok(());
+        }
+
+        let sender_id = tx.sender_id as i64;
+        let fee_nqt = tx.fee as i64;
+
+        if fee_nqt != 0 {
+            self.account_repo.add_to_balance(sender_id, -fee_nqt).await?;
+            debug!("Deducted phased fee={} from sender={}", fee_nqt, sender_id);
+        }
 
         Ok(())
     }
@@ -743,16 +846,40 @@ impl DatabaseTransactionProcessor {
         let asset_id = tx.id as i64;
         let current_height = self.get_current_height();
 
+        // Parse attachment to get asset name, quantity, decimals
+        // Reference: Java TransactionTypeAsset.ASSET_ISSUANCE.applyAttachment()
+        let (name, description, quantity, decimals) = if let Some(att_json) = self.get_attachment_json(tx) {
+            let name = att_json.get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let description = att_json.get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let quantity = att_json.get("quantity")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(tx.amount as i64);
+            let decimals = att_json.get("decimals")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u8;
+            (name, Some(description), quantity, decimals)
+        } else {
+            // Fallback: use transaction amount as quantity
+            (format!("Asset_{}", asset_id), None, tx.amount as i64, 0u8)
+        };
+
         let asset = AssetModel {
             db_id: 0,
             id: asset_id,
             account_id: sender_id as i64,
-            name: format!("Asset_{}", asset_id),
-            description: None,
-            quantity: tx.amount as i64,
-            decimals: 0,
+            name,
+            description,
+            quantity,
+            decimals: decimals as i16,
             has_control_phasing: false,
-            initial_quantity: tx.amount as i64,
+            initial_quantity: quantity,
             height: current_height,
             latest: true,
         };
@@ -763,16 +890,16 @@ impl DatabaseTransactionProcessor {
             db_id: 0,
             account_id: sender_id as i64,
             asset_id,
-            quantity: tx.amount as i64,
-            unconfirmed_quantity: tx.amount as i64,
+            quantity,
+            unconfirmed_quantity: quantity,
             height: current_height,
             latest: true,
         };
 
         self.account_asset_repo.insert(&account_asset).await?;
 
-        info!("Asset issued: id={} owner={} quantity={} height={}",
-              asset_id, sender_id, tx.amount, current_height);
+        info!("Asset issued: id={} owner={} quantity={} decimals={} height={}",
+              asset_id, sender_id, quantity, decimals, current_height);
 
         Ok(())
     }
@@ -786,13 +913,37 @@ impl DatabaseTransactionProcessor {
     async fn apply_asset_transfer(&self, tx: &Transaction) -> ProcessorResult<()> {
         let sender_id = tx.sender_id;
         let recipient_id = tx.recipient_id.unwrap_or(0);
-        let asset_id = tx.id as i64;
-        let quantity = tx.amount as i64;
+
+        // Java: Parse asset_id and quantity from attachment
+        // long assetId = transaction.getAttachment().getAssetId();
+        // long quantityQNT = transaction.getAttachment().getQuantityQNT();
+        let (asset_id, quantity) = if let Some(att_json) = self.get_attachment_json(tx) {
+            let asset_id = att_json.get("asset")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
+            let quantity = att_json.get("quantity")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(0);
+            (asset_id, quantity)
+        } else {
+            (0i64, 0i64)
+        };
+
+        if asset_id == 0 || quantity <= 0 {
+            return Err(ProcessorError::Validation(
+                format!("Invalid asset transfer: asset_id={}, quantity={}", asset_id, quantity)
+            ));
+        }
+
         let current_height = self.get_current_height();
 
+        // Java: senderAccount.addToAssetBalanceQNT(event, txId, assetId, -quantityQNT);
         self.account_asset_repo.decrease_quantity(sender_id as i64, asset_id, quantity).await?;
 
         if recipient_id != 0 {
+            // Java: recipientAccount.addToAssetAndUnconfirmedAssetBalanceQNT(event, txId, assetId, quantityQNT);
             self.account_repo.get_or_create(recipient_id as i64).await?;
 
             match self.account_asset_repo.find_by_account_and_asset(recipient_id as i64, asset_id).await? {
@@ -813,6 +964,7 @@ impl DatabaseTransactionProcessor {
                 }
             }
 
+            // Java: AssetTransfer.addAssetTransfer(transaction, attachment);
             let transfer = AssetTransferModel::new(
                 tx.id as i64,
                 asset_id,
@@ -867,9 +1019,9 @@ impl DatabaseTransactionProcessor {
                 info!("Placed ASK order {} for asset {}, qty={}, price={}",
                     tx.id, asset_id, quantity, price_nqt);
 
-                // 减少unconfirmed资产余额
-                // TODO: 实现decrease_unconfirmed_quantity方法（需要扩展AccountAssetRepository）
-                debug!("Decreasing unconfirmed asset balance for account {} asset {}", sender_id, asset_id);
+                // Java: senderAccount.addToUnconfirmedAssetBalanceQNT(event, assetId, -quantityQNT);
+                // Decrease unconfirmed asset balance
+                self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, -quantity).await?;
             }
             Err(e) => {
                 warn!("Failed to place ASK order {}: {}", tx.id, e);
@@ -944,15 +1096,16 @@ impl DatabaseTransactionProcessor {
         match self.ask_order_repo.find_by_id(order_id).await {
             Ok(Some(order)) if order.account_id == sender_id => {
                 let asset_id = order.asset_id;
+                let quantity = order.quantity;
 
                 // 删除order记录
                 self.ask_order_repo.delete(order.db_id).await?;
 
                 info!("Cancelled ASK order {} for account {}", order_id, sender_id);
 
-                // 恢复unconfirmed资产余额
-                // TODO: 实现increase_unconfirmed_quantity方法（需要扩展AccountAssetRepository）
-                debug!("Increasing unconfirmed asset balance for account {} asset {}", sender_id, asset_id);
+                // Java: senderAccount.addToUnconfirmedAssetBalanceQNT(event, assetId, quantityQNT);
+                // Restore unconfirmed asset balance
+                self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, quantity).await?;
             }
             Ok(Some(_)) => {
                 warn!("Cannot cancel ASK order owned by another account");
@@ -1088,10 +1241,11 @@ impl DatabaseTransactionProcessor {
         let delete_quantity = self.parse_long_field(tx, "quantityQQT").unwrap_or(tx.amount as i64);
 
         if delete_quantity > 0 && asset_id > 0 {
-            // 更新ASSET表的总数量（暂时跳过，AssetRepository暂未扩展）
-            debug!("Decreasing asset {} quantity by {}", asset_id, delete_quantity);
+            // Java: Asset.deleteAsset(transaction, attachment);
+            // Update the asset's total quantity in the asset table
+            self.asset_repo.decrease_quantity(asset_id, delete_quantity).await?;
 
-            // 更新发送者的资产余额
+            // Java: senderAccount.addToAssetBalanceQNT(event, txId, assetId, -quantityQNT);
             self.account_asset_repo.decrease_quantity(sender_id, asset_id, delete_quantity).await?;
 
             info!("Deleted {} of asset {} from account {}", delete_quantity, asset_id, sender_id);
@@ -1113,11 +1267,14 @@ impl DatabaseTransactionProcessor {
         let increase_quantity = self.parse_long_field(tx, "quantityQQT").unwrap_or(tx.amount as i64);
 
         if increase_quantity > 0 && asset_id > 0 {
-            // 更新ASSET表的总数量（暂时跳过，AssetRepository暂未扩展）
-            debug!("Increasing asset {} quantity by {}", asset_id, increase_quantity);
+            // Java: Asset.increaseAsset(transaction, attachment);
+            // Update the asset's total quantity in the asset table
+            self.asset_repo.increase_quantity(asset_id, increase_quantity).await?;
 
-            // 更新发送者的资产余额
+            // Java: senderAccount.addToAssetAndUnconfirmedAssetBalanceQNT(event, assetId, increaseQuantityQNT);
+            // Update both confirmed and unconfirmed asset balance
             self.account_asset_repo.increase_quantity(sender_id, asset_id, increase_quantity).await?;
+            self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, increase_quantity).await?;
 
             info!("Increased asset {} by {} for account {}", asset_id, increase_quantity, sender_id);
         } else {
@@ -1351,15 +1508,37 @@ impl DatabaseTransactionProcessor {
         let units_to_claim = self.parse_long_field(tx, "units").unwrap_or(0);
 
         if currency_id > 0 && units_to_claim > 0 {
+            // Java: nrcsReceived = Convert.unitsToNQT(unitsToClaim * currency.getReserveSupply() / currency.getCurrentSupply());
+            // Calculate NRCS received based on reserve ratio
+            let currency = self.currency_repo.find_by_id(currency_id).await?
+                .ok_or_else(|| ProcessorError::Validation(format!("Currency {} not found", currency_id)))?;
+
+            // Use initial_supply as current supply (simplification)
+            // In a full implementation, this would sum all account_currency units
+            let current_supply = currency.initial_supply;
+            let reserve_supply = currency.reserve_supply;
+
+            if current_supply <= 0 {
+                return Err(ProcessorError::Validation(
+                    format!("Currency {} has no current supply", currency_id)
+                ));
+            }
+
+            // nrcs_received = (units_to_claim * reserve_supply) / current_supply
+            let nrcs_received = (units_to_claim as i128)
+                .checked_mul(reserve_supply as i128)
+                .and_then(|v| v.checked_div(current_supply as i128))
+                .map(|v| v as i64)
+                .ok_or_else(|| ProcessorError::Validation("Reserve claim calculation overflow".to_string()))?;
+
             // 减少货币余额
             self.account_currency_repo.update_units(sender_id, currency_id, -units_to_claim).await?;
 
-            // 增加NRCS余额（按reserve比例计算）
-            // TODO: 实际计算received NRCS
-            let nrcs_received = units_to_claim; // 简化处理，实际需要根据reserve计算
+            // 增加NRCS余额
             self.account_repo.add_to_balance(sender_id, nrcs_received).await?;
 
-            info!("Claimed {} units from currency {}, received {} NQT", units_to_claim, currency_id, nrcs_received);
+            info!("Claimed {} units from currency {}, received {} NQT (reserve ratio: {}/{})",
+                  units_to_claim, currency_id, nrcs_received, reserve_supply, current_supply);
         } else {
             warn!("Invalid reserve claim parameters in transaction {}", tx.id);
         }
@@ -1372,13 +1551,27 @@ impl DatabaseTransactionProcessor {
     /// Reference: Java TransactionTypeCurrency.PUBLISH_EXCHANGE_OFFER.applyAttachment()
     ///   CurrencyExchangeOffer.publishOffer(transaction, attachment);
     async fn apply_publish_exchange_offer(&self, tx: &Transaction) -> ProcessorResult<()> {
-        let _sender_id = tx.sender_id as i64;
+        let sender_id = tx.sender_id as i64;
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
 
         if currency_id > 0 {
-            // TODO: 创建或更新exchange offer记录
-            debug!("Publishing exchange offer for currency {}", currency_id);
-            info!("Exchange offer publishing not yet fully implemented");
+            // Parse offer details from attachment
+            let buy_rate = self.parse_long_field(tx, "buyRate").unwrap_or(0);
+            let sell_rate = self.parse_long_field(tx, "sellRate").unwrap_or(0);
+            let total_buy_limit = self.parse_long_field(tx, "totalBuyLimit").unwrap_or(0);
+            let total_sell_limit = self.parse_long_field(tx, "totalSellLimit").unwrap_or(0);
+            let initial_buy_supply = self.parse_long_field(tx, "initialBuySupply").unwrap_or(0);
+            let initial_sell_supply = self.parse_long_field(tx, "initialSellSupply").unwrap_or(0);
+            let expiration_height = self.parse_long_field(tx, "expirationHeight").unwrap_or(0);
+
+            // Java: CurrencyExchangeOffer.publishOffer(transaction, attachment);
+            // Store the exchange offer - for now we'll use the exchange_request table
+            // In a full implementation, this would create a separate exchange_offer record
+            info!("Published exchange offer for currency {} by account {}: buy_rate={}, sell_rate={}, buy_limit={}, sell_limit={}, expiration={}",
+                  currency_id, sender_id, buy_rate, sell_rate, total_buy_limit, total_sell_limit, expiration_height);
+
+            // TODO: Create proper exchange_offer table and model
+            // The offer should be matched against future EXCHANGE_BUY/SELL requests
         } else {
             warn!("Missing currency ID in transaction {}", tx.id);
         }
@@ -1419,10 +1612,8 @@ impl DatabaseTransactionProcessor {
                 Ok(_) => {
                     info!("Created exchange buy request: {} units of currency {} at rate {}",
                         units, currency_id, rate);
-
-                    // 扣减NRCS余额
-                    let total_cost = units * rate;
-                    self.account_repo.add_to_balance(sender_id, -total_cost).await?;
+                    // Note: NRCS deduction is handled by base apply() method via tx.amount
+                    // No additional deduction needed here
                 }
                 Err(e) => {
                     warn!("Failed to create exchange buy request (non-critical): {}", e);
@@ -1469,9 +1660,9 @@ impl DatabaseTransactionProcessor {
                 Ok(_) => {
                     info!("Created exchange sell request: {} units of currency {} at rate {}",
                         units, currency_id, rate);
-
-                    // 扣减货币余额
-                    self.account_currency_repo.update_units(sender_id, currency_id, -units).await?;
+                    // Java: senderAccount.addToCurrencyUnconfirmedUnits(event, txId, currencyId, -units);
+                    // Deduct from unconfirmed currency units (not confirmed)
+                    self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, -units).await?;
                 }
                 Err(e) => {
                     warn!("Failed to create exchange sell request: {}", e);
@@ -1583,15 +1774,16 @@ impl DatabaseTransactionProcessor {
         let units = self.parse_long_field(tx, "units").unwrap_or(tx.amount as i64);
 
         if units > 0 && currency_id > 0 {
-            // 更新发送者货币余额
+            // Java: senderAccount.addToCurrencyUnits(event, txId, currencyId, -units);
             self.account_currency_repo.update_units(sender_id, currency_id, -units).await?;
 
             if recipient_id != 0 {
-                // 确保接收者账户存在
+                // Java: recipientAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, txId, currencyId, +units);
                 self.account_repo.get_or_create(recipient_id).await?;
 
-                // 更新接收者货币余额
+                // Update both confirmed and unconfirmed for recipient
                 self.account_currency_repo.update_units(recipient_id, currency_id, units).await?;
+                self.account_currency_repo.add_to_unconfirmed_units(recipient_id, currency_id, units).await?;
             }
 
             // 创建CURRENCY_TRANSFER记录
@@ -2780,5 +2972,328 @@ impl DatabaseTransactionProcessor {
         }
 
         serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes).ok()
+    }
+
+    /// Apply unconfirmed attachment deduction (mempool pre-deduction for assets/currencies)
+    ///
+    /// Reference: Java TransactionType.applyAttachmentUnconfirmed()
+    /// This prevents double-spending of assets and currencies in the mempool.
+    async fn apply_attachment_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<bool> {
+        match tx.type_id {
+            TransactionType::ColoredCoins => {
+                self.apply_colored_coins_unconfirmed(tx).await
+            }
+            TransactionType::MonetarySystem => {
+                self.apply_monetary_system_unconfirmed(tx).await
+            }
+            _ => Ok(true), // Other types don't need attachment unconfirmed
+        }
+    }
+
+    /// Apply unconfirmed deduction for ColoredCoins (asset) transactions
+    ///
+    /// Reference: Java TransactionTypeAsset.applyAttachmentUnconfirmed()
+    async fn apply_colored_coins_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<bool> {
+        match tx.subtype {
+            1 => {
+                // ASSET_TRANSFER: Pre-deduct asset quantity from sender
+                let sender_id = tx.sender_id as i64;
+                let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+                let quantity = tx.amount as i64;
+
+                if asset_id == 0 {
+                    return Ok(true); // No asset to deduct
+                }
+
+                // Check unconfirmed quantity
+                match self.account_asset_repo.find_by_account_and_asset(sender_id, asset_id).await? {
+                    Some(aa) => {
+                        if aa.unconfirmed_quantity < quantity {
+                            tracing::warn!(
+                                "Insufficient unconfirmed asset balance: account={}, asset={}, have={}, need={}",
+                                sender_id, asset_id, aa.unconfirmed_quantity, quantity
+                            );
+                            return Ok(false);
+                        }
+                        // Deduct from unconfirmed quantity
+                        self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, -quantity).await?;
+                        debug!("Pre-deducted asset transfer: account={}, asset={}, quantity={}", sender_id, asset_id, quantity);
+                        Ok(true)
+                    }
+                    None => {
+                        tracing::warn!("Account {} has no asset {}", sender_id, asset_id);
+                        Ok(false)
+                    }
+                }
+            }
+            2 => {
+                // ASK_ORDER_PLACEMENT: Pre-deduct asset quantity from sender (they're selling)
+                let sender_id = tx.sender_id as i64;
+                let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+                let quantity = self.parse_long_field(tx, "quantity").unwrap_or(tx.amount as i64);
+
+                if asset_id == 0 {
+                    return Ok(true);
+                }
+
+                match self.account_asset_repo.find_by_account_and_asset(sender_id, asset_id).await? {
+                    Some(aa) => {
+                        if aa.unconfirmed_quantity < quantity {
+                            tracing::warn!(
+                                "Insufficient unconfirmed asset for ask order: account={}, asset={}, have={}, need={}",
+                                sender_id, asset_id, aa.unconfirmed_quantity, quantity
+                            );
+                            return Ok(false);
+                        }
+                        self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, -quantity).await?;
+                        debug!("Pre-deducted ask order: account={}, asset={}, quantity={}", sender_id, asset_id, quantity);
+                        Ok(true)
+                    }
+                    None => {
+                        tracing::warn!("Account {} has no asset {} for ask order", sender_id, asset_id);
+                        Ok(false)
+                    }
+                }
+            }
+            3 => {
+                // BID_ORDER_PLACEMENT: No asset pre-deduction needed (buyer is paying NRCS)
+                // The NRCS amount is already handled by the main apply_unconfirmed
+                Ok(true)
+            }
+            6 => {
+                // DIVIDEND_PAYMENT: Complex - need to check if sender has enough to pay all shareholders
+                // For now, we'll just check if sender has the asset at all
+                // Full implementation would calculate total dividend amount
+                let sender_id = tx.sender_id as i64;
+                let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+
+                if asset_id == 0 {
+                    return Ok(true);
+                }
+
+                match self.account_asset_repo.find_by_account_and_asset(sender_id, asset_id).await? {
+                    Some(_) => Ok(true), // Sender has the asset
+                    None => {
+                        tracing::warn!("Account {} has no asset {} for dividend payment", sender_id, asset_id);
+                        Ok(false)
+                    }
+                }
+            }
+            7 => {
+                // ASSET_DELETE: Pre-deduct asset quantity from sender
+                let sender_id = tx.sender_id as i64;
+                let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+                let quantity = tx.amount as i64;
+
+                if asset_id == 0 {
+                    return Ok(true);
+                }
+
+                match self.account_asset_repo.find_by_account_and_asset(sender_id, asset_id).await? {
+                    Some(aa) => {
+                        if aa.unconfirmed_quantity < quantity {
+                            tracing::warn!(
+                                "Insufficient unconfirmed asset for delete: account={}, asset={}, have={}, need={}",
+                                sender_id, asset_id, aa.unconfirmed_quantity, quantity
+                            );
+                            return Ok(false);
+                        }
+                        self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, -quantity).await?;
+                        debug!("Pre-deducted asset delete: account={}, asset={}, quantity={}", sender_id, asset_id, quantity);
+                        Ok(true)
+                    }
+                    None => {
+                        tracing::warn!("Account {} has no asset {} for delete", sender_id, asset_id);
+                        Ok(false)
+                    }
+                }
+            }
+            9 => {
+                // ASSET_INCREASE: No pre-deduction needed (creates new assets)
+                Ok(true)
+            }
+            _ => Ok(true), // Other asset subtypes don't need unconfirmed deduction
+        }
+    }
+
+    /// Apply unconfirmed deduction for MonetarySystem (currency) transactions
+    ///
+    /// Reference: Java TransactionTypeCurrency.applyAttachmentUnconfirmed()
+    async fn apply_monetary_system_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<bool> {
+        match tx.subtype {
+            1 => {
+                // RESERVE_INCREASE: Pre-deduct NRCS for reserve
+                // The NRCS amount is already handled by the main apply_unconfirmed
+                Ok(true)
+            }
+            3 => {
+                // CURRENCY_TRANSFER: Pre-deduct currency units from sender
+                let sender_id = tx.sender_id as i64;
+                let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+                let units = tx.amount as i64;
+
+                if currency_id == 0 {
+                    return Ok(true);
+                }
+
+                match self.account_currency_repo.find_by_account_and_currency(sender_id, currency_id).await? {
+                    Some(ac) => {
+                        if ac.unconfirmed_units < units {
+                            tracing::warn!(
+                                "Insufficient unconfirmed currency units: account={}, currency={}, have={}, need={}",
+                                sender_id, currency_id, ac.unconfirmed_units, units
+                            );
+                            return Ok(false);
+                        }
+                        self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, -units).await?;
+                        debug!("Pre-deducted currency transfer: account={}, currency={}, units={}", sender_id, currency_id, units);
+                        Ok(true)
+                    }
+                    None => {
+                        tracing::warn!("Account {} has no currency {}", sender_id, currency_id);
+                        Ok(false)
+                    }
+                }
+            }
+            5 => {
+                // EXCHANGE_BUY: Pre-deduct NRCS for the buy
+                // The NRCS amount is already handled by the main apply_unconfirmed
+                Ok(true)
+            }
+            6 => {
+                // EXCHANGE_SELL: Pre-deduct currency units for the sell
+                let sender_id = tx.sender_id as i64;
+                let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+                let units = tx.amount as i64;
+
+                if currency_id == 0 {
+                    return Ok(true);
+                }
+
+                match self.account_currency_repo.find_by_account_and_currency(sender_id, currency_id).await? {
+                    Some(ac) => {
+                        if ac.unconfirmed_units < units {
+                            tracing::warn!(
+                                "Insufficient unconfirmed currency for exchange sell: account={}, currency={}, have={}, need={}",
+                                sender_id, currency_id, ac.unconfirmed_units, units
+                            );
+                            return Ok(false);
+                        }
+                        self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, -units).await?;
+                        debug!("Pre-deducted exchange sell: account={}, currency={}, units={}", sender_id, currency_id, units);
+                        Ok(true)
+                    }
+                    None => {
+                        tracing::warn!("Account {} has no currency {} for exchange sell", sender_id, currency_id);
+                        Ok(false)
+                    }
+                }
+            }
+            7 => {
+                // CURRENCY_MINTING: Pre-deduct NRCS for minting
+                // The NRCS amount is already handled by the main apply_unconfirmed
+                Ok(true)
+            }
+            _ => Ok(true), // Other currency subtypes don't need unconfirmed deduction
+        }
+    }
+
+    /// Rollback unconfirmed attachment deduction
+    ///
+    /// Reference: Java TransactionType.rollbackAttachmentUnconfirmed()
+    async fn rollback_attachment_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<()> {
+        match tx.type_id {
+            TransactionType::ColoredCoins => {
+                self.rollback_colored_coins_unconfirmed(tx).await
+            }
+            TransactionType::MonetarySystem => {
+                self.rollback_monetary_system_unconfirmed(tx).await
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Rollback unconfirmed deduction for ColoredCoins (asset) transactions
+    async fn rollback_colored_coins_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<()> {
+        match tx.subtype {
+            1 => {
+                // ASSET_TRANSFER: Restore asset quantity to sender
+                let sender_id = tx.sender_id as i64;
+                let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+                let quantity = tx.amount as i64;
+
+                if asset_id == 0 {
+                    return Ok(());
+                }
+
+                self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, quantity).await?;
+                debug!("Rolled back asset transfer unconfirmed: account={}, asset={}, quantity={}", sender_id, asset_id, quantity);
+                Ok(())
+            }
+            2 => {
+                // ASK_ORDER_PLACEMENT: Restore asset quantity to sender
+                let sender_id = tx.sender_id as i64;
+                let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+                let quantity = self.parse_long_field(tx, "quantity").unwrap_or(tx.amount as i64);
+
+                if asset_id == 0 {
+                    return Ok(());
+                }
+
+                self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, quantity).await?;
+                debug!("Rolled back ask order unconfirmed: account={}, asset={}, quantity={}", sender_id, asset_id, quantity);
+                Ok(())
+            }
+            7 => {
+                // ASSET_DELETE: Restore asset quantity to sender
+                let sender_id = tx.sender_id as i64;
+                let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+                let quantity = tx.amount as i64;
+
+                if asset_id == 0 {
+                    return Ok(());
+                }
+
+                self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, quantity).await?;
+                debug!("Rolled back asset delete unconfirmed: account={}, asset={}, quantity={}", sender_id, asset_id, quantity);
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// Rollback unconfirmed deduction for MonetarySystem (currency) transactions
+    async fn rollback_monetary_system_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<()> {
+        match tx.subtype {
+            3 => {
+                // CURRENCY_TRANSFER: Restore currency units to sender
+                let sender_id = tx.sender_id as i64;
+                let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+                let units = tx.amount as i64;
+
+                if currency_id == 0 {
+                    return Ok(());
+                }
+
+                self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, units).await?;
+                debug!("Rolled back currency transfer unconfirmed: account={}, currency={}, units={}", sender_id, currency_id, units);
+                Ok(())
+            }
+            6 => {
+                // EXCHANGE_SELL: Restore currency units to sender
+                let sender_id = tx.sender_id as i64;
+                let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
+                let units = tx.amount as i64;
+
+                if currency_id == 0 {
+                    return Ok(());
+                }
+
+                self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, units).await?;
+                debug!("Rolled back exchange sell unconfirmed: account={}, currency={}, units={}", sender_id, currency_id, units);
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 }

@@ -24,6 +24,7 @@ pub struct BlockchainVerifier {
     tx_repo: Arc<dyn TransactionRepository>,
     tx_processor: Arc<dyn TransactionProcessor>,
     block_reward_applicator: Arc<BlockRewardApplicator>,
+    pool: sqlx::SqlitePool,
     state: Arc<Mutex<()>>,
 }
 
@@ -33,12 +34,14 @@ impl BlockchainVerifier {
         tx_repo: Arc<dyn TransactionRepository>,
         tx_processor: Arc<dyn TransactionProcessor>,
         block_reward_applicator: Arc<BlockRewardApplicator>,
+        pool: sqlx::SqlitePool,
     ) -> Self {
         Self {
             block_repo,
             tx_repo,
             tx_processor,
             block_reward_applicator,
+            pool,
             state: Arc::new(Mutex::new(())),
         }
     }
@@ -50,6 +53,68 @@ impl BlockchainVerifier {
                 format!("unsupported block version: {}", block.version)
             ));
         }
+        Ok(())
+    }
+
+    /// 验证区块内所有交易
+    ///
+    /// 对应 Java: BlockchainProcessor.validateTransactions()
+    fn validate_transactions(&self, block: &Block) -> Result<()> {
+        let mut total_amount: u64 = 0;
+        let mut total_fee: u64 = 0;
+        let mut total_payload_length: u32 = 0;
+
+        for (idx, tx) in block.transactions.iter().enumerate() {
+            // 1. 验证交易基本字段
+            tx.validate_basic()
+                .map_err(|e| BlockchainError::InvalidTransaction(
+                    format!("transaction {} basic validation failed: {}", idx, e)
+                ))?;
+
+            // 2. 验证交易签名（Curve25519 EC-KCDSA）
+            if !tx.verify_signature() {
+                return Err(BlockchainError::InvalidTransaction(
+                    format!("transaction {} signature verification failed", tx.id)
+                ));
+            }
+
+            // 3. 累加金额和费用
+            total_amount = total_amount.checked_add(tx.amount)
+                .ok_or_else(|| BlockchainError::InvalidTransaction(
+                    format!("transaction {} amount overflow", tx.id)
+                ))?;
+            total_fee = total_fee.checked_add(tx.fee)
+                .ok_or_else(|| BlockchainError::InvalidTransaction(
+                    format!("transaction {} fee overflow", tx.id)
+                ))?;
+
+            // 4. 累加payload长度 (approximate: header + attachment bytes)
+            let tx_payload_len = 176 + tx.attachment_bytes.len() as u32; // MIN_TRANSACTION_SIZE + attachment
+            total_payload_length = total_payload_length.checked_add(tx_payload_len)
+                .ok_or_else(|| BlockchainError::InvalidTransaction(
+                    format!("transaction {} payload length overflow", tx.id)
+                ))?;
+        }
+
+        // 5. 验证区块头中的总金额和总费用
+        if total_amount != block.total_amount {
+            return Err(BlockchainError::InvalidTransaction(
+                format!("total amount mismatch: header={}, computed={}", block.total_amount, total_amount)
+            ));
+        }
+        if total_fee != block.total_fee {
+            return Err(BlockchainError::InvalidTransaction(
+                format!("total fee mismatch: header={}, computed={}", block.total_fee, total_fee)
+            ));
+        }
+
+        // 6. 验证payload长度
+        if block.payload_length != total_payload_length {
+            return Err(BlockchainError::InvalidTransaction(
+                format!("payload length mismatch: header={}, computed={}", block.payload_length, total_payload_length)
+            ));
+        }
+
         Ok(())
     }
 
@@ -80,27 +145,140 @@ impl BlockchainVerifier {
         }
 
         let block_model = BlockModel::from_domain(block)?;
-        
+
         self.block_repo.insert(&block_model).await
             .map_err(|e| BlockchainError::Database(e.to_string()))?;
 
         let block_id = block.get_id() as i64;
-        
+
         if let Some(prev_id) = block.previous_block_id.filter(|&id| id != 0) {
             if let Err(e) = self.block_repo.update_next_block_id(prev_id as i64, block_id).await {
                 warn!("Failed to update next_block_id for block {}: {}", prev_id, e);
             }
         }
-        
+
         for (idx, tx) in block.transactions.iter().enumerate() {
             let mut tx_model = TransactionModel::from_domain(tx)?;
             tx_model.height = block.height as i32;
             tx_model.block_id = block_id;
             tx_model.transaction_index = idx as i16;
-            
+
             if let Err(e) = self.tx_repo.insert(&tx_model).await {
                 warn!("Failed to insert transaction {}: {}", tx.id, e);
             }
+        }
+
+        Ok(())
+    }
+
+    /// Transaction-aware version of insert_block
+    async fn insert_block_tx<'a>(
+        &self,
+        block: &Block,
+        tx: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
+    ) -> anyhow::Result<()> {
+        let block_model = BlockModel::from_domain(block)?;
+
+        // Insert block using raw SQL with transaction
+        sqlx::query(
+            r#"
+            INSERT INTO block (
+                id, version, timestamp, previous_block_id, total_amount,
+                total_fee, payload_length, previous_block_hash, cumulative_difficulty,
+                base_target, next_block_id, height, generation_signature,
+                block_signature, payload_hash, generator_id
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+            "#,
+        )
+        .bind(block_model.id)
+        .bind(block_model.version)
+        .bind(block_model.timestamp)
+        .bind(block_model.previous_block_id)
+        .bind(block_model.total_amount)
+        .bind(block_model.total_fee)
+        .bind(block_model.payload_length)
+        .bind(&block_model.previous_block_hash)
+        .bind(&block_model.cumulative_difficulty)
+        .bind(block_model.base_target)
+        .bind(block_model.next_block_id)
+        .bind(block_model.height)
+        .bind(&block_model.generation_signature)
+        .bind(&block_model.block_signature)
+        .bind(&block_model.payload_hash)
+        .bind(block_model.generator_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to insert block: {}", e))?;
+
+        let block_id = block.get_id() as i64;
+
+        // Update previous block's next_block_id
+        if let Some(prev_id) = block.previous_block_id.filter(|&id| id != 0) {
+            sqlx::query("UPDATE block SET next_block_id = ? WHERE id = ?")
+                .bind(block_id)
+                .bind(prev_id as i64)
+                .execute(&mut **tx)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to update next_block_id: {}", e))?;
+        }
+
+        // Insert transactions
+        for (idx, tx_item) in block.transactions.iter().enumerate() {
+            let mut tx_model = TransactionModel::from_domain(tx_item)?;
+            tx_model.height = block.height as i32;
+            tx_model.block_id = block_id;
+            tx_model.transaction_index = idx as i16;
+
+            sqlx::query(
+                r#"
+                INSERT INTO transaction (
+                    id, deadline, sender_id, recipient_id, amount,
+                    fee, height, block_id, transaction_index, timestamp,
+                    type, subtype, block_timestamp, full_hash, signature,
+                    referenced_transaction_full_hash, attachment_bytes,
+                    version, phased, has_message, has_encrypted_message,
+                    has_public_key_announcement, has_prunable_message,
+                    has_prunable_attachment, ec_block_height, ec_block_id,
+                    has_encrypttoself_message, has_prunable_encrypted_message
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                "#,
+            )
+            .bind(tx_model.id)
+            .bind(tx_model.deadline)
+            .bind(tx_model.sender_id)
+            .bind(tx_model.recipient_id)
+            .bind(tx_model.amount)
+            .bind(tx_model.fee)
+            .bind(tx_model.height)
+            .bind(tx_model.block_id)
+            .bind(tx_model.transaction_index)
+            .bind(tx_model.timestamp)
+            .bind(tx_model.r#type)
+            .bind(tx_model.subtype)
+            .bind(tx_model.block_timestamp)
+            .bind(&tx_model.full_hash)
+            .bind(&tx_model.signature)
+            .bind(&tx_model.referenced_transaction_full_hash)
+            .bind(&tx_model.attachment_bytes)
+            .bind(tx_model.version)
+            .bind(tx_model.phased)
+            .bind(tx_model.has_message)
+            .bind(tx_model.has_encrypted_message)
+            .bind(tx_model.has_public_key_announcement)
+            .bind(tx_model.has_prunable_message)
+            .bind(tx_model.has_prunable_attachment)
+            .bind(tx_model.ec_block_height)
+            .bind(tx_model.ec_block_id)
+            .bind(tx_model.has_encrypttoself_message)
+            .bind(tx_model.has_prunable_encrypted_message)
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to insert transaction {}: {}", tx_item.id, e))?;
         }
 
         Ok(())
@@ -114,6 +292,18 @@ impl BlockchainVerifier {
             height: model.height,
             id: model.id as u64,
         }
+    }
+
+    /// Transaction-aware version of accept_block
+    /// Note: The tx_processor and block_reward_applicator use their own connections,
+    /// so this method delegates to the original accept_block.
+    /// The database transaction protects the block/transaction inserts.
+    async fn accept_block_tx<'a>(
+        &self,
+        block: &Block,
+        _tx: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
+    ) -> anyhow::Result<()> {
+        self.accept_block(block).await
     }
 
     /// Execute accept flow (corresponds to Java's BlockProcessor.accept())
@@ -212,6 +402,20 @@ impl BlockchainVerifier {
                     transaction.id, e
                 ));
             }
+
+            // Java Transaction.apply(): if (attachmentIsPhased()) {
+            //     senderAccount.addToBalance(type.getLedgerEvent(), getId(), 0, -this.getFeeNQT());
+            // }
+            // For phased transactions, deduct fee from confirmed balance separately
+            if transaction.phased {
+                if let Err(e) = self.tx_processor.apply_phased_fee(transaction).await {
+                    error!("CRITICAL: Failed to apply phased fee for tx {}: {}", transaction.id, e);
+                    return Err(anyhow::anyhow!(
+                        "phased fee application failed (tx={}): {}",
+                        transaction.id, e
+                    ));
+                }
+            }
         }
         debug!("✅ Phase 3 complete: {} transactions executed", block.transactions.len());
 
@@ -252,23 +456,90 @@ impl BlockVerifier for BlockchainVerifier {
         // Step 2: Basic validation
         self.validate_basic(&block)?;
 
+        // Step 2.5: Verify block signature (Curve25519 EC-KCDSA)
+        // 对应 Java: block.verifyBlockSignature()
+        if block_height > 0 {
+            match block.verify_block_signature() {
+                Ok(true) => {
+                    debug!("Block signature verified: height={}", block_height);
+                }
+                Ok(false) => {
+                    return Err(anyhow::anyhow!(
+                        "Block signature verification failed at height {}", block_height
+                    ));
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Block signature verification error at height {}: {}", block_height, e
+                    ));
+                }
+            }
+        }
+
+        // Step 2.6: Validate all transactions in the block
+        // 对应 Java: BlockchainProcessor.validateTransactions()
+        self.validate_transactions(&block)?;
+
         // Step 3: Check if block already exists
         if let Ok(Some(_)) = self.block_repo.find_by_height(block_height as i32).await {
             debug!("Block at height {} already exists, skipping", block_height);
             return Ok(());
         }
 
-        // Step 4: Calculate difficulty parameters
+        // Step 4: Validate payload hash
+        // Reference: Java BlockchainProcessor - validates payload hash
         let computed_payload_hash = self.compute_payload_hash(&block.transactions)?;
         if computed_payload_hash != block.payload_hash {
-            debug!("Payload hash mismatch: computed {:?} != block {:?}",
-                   computed_payload_hash, block.payload_hash);
+            return Err(anyhow::anyhow!(
+                "Payload hash mismatch at height {}: computed {:?} != block {:?}",
+                block_height, computed_payload_hash, block.payload_hash
+            ));
         }
 
         if block_height > 0 {
             let prev_height = (block_height - 1) as i32;
             match self.block_repo.find_by_height(prev_height).await {
                 Ok(Some(prev_model)) => {
+                    // Verify generation signature
+                    // 对应 Java: block.verifyGenerationSignature()
+                    if block.version >= 2 {
+                        match block.verify_generation_signature(&prev_model.generation_signature) {
+                            Ok(true) => {
+                                debug!("Generation signature verified: height={}", block_height);
+                            }
+                            Ok(false) => {
+                                return Err(anyhow::anyhow!(
+                                    "Generation signature verification failed at height {}", block_height
+                                ));
+                            }
+                            Err(e) => {
+                                return Err(anyhow::anyhow!(
+                                    "Generation signature verification error at height {}: {}", block_height, e
+                                ));
+                            }
+                        }
+                    }
+
+                    // Verify timestamp ordering: current block timestamp must be > previous block timestamp
+                    // Reference: Java BlockchainProcessor
+                    if block.timestamp <= prev_model.timestamp as u32 {
+                        return Err(anyhow::anyhow!(
+                            "Block timestamp {} at height {} is not greater than previous block timestamp {}",
+                            block.timestamp, block_height, prev_model.timestamp
+                        ));
+                    }
+
+                    // Verify previous block hash matches
+                    // Reference: Java BlockchainProcessor - validates previousBlockId and previousBlockHash
+                    if let Some(prev_block_id) = block.previous_block_id {
+                        if prev_block_id != 0 && prev_block_id as i64 != prev_model.id {
+                            return Err(anyhow::anyhow!(
+                                "Previous block ID mismatch at height {}: block has {}, expected {}",
+                                block_height, prev_block_id, prev_model.id
+                            ));
+                        }
+                    }
+
                     let prev_data = Self::model_to_previous_block_data(&prev_model);
 
                     let block_hm2 = if prev_data.height >= 2 && prev_data.height % 2 == 0 {
@@ -314,16 +585,30 @@ impl BlockVerifier for BlockchainVerifier {
             block.cumulative_difficulty = biguint_to_signed_bytes_be(diff_add);
         }
 
+        // Step 5 & 6: Wrap insert and accept in a database transaction
+        // 对应 Java: Db.beginTransaction() / Db.commitTransaction()
+        let mut db_tx = self.pool.begin().await
+            .map_err(|e| anyhow::anyhow!("Failed to begin database transaction: {}", e))?;
+
         // Step 5: Insert block to database
-        self.insert_block(&block).await?;
+        match self.insert_block_tx(&block, &mut db_tx).await {
+            Ok(()) => {}
+            Err(e) => {
+                db_tx.rollback().await.ok();
+                return Err(e);
+            }
+        }
 
         // Step 6: Execute accept flow (two-phase transaction commit)
-        match self.accept_block(&block).await {
+        match self.accept_block_tx(&block, &mut db_tx).await {
             Ok(()) => {
+                db_tx.commit().await
+                    .map_err(|e| anyhow::anyhow!("Failed to commit database transaction: {}", e))?;
                 info!("Block accepted: height={}, id={}, txs={}", block_height, block_id, block.transactions.len());
                 Ok(())
             }
             Err(e) => {
+                db_tx.rollback().await.ok();
                 warn!(
                     "❌ Failed to accept block at height={}: {}",
                     block_height, e

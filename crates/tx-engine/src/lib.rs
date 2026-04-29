@@ -11,6 +11,7 @@
 
 pub mod types;
 pub mod attachment;
+#[deprecated(since = "0.1.0", note = "tx_types is deprecated. Use processor::DatabaseTransactionProcessor instead.")]
 pub mod tx_types;
 pub mod validation;
 pub mod processor;
@@ -34,6 +35,8 @@ pub use attachment::{
     LeaseAttachment, SetPropertyAttachment, MessageAttachment,
     TransactionDbModel,
 };
+#[allow(deprecated)]
+#[deprecated(since = "0.1.0", note = "tx_types types are deprecated. Use processor::DatabaseTransactionProcessor instead.")]
 pub use tx_types::{
     TxTypeHandler, TxTypeRegistry, TxTypeError, TxTypeResult,
     TxExecutionContext,
@@ -95,9 +98,6 @@ pub mod prelude {
         SetPropertyAttachment,
         MessageAttachment,
         TransactionDbModel,
-        TxTypeHandler,
-        TxTypeRegistry,
-        TxExecutionContext,
         TransactionValidator,
         TransactionProcessor,
         DatabaseTransactionProcessor,

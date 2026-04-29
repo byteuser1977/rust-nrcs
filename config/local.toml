@@ -4,7 +4,7 @@
 listen_addr = "/ip4/0.0.0.0/tcp/17975"
 external_addr = "/ip4/0.0.0.0/tcp/17975"
 bootstrap_nodes = [
-  "/ip4/192.168.110.214/tcp/17974",
+  "/ip4/192.168.2.164/tcp/17974",
 ]
 max_connections = 2000
 connection_ttl_secs = 600

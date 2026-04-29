@@ -27,6 +27,14 @@ pub const MAX_BALANCE_FXT: u64 = MAX_BALANCE_NRCS;
 
 pub const GENESIS_BLOCK_ID: u64 = 3488276486778630462;
 
+// Genesis creator public key (from Java Genesis.CREATOR_PUBLIC_KEY)
+pub const GENESIS_CREATOR_PUBLIC_KEY: [u8; 32] = [
+    183, 242, 35, 45, 218, 231, 117, 68,
+    105, 14, 20, 151, 241, 181, 142, 39,
+    64, 57, 195, 176, 249, 157, 155, 96,
+    120, 242, 82, 9, 38, 35, 11, 38,
+];
+
 // ============ PoS共识常量 ============
 
 pub const INITIAL_BASE_TARGET: u64 = 153722867;

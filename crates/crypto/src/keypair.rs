@@ -184,11 +184,20 @@ mod tests {
 
     #[test]
     fn test_keypair_sign_verify() {
-        let kp_ed = KeyPair::Ed25519(SigningKey::generate(&mut rand::thread_rng()));
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let mut seed = [0u8; 32];
+        rng.fill(&mut seed);
+
+        let public_key = crate::algorithms::Curve25519::derive_public_key(&seed);
+        let kp = KeyPair::Curve25519 {
+            public_key,
+            secret_key: seed,
+        };
         let msg = b"test";
-        let sig = kp_ed.sign(msg);
-        let pk_ed = kp_ed.public_key();
-        assert!(crate::verify(&pk_ed, msg, &sig).is_ok());
+        let sig = kp.sign(msg);
+        let pk = kp.public_key();
+        assert!(crate::verify(&pk, msg, &sig).is_ok());
     }
 
     #[test]

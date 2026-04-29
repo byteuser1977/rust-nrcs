@@ -67,9 +67,20 @@ impl ProcessBlockHandler {
         debug!("Received block: height={}, generator={:?}", block.height, block.generator_id);
 
         // 验证并处理区块
-        match self.verifier.verify_and_process(block).await {
+        match self.verifier.verify_and_process(block.clone()).await {
             Ok(_) => {
                 info!("Block verified and processed successfully");
+
+                // Java: if (block.getTimestamp() >= curTime - 600) { Peers.sendToSomePeers(block); }
+                // TODO: Implement block broadcast to peers when P2P infrastructure is ready
+                let current_time = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs() as i64;
+                if block.timestamp as i64 >= current_time - 600 {
+                    debug!("Block height={} should be broadcast to peers (not yet implemented)", block.height);
+                }
+
                 serde_json::json!({})
             }
             Err(e) => {

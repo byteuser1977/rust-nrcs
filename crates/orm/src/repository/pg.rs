@@ -859,6 +859,23 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         }
         Ok(())
     }
+
+    async fn add_to_unconfirmed_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE account_asset
+            SET unconfirmed_quantity = unconfirmed_quantity + $3, latest = TRUE
+            WHERE account_id = $1 AND asset_id = $2
+            "#,
+            account_id,
+            asset_id,
+            delta
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
 }
 
 #[async_trait]

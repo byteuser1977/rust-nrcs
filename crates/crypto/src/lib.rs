@@ -179,6 +179,9 @@ pub enum CryptoError {
     #[error("SM4 error: {0}")]
     Sm4Error(String),
 
+    #[error("AES error: {0}")]
+    AesError(String),
+
     #[error("configuration error: {0}")]
     ConfigurationError(String),
 

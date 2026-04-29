@@ -6,8 +6,7 @@
 use crate::{
     algorithms::{HashAlgorithm, SignatureAlgorithm, GcmAlgorithm},
     config::CryptoConfig,
-    algorithms::{Ed25519, Sha256, Sm3, Sm4Gcm},
-    // algorithms::Curve25519, // TODO: 重构中，暂时禁用
+    algorithms::{Ed25519, Curve25519, Sha256, Sm3, Sm4Gcm},
     CryptoError, CryptoResult, Hash256, PublicKey, SecretKey, Signature, keypair::KeyPair,
 };
 use once_cell::sync::OnceCell;
@@ -35,7 +34,7 @@ impl Crypto {
 
         let signer: Arc<dyn SignatureAlgorithm> = match config.signature.as_str() {
             "ed25519" => Arc::new(Ed25519),
-            // "curve25519" => Arc::new(Curve25519), // TODO: 重构中，暂时禁用
+            "curve25519" => Arc::new(Curve25519),
             _ => return Err(CryptoError::ConfigurationError(format!("unknown signature algorithm: {}", config.signature))),
         };
 

@@ -680,21 +680,13 @@ impl Transaction {
         flags
     }
 
+    /// 验证交易签名（使用 Curve25519 EC-KCDSA）
+    ///
+    /// 对应 Java: Crypto.verify(signature, message, publicKey, enforceCanonical)
     pub fn verify_signature(&self) -> bool {
-        use ed25519_dalek::{Verifier, Signature as EdSignature, PublicKey};
-
-        let public_key = match PublicKey::from_bytes(&self.sender_public_key.0) {
-            Ok(pk) => pk,
-            Err(_) => return false,
-        };
-
-        let signature = match EdSignature::from_bytes(&self.signature.0) {
-            Ok(sig) => sig,
-            Err(_) => return false,
-        };
-
+        let pub_key = crypto::PublicKey::Curve25519(self.sender_public_key.0);
         let message = self.serialize_for_signing();
-        public_key.verify(&message, &signature).is_ok()
+        crypto::verify(&pub_key, &message, &self.signature.0).is_ok()
     }
 
     pub fn validate_basic(&self) -> Result<()> {

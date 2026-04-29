@@ -553,6 +553,24 @@ impl AccountRepository for SqliteAccountRepository {
     }
 
     async fn add_to_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+        // 对应 Java: Math.addExact() 溢出检查 + checkBalance() 负数检查
+        // First check if the result would be negative
+        if amount < 0 {
+            let account = self.find_by_account_id(account_id).await?;
+            if let Some(acc) = account {
+                let new_balance = acc.balance.checked_add(amount)
+                    .ok_or_else(|| RepositoryError::Validation(
+                        format!("balance overflow for account {}", account_id)
+                    ))?;
+                if new_balance < 0 {
+                    return Err(RepositoryError::Validation(
+                        format!("insufficient balance for account {}: have {}, need {}",
+                            account_id, acc.balance, -amount)
+                    ));
+                }
+            }
+        }
+
         let result = sqlx::query(
             r#"
             UPDATE account
@@ -565,7 +583,7 @@ impl AccountRepository for SqliteAccountRepository {
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
-        
+
         if result.rows_affected() == 0 {
             let _account = self.get_or_create(account_id).await?;
             sqlx::query(
@@ -585,6 +603,23 @@ impl AccountRepository for SqliteAccountRepository {
     }
 
     async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+        // 对应 Java: Math.addExact() 溢出检查
+        if amount < 0 {
+            let account = self.find_by_account_id(account_id).await?;
+            if let Some(acc) = account {
+                let new_balance = acc.unconfirmed_balance.checked_add(amount)
+                    .ok_or_else(|| RepositoryError::Validation(
+                        format!("unconfirmed balance overflow for account {}", account_id)
+                    ))?;
+                if new_balance < 0 {
+                    return Err(RepositoryError::Validation(
+                        format!("insufficient unconfirmed balance for account {}: have {}, need {}",
+                            account_id, acc.unconfirmed_balance, -amount)
+                    ));
+                }
+            }
+        }
+
         let result = sqlx::query(
             r#"
             UPDATE account
@@ -597,7 +632,7 @@ impl AccountRepository for SqliteAccountRepository {
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
-        
+
         if result.rows_affected() == 0 {
             let _account = self.get_or_create(account_id).await?;
             sqlx::query(
@@ -879,6 +914,23 @@ impl AccountAssetRepository for SqliteAccountAssetRepository {
         }
         Ok(())
     }
+
+    async fn add_to_unconfirmed_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE account_asset
+            SET unconfirmed_quantity = unconfirmed_quantity + ?, latest = 1
+            WHERE account_id = ? AND asset_id = ?
+            "#,
+        )
+        .bind(delta)
+        .bind(account_id)
+        .bind(asset_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -1014,6 +1066,39 @@ impl AssetRepository for SqliteAssetRepository {
         .await
         .map_err(RepositoryError::DbError)?;
         Ok(records)
+    }
+
+    async fn increase_quantity(&self, asset_id: i64, delta: i64) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE asset
+            SET quantity = quantity + ?, latest = 1
+            WHERE id = ? AND latest = 1
+            "#,
+        )
+        .bind(delta)
+        .bind(asset_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn decrease_quantity(&self, asset_id: i64, delta: i64) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE asset
+            SET quantity = quantity - ?, latest = 1
+            WHERE id = ? AND latest = 1 AND quantity >= ?
+            "#,
+        )
+        .bind(delta)
+        .bind(asset_id)
+        .bind(delta)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 }
 
@@ -3137,6 +3222,23 @@ impl AccountCurrencyRepository for SqliteAccountCurrencyRepository {
         .map_err(RepositoryError::DbError)?;
         Ok(())
     }
+
+    async fn add_to_unconfirmed_units(&self, account_id: i64, currency_id: i64, delta: i64) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE account_currency
+            SET unconfirmed_units = unconfirmed_units + ?, latest = 1
+            WHERE account_id = ? AND currency_id = ?
+            "#,
+        )
+        .bind(delta)
+        .bind(account_id)
+        .bind(currency_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -4184,5 +4286,1382 @@ impl Repository<CurrencyMintModel> for SqliteCurrencyMintRepository {
             .await
             .map_err(RepositoryError::DbError)?;
         Ok(count)
+    }
+}
+
+// ============================================================================
+// AccountInfoRepository
+// ============================================================================
+
+pub struct SqliteAccountInfoRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAccountInfoRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<AccountInfoModel> for SqliteAccountInfoRepository {
+    async fn insert(&self, model: &AccountInfoModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO account_info (account_id, name, description, height, latest)
+            VALUES (?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.account_id)
+        .bind(&model.name)
+        .bind(&model.description)
+        .bind(model.height)
+        .bind(model.latest)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountInfoModel>> {
+        let record = sqlx::query_as::<_, AccountInfoModel>(
+            "SELECT * FROM account_info WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, model: &AccountInfoModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE account_info SET
+                name = ?, description = ?, height = ?, latest = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(&model.name)
+        .bind(&model.description)
+        .bind(model.height)
+        .bind(model.latest)
+        .bind(model.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM account_info WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountInfoModel>> {
+        let records = sqlx::query_as::<_, AccountInfoModel>(
+            "SELECT * FROM account_info ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_info")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl AccountInfoRepository for SqliteAccountInfoRepository {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Option<AccountInfoModel>> {
+        let record = sqlx::query_as::<_, AccountInfoModel>(
+            "SELECT * FROM account_info WHERE account_id = ? AND latest = 1"
+        )
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn upsert(&self, model: &AccountInfoModel) -> RepositoryResult<()> {
+        // Mark old entries as not latest
+        sqlx::query(
+            "UPDATE account_info SET latest = 0 WHERE account_id = ? AND latest = 1"
+        )
+        .bind(model.account_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+
+        // Insert new entry
+        self.insert(model).await
+    }
+}
+
+// ============================================================================
+// AccountLeaseRepository
+// ============================================================================
+
+pub struct SqliteAccountLeaseRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAccountLeaseRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<AccountLeaseModel> for SqliteAccountLeaseRepository {
+    async fn insert(&self, model: &AccountLeaseModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO account_lease (
+                lessor_id, current_leasing_height_from, current_leasing_height_to,
+                current_lessee_id, next_leasing_height_from, next_leasing_height_to,
+                next_lessee_id, height, latest
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.lessor_id)
+        .bind(model.current_leasing_height_from)
+        .bind(model.current_leasing_height_to)
+        .bind(model.current_lessee_id)
+        .bind(model.next_leasing_height_from)
+        .bind(model.next_leasing_height_to)
+        .bind(model.next_lessee_id)
+        .bind(model.height)
+        .bind(model.latest)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountLeaseModel>> {
+        let record = sqlx::query_as::<_, AccountLeaseModel>(
+            "SELECT * FROM account_lease WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, model: &AccountLeaseModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE account_lease SET
+                current_leasing_height_from = ?, current_leasing_height_to = ?,
+                current_lessee_id = ?, next_leasing_height_from = ?,
+                next_leasing_height_to = ?, next_lessee_id = ?,
+                height = ?, latest = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(model.current_leasing_height_from)
+        .bind(model.current_leasing_height_to)
+        .bind(model.current_lessee_id)
+        .bind(model.next_leasing_height_from)
+        .bind(model.next_leasing_height_to)
+        .bind(model.next_lessee_id)
+        .bind(model.height)
+        .bind(model.latest)
+        .bind(model.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM account_lease WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountLeaseModel>> {
+        let records = sqlx::query_as::<_, AccountLeaseModel>(
+            "SELECT * FROM account_lease ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_lease")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl AccountLeaseRepository for SqliteAccountLeaseRepository {
+    async fn find_by_account(&self, lessor_id: i64) -> RepositoryResult<Option<AccountLeaseModel>> {
+        let record = sqlx::query_as::<_, AccountLeaseModel>(
+            "SELECT * FROM account_lease WHERE lessor_id = ? AND latest = 1"
+        )
+        .bind(lessor_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn upsert(&self, model: &AccountLeaseModel) -> RepositoryResult<()> {
+        // Mark old entries as not latest
+        sqlx::query(
+            "UPDATE account_lease SET latest = 0 WHERE lessor_id = ? AND latest = 1"
+        )
+        .bind(model.lessor_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+
+        // Insert new entry
+        self.insert(model).await
+    }
+}
+
+// ============================================================================
+// AccountPropertyRepository
+// ============================================================================
+
+pub struct SqliteAccountPropertyRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAccountPropertyRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<AccountPropertyModel> for SqliteAccountPropertyRepository {
+    async fn insert(&self, model: &AccountPropertyModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO account_property (id, recipient_id, setter_id, property, value, height, latest)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.id)
+        .bind(model.recipient_id)
+        .bind(model.setter_id)
+        .bind(&model.property)
+        .bind(&model.value)
+        .bind(model.height)
+        .bind(model.latest)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountPropertyModel>> {
+        let record = sqlx::query_as::<_, AccountPropertyModel>(
+            "SELECT * FROM account_property WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, model: &AccountPropertyModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE account_property SET
+                recipient_id = ?, setter_id = ?, property = ?, value = ?,
+                height = ?, latest = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(model.recipient_id)
+        .bind(model.setter_id)
+        .bind(&model.property)
+        .bind(&model.value)
+        .bind(model.height)
+        .bind(model.latest)
+        .bind(model.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM account_property WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountPropertyModel>> {
+        let records = sqlx::query_as::<_, AccountPropertyModel>(
+            "SELECT * FROM account_property ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_property")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl AccountPropertyRepository for SqliteAccountPropertyRepository {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountPropertyModel>> {
+        let records = sqlx::query_as::<_, AccountPropertyModel>(
+            "SELECT * FROM account_property WHERE recipient_id = ? AND latest = 1"
+        )
+        .bind(account_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_property(&self, account_id: i64, property: &str) -> RepositoryResult<Option<AccountPropertyModel>> {
+        let record = sqlx::query_as::<_, AccountPropertyModel>(
+            "SELECT * FROM account_property WHERE recipient_id = ? AND property = ? AND latest = 1"
+        )
+        .bind(account_id)
+        .bind(property)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn upsert(&self, model: &AccountPropertyModel) -> RepositoryResult<()> {
+        // Mark old entries as not latest
+        sqlx::query(
+            "UPDATE account_property SET latest = 0 WHERE recipient_id = ? AND property = ? AND latest = 1"
+        )
+        .bind(model.recipient_id)
+        .bind(&model.property)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+
+        // Insert new entry
+        self.insert(model).await
+    }
+
+    async fn delete_by_id(&self, id: i64) -> RepositoryResult<()> {
+        sqlx::query("UPDATE account_property SET latest = 0 WHERE id = ? AND latest = 1")
+            .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+}
+
+// ============================================================================
+// AccountControlPhasingRepository
+// ============================================================================
+
+pub struct SqliteAccountControlPhasingRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAccountControlPhasingRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<AccountControlPhasingModel> for SqliteAccountControlPhasingRepository {
+    async fn insert(&self, model: &AccountControlPhasingModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO account_control_phasing (
+                account_id, whitelist, voting_model, quorum, min_balance,
+                holding_id, min_balance_model, max_fees, min_duration,
+                max_duration, height, latest
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.account_id)
+        .bind(&model.whitelist)
+        .bind(model.voting_model)
+        .bind(model.quorum)
+        .bind(model.min_balance)
+        .bind(model.holding_id)
+        .bind(model.min_balance_model)
+        .bind(model.max_fees)
+        .bind(model.min_duration)
+        .bind(model.max_duration)
+        .bind(model.height)
+        .bind(model.latest)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountControlPhasingModel>> {
+        let record = sqlx::query_as::<_, AccountControlPhasingModel>(
+            "SELECT * FROM account_control_phasing WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, model: &AccountControlPhasingModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE account_control_phasing SET
+                whitelist = ?, voting_model = ?, quorum = ?, min_balance = ?,
+                holding_id = ?, min_balance_model = ?, max_fees = ?,
+                min_duration = ?, max_duration = ?, height = ?, latest = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(&model.whitelist)
+        .bind(model.voting_model)
+        .bind(model.quorum)
+        .bind(model.min_balance)
+        .bind(model.holding_id)
+        .bind(model.min_balance_model)
+        .bind(model.max_fees)
+        .bind(model.min_duration)
+        .bind(model.max_duration)
+        .bind(model.height)
+        .bind(model.latest)
+        .bind(model.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM account_control_phasing WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountControlPhasingModel>> {
+        let records = sqlx::query_as::<_, AccountControlPhasingModel>(
+            "SELECT * FROM account_control_phasing ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_control_phasing")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl AccountControlPhasingRepository for SqliteAccountControlPhasingRepository {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Option<AccountControlPhasingModel>> {
+        let record = sqlx::query_as::<_, AccountControlPhasingModel>(
+            "SELECT * FROM account_control_phasing WHERE account_id = ? AND latest = 1"
+        )
+        .bind(account_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn upsert(&self, model: &AccountControlPhasingModel) -> RepositoryResult<()> {
+        // Mark old entries as not latest
+        sqlx::query(
+            "UPDATE account_control_phasing SET latest = 0 WHERE account_id = ? AND latest = 1"
+        )
+        .bind(model.account_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+
+        // Insert new entry
+        self.insert(model).await
+    }
+}
+
+// ============================================================================
+// AssetDeleteRepository
+// ============================================================================
+
+pub struct SqliteAssetDeleteRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAssetDeleteRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<AssetDeleteModel> for SqliteAssetDeleteRepository {
+    async fn insert(&self, model: &AssetDeleteModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO asset_delete (asset_id, account_id, quantity, height)
+            VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.asset_id)
+        .bind(model.account_id)
+        .bind(model.quantity)
+        .bind(model.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetDeleteModel>> {
+        let record = sqlx::query_as::<_, AssetDeleteModel>(
+            "SELECT * FROM asset_delete WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _model: &AssetDeleteModel) -> RepositoryResult<()> {
+        // Asset deletes are immutable
+        Ok(())
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        // Asset deletes are immutable
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AssetDeleteModel>> {
+        let records = sqlx::query_as::<_, AssetDeleteModel>(
+            "SELECT * FROM asset_delete ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset_delete")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl AssetDeleteRepository for SqliteAssetDeleteRepository {
+    async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetDeleteModel>> {
+        let records = sqlx::query_as::<_, AssetDeleteModel>(
+            "SELECT * FROM asset_delete WHERE asset_id = ? ORDER BY height DESC"
+        )
+        .bind(asset_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+}
+
+// ============================================================================
+// AssetDividendRepository
+// ============================================================================
+
+pub struct SqliteAssetDividendRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteAssetDividendRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<AssetDividendModel> for SqliteAssetDividendRepository {
+    async fn insert(&self, model: &AssetDividendModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO asset_dividend (id, asset_id, amount, dividend_height, total_dividend, num_accounts, timestamp, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.id)
+        .bind(model.asset_id)
+        .bind(model.amount)
+        .bind(model.dividend_height)
+        .bind(model.total_dividend)
+        .bind(model.num_accounts)
+        .bind(model.timestamp)
+        .bind(model.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetDividendModel>> {
+        let record = sqlx::query_as::<_, AssetDividendModel>(
+            "SELECT * FROM asset_dividend WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _model: &AssetDividendModel) -> RepositoryResult<()> {
+        // Dividends are immutable
+        Ok(())
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        // Dividends are immutable
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AssetDividendModel>> {
+        let records = sqlx::query_as::<_, AssetDividendModel>(
+            "SELECT * FROM asset_dividend ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset_dividend")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl AssetDividendRepository for SqliteAssetDividendRepository {
+    async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetDividendModel>> {
+        let records = sqlx::query_as::<_, AssetDividendModel>(
+            "SELECT * FROM asset_dividend WHERE asset_id = ? ORDER BY height DESC"
+        )
+        .bind(asset_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+}
+
+// ============================================================================
+// PhasingPollRepository
+// ============================================================================
+
+pub struct SqlitePhasingPollRepository {
+    pool: SqlitePool,
+}
+
+impl SqlitePhasingPollRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<PhasingPollModel> for SqlitePhasingPollRepository {
+    async fn insert(&self, model: &PhasingPollModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO phasing_poll (id, account_id, whitelist_size, finish_height, voting_model, quorum,
+                min_balance, holding_id, min_balance_model, hashed_secret, algorithm, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.id)
+        .bind(model.account_id)
+        .bind(model.whitelist_size)
+        .bind(model.finish_height)
+        .bind(model.voting_model)
+        .bind(model.quorum)
+        .bind(model.min_balance)
+        .bind(model.holding_id)
+        .bind(model.min_balance_model)
+        .bind(&model.hashed_secret)
+        .bind(model.algorithm)
+        .bind(model.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingPollModel>> {
+        let record = sqlx::query_as::<_, PhasingPollModel>(
+            "SELECT * FROM phasing_poll WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, model: &PhasingPollModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE phasing_poll SET
+                account_id = ?, whitelist_size = ?, finish_height = ?, voting_model = ?, quorum = ?,
+                min_balance = ?, holding_id = ?, min_balance_model = ?,
+                hashed_secret = ?, algorithm = ?, height = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(model.account_id)
+        .bind(model.whitelist_size)
+        .bind(model.finish_height)
+        .bind(model.voting_model)
+        .bind(model.quorum)
+        .bind(model.min_balance)
+        .bind(model.holding_id)
+        .bind(model.min_balance_model)
+        .bind(&model.hashed_secret)
+        .bind(model.algorithm)
+        .bind(model.height)
+        .bind(model.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM phasing_poll WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingPollModel>> {
+        let records = sqlx::query_as::<_, PhasingPollModel>(
+            "SELECT * FROM phasing_poll ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM phasing_poll")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl PhasingPollRepository for SqlitePhasingPollRepository {
+    async fn find_by_poll_id(&self, id: i64) -> RepositoryResult<Option<PhasingPollModel>> {
+        let record = sqlx::query_as::<_, PhasingPollModel>(
+            "SELECT * FROM phasing_poll WHERE id = ?"
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn upsert(&self, model: &PhasingPollModel) -> RepositoryResult<()> {
+        // Try to find existing record
+        if let Some(existing) = self.find_by_poll_id(model.id).await? {
+            // Update existing
+            let mut updated = model.clone();
+            updated.db_id = existing.db_id;
+            self.update(&updated).await
+        } else {
+            // Insert new
+            self.insert(model).await
+        }
+    }
+}
+
+// ============================================================================
+// PhasingPollLinkedTransactionRepository
+// ============================================================================
+
+pub struct SqlitePhasingPollLinkedTransactionRepository {
+    pool: SqlitePool,
+}
+
+impl SqlitePhasingPollLinkedTransactionRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<PhasingPollLinkedTransactionModel> for SqlitePhasingPollLinkedTransactionRepository {
+    async fn insert(&self, model: &PhasingPollLinkedTransactionModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO phasing_poll_linked_transaction (transaction_id, linked_full_hash, linked_transaction_id, height)
+            VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.transaction_id)
+        .bind(&model.linked_full_hash)
+        .bind(model.linked_transaction_id)
+        .bind(model.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingPollLinkedTransactionModel>> {
+        let record = sqlx::query_as::<_, PhasingPollLinkedTransactionModel>(
+            "SELECT * FROM phasing_poll_linked_transaction WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _model: &PhasingPollLinkedTransactionModel) -> RepositoryResult<()> {
+        // Linked transactions are immutable
+        Ok(())
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        // Linked transactions are immutable
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingPollLinkedTransactionModel>> {
+        let records = sqlx::query_as::<_, PhasingPollLinkedTransactionModel>(
+            "SELECT * FROM phasing_poll_linked_transaction ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM phasing_poll_linked_transaction")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl PhasingPollLinkedTransactionRepository for SqlitePhasingPollLinkedTransactionRepository {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingPollLinkedTransactionModel>> {
+        let records = sqlx::query_as::<_, PhasingPollLinkedTransactionModel>(
+            "SELECT * FROM phasing_poll_linked_transaction WHERE transaction_id = ?"
+        )
+        .bind(poll_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+}
+
+// ============================================================================
+// PhasingPollResultRepository
+// ============================================================================
+
+pub struct SqlitePhasingPollResultRepository {
+    pool: SqlitePool,
+}
+
+impl SqlitePhasingPollResultRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<PhasingPollResultModel> for SqlitePhasingPollResultRepository {
+    async fn insert(&self, model: &PhasingPollResultModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO phasing_poll_result (id, result, approved, height)
+            VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.id)
+        .bind(model.result)
+        .bind(model.approved)
+        .bind(model.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingPollResultModel>> {
+        let record = sqlx::query_as::<_, PhasingPollResultModel>(
+            "SELECT * FROM phasing_poll_result WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, model: &PhasingPollResultModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE phasing_poll_result SET
+                id = ?, result = ?, approved = ?, height = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(model.id)
+        .bind(model.result)
+        .bind(model.approved)
+        .bind(model.height)
+        .bind(model.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM phasing_poll_result WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingPollResultModel>> {
+        let records = sqlx::query_as::<_, PhasingPollResultModel>(
+            "SELECT * FROM phasing_poll_result ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM phasing_poll_result")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl PhasingPollResultRepository for SqlitePhasingPollResultRepository {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Option<PhasingPollResultModel>> {
+        let record = sqlx::query_as::<_, PhasingPollResultModel>(
+            "SELECT * FROM phasing_poll_result WHERE id = ?"
+        )
+        .bind(poll_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn upsert(&self, model: &PhasingPollResultModel) -> RepositoryResult<()> {
+        if let Some(existing) = self.find_by_poll(model.id).await? {
+            let mut updated = model.clone();
+            updated.db_id = existing.db_id;
+            self.update(&updated).await
+        } else {
+            self.insert(model).await
+        }
+    }
+}
+
+// ============================================================================
+// PhasingPollVoterRepository
+// ============================================================================
+
+pub struct SqlitePhasingPollVoterRepository {
+    pool: SqlitePool,
+}
+
+impl SqlitePhasingPollVoterRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<PhasingPollVoterModel> for SqlitePhasingPollVoterRepository {
+    async fn insert(&self, model: &PhasingPollVoterModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO phasing_poll_voter (transaction_id, voter_id, height)
+            VALUES (?, ?, ?)
+            "#,
+        )
+        .bind(model.transaction_id)
+        .bind(model.voter_id)
+        .bind(model.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingPollVoterModel>> {
+        let record = sqlx::query_as::<_, PhasingPollVoterModel>(
+            "SELECT * FROM phasing_poll_voter WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _model: &PhasingPollVoterModel) -> RepositoryResult<()> {
+        // Voters are immutable
+        Ok(())
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        // Voters are immutable
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingPollVoterModel>> {
+        let records = sqlx::query_as::<_, PhasingPollVoterModel>(
+            "SELECT * FROM phasing_poll_voter ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM phasing_poll_voter")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl PhasingPollVoterRepository for SqlitePhasingPollVoterRepository {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingPollVoterModel>> {
+        let records = sqlx::query_as::<_, PhasingPollVoterModel>(
+            "SELECT * FROM phasing_poll_voter WHERE transaction_id = ?"
+        )
+        .bind(poll_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+}
+
+// ============================================================================
+// PhasingVoteRepository
+// ============================================================================
+
+pub struct SqlitePhasingVoteRepository {
+    pool: SqlitePool,
+}
+
+impl SqlitePhasingVoteRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<PhasingVoteModel> for SqlitePhasingVoteRepository {
+    async fn insert(&self, model: &PhasingVoteModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO phasing_vote (vote_id, transaction_id, voter_id, height)
+            VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.vote_id)
+        .bind(model.transaction_id)
+        .bind(model.voter_id)
+        .bind(model.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingVoteModel>> {
+        let record = sqlx::query_as::<_, PhasingVoteModel>(
+            "SELECT * FROM phasing_vote WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _model: &PhasingVoteModel) -> RepositoryResult<()> {
+        // Votes are immutable
+        Ok(())
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        // Votes are immutable
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingVoteModel>> {
+        let records = sqlx::query_as::<_, PhasingVoteModel>(
+            "SELECT * FROM phasing_vote ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM phasing_vote")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl PhasingVoteRepository for SqlitePhasingVoteRepository {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingVoteModel>> {
+        let records = sqlx::query_as::<_, PhasingVoteModel>(
+            "SELECT * FROM phasing_vote WHERE transaction_id = ?"
+        )
+        .bind(poll_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+}
+
+// ============================================================================
+// PollResultRepository
+// ============================================================================
+
+pub struct SqlitePollResultRepository {
+    pool: SqlitePool,
+}
+
+impl SqlitePollResultRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<PollResultModel> for SqlitePollResultRepository {
+    async fn insert(&self, model: &PollResultModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO poll_result (poll_id, result, weight, height)
+            VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.poll_id)
+        .bind(&model.result)
+        .bind(model.weight)
+        .bind(model.height)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PollResultModel>> {
+        let record = sqlx::query_as::<_, PollResultModel>(
+            "SELECT * FROM poll_result WHERE db_id = ?"
+        )
+        .bind(db_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, model: &PollResultModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE poll_result SET
+                poll_id = ?, result = ?, height = ?
+            WHERE db_id = ?
+            "#,
+        )
+        .bind(model.poll_id)
+        .bind(&model.result)
+        .bind(model.height)
+        .bind(model.db_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM poll_result WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PollResultModel>> {
+        let records = sqlx::query_as::<_, PollResultModel>(
+            "SELECT * FROM poll_result ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit.unwrap_or(100))
+        .bind(offset.unwrap_or(0))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM poll_result")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl PollResultRepository for SqlitePollResultRepository {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PollResultModel>> {
+        let records = sqlx::query_as::<_, PollResultModel>(
+            "SELECT * FROM poll_result WHERE poll_id = ?"
+        )
+        .bind(poll_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn upsert(&self, model: &PollResultModel) -> RepositoryResult<()> {
+        // Find existing by poll_id and result
+        let existing = sqlx::query_as::<_, PollResultModel>(
+            "SELECT * FROM poll_result WHERE poll_id = ? AND result = ?"
+        )
+        .bind(model.poll_id)
+        .bind(&model.result)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+
+        if let Some(existing) = existing {
+            let mut updated = model.clone();
+            updated.db_id = existing.db_id;
+            self.update(&updated).await
+        } else {
+            self.insert(model).await
+        }
     }
 }

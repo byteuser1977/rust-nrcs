@@ -235,7 +235,7 @@ async fn main() -> Result<()> {
             ).await.context("Failed to create genesis block")?;
             info!("Genesis block ensured");
 
-            start_node(cfg, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
+            start_node(cfg, pool, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
                 alias_repo, alias_offer_repo, poll_repo, vote_repo, /* account_property_repo, */ tagged_data_repo, tagged_data_tag_repo, contract_ref_repo, ask_order_repo, bid_order_repo, currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo,
                 exchange_request_repo, currency_mint_repo
             ).await
@@ -246,6 +246,7 @@ async fn main() -> Result<()> {
 #[allow(clippy::too_many_arguments)]
 async fn start_node(
     cfg: NodeConfig,
+    pool: SqlitePool,
     block_repo: Arc<dyn BlockRepository>,
     tx_repo: Arc<dyn TransactionRepository>,
     asset_repo: Arc<dyn AssetRepository>,
@@ -317,6 +318,7 @@ async fn start_node(
             Arc::clone(&tx_repo),
             Arc::clone(&tx_processor),
             Arc::clone(&block_reward_applicator),
+            pool.clone(),
         )
     );
 

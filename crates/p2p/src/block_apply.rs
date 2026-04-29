@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use blockchain_types::prelude::{Block, AccountId};
+use blockchain_types::prelude::{Block, AccountId, Transaction, TransactionType};
 use orm::{AccountRepository, BlockRepository, PublicKeyRepository};
 use tracing::debug;
 
@@ -115,9 +115,15 @@ impl BlockRewardApplicator {
 
     /// Calculate and distribute Back Fees to previous 3 blocks' generators
     ///
-    /// Reference: Java Transaction.getBackFees()
-    /// - Returns [long_3] array of back fees for previous 1-3 blocks
-    /// - Only active after SHUFFLING_BLOCK (300000)
+    /// Reference: Java Block.apply() and TransactionType.getBackFees()
+    ///
+    /// Back fees apply to:
+    /// - Asset issuance (type=2, subtype=0) - except singleton issuance
+    /// - Currency issuance (type=5, subtype=0)
+    ///
+    /// Formula: [fee * 3/10, fee * 2/10, fee * 1/10] distributed to previous 3 blocks' generators
+    ///
+    /// Only active after SHUFFLING_BLOCK (300000)
     async fn calculate_and_distribute_back_fees(&self, block: &Block) -> anyhow::Result<i64> {
         const SHUFFLING_BLOCK: u32 = 300_000;  // Reference: Java Constant.SHUFFLING_BLOCK
 
@@ -125,10 +131,17 @@ impl BlockRewardApplicator {
             return Ok(0);
         }
 
-        // TODO: Extract actual back fees from transaction attachments
-        // For now, simplified version returns 0
-        // Future implementation should call transaction.getBackFees()
-        let back_fees = [0i64; 3];
+        // Calculate back fees from all transactions in the block
+        // Reference: Java Block.apply() - iterates transactions and sums getBackFees()
+        let mut back_fees = [0i64; 3];
+
+        for tx in &block.transactions {
+            let tx_back_fees = self.get_back_fees(tx);
+            for i in 0..3 {
+                back_fees[i] += tx_back_fees[i];
+            }
+        }
+
         let mut total_back_fees = 0i64;
 
         for (i, &fee) in back_fees.iter().enumerate() {
@@ -164,5 +177,28 @@ impl BlockRewardApplicator {
         }
 
         Ok(total_back_fees)
+    }
+
+    /// Calculate back fees for a single transaction
+    ///
+    /// Reference: Java TransactionType.getBackFees()
+    /// - Asset issuance: [fee * 3/10, fee * 2/10, fee * 1/10]
+    /// - Currency issuance: [fee * 3/10, fee * 2/10, fee * 1/10]
+    /// - Other types: empty (no back fees)
+    fn get_back_fees(&self, tx: &Transaction) -> [i64; 3] {
+        // Asset issuance (ColoredCoins, subtype=0) or Currency issuance (MonetarySystem, subtype=0)
+        let is_asset_issuance = tx.type_id == TransactionType::ColoredCoins && tx.subtype == 0;
+        let is_currency_issuance = tx.type_id == TransactionType::MonetarySystem && tx.subtype == 0;
+
+        if is_asset_issuance || is_currency_issuance {
+            let fee = tx.fee as i64;
+            [
+                fee * 3 / 10,  // 30% to previous block generator
+                fee * 2 / 10,  // 20% to 2 blocks ago generator
+                fee / 10,      // 10% to 3 blocks ago generator
+            ]
+        } else {
+            [0; 3]
+        }
     }
 }

@@ -581,20 +581,73 @@ impl Block {
         Ok(Hash256(hash_arr))
     }
 
-    /// 验证区块签名
+    /// 序列化区块用于签名验证（不含 block_signature）
+    ///
+    /// 对应 Java: `Arrays.copyOf(bytes(), bytes.length - 64)`
+    /// 即 serialize_for_id() 的结果去掉末尾 64 字节签名
+    pub fn serialize_for_signing(&self) -> Vec<u8> {
+        let full = self.serialize_for_id();
+        if full.len() > 64 {
+            full[..full.len() - 64].to_vec()
+        } else {
+            full
+        }
+    }
+
+    /// 使用 Curve25519 验证区块签名
+    ///
+    /// 对应 Java: Crypto.verify(blockSignature, data, generatorPublicKey, enforceCanonical)
+    pub fn verify_block_signature(&self) -> Result<bool> {
+        let pub_key_bytes = match &self.generator_public_key {
+            Some(pk) => *pk,
+            None => return Ok(false),
+        };
+
+        let signature = self.block_signature.0;
+        let data = self.serialize_for_signing();
+
+        // 使用 Curve25519 EC-KCDSA 验证
+        let pub_key = crypto::PublicKey::Curve25519(pub_key_bytes);
+        match crypto::verify(&pub_key, &data, &signature) {
+            Ok(()) => Ok(true),
+            Err(_) => Ok(false),
+        }
+    }
+
+    /// 验证 generation signature（version >= 2）
+    ///
+    /// 对应 Java: generationSignature = SHA256(previousGenerationSignature || generatorPublicKey)
+    pub fn verify_generation_signature(&self, previous_generation_signature: &[u8]) -> Result<bool> {
+        if self.version < 2 {
+            // version 1 使用 Curve25519 签名验证，暂不处理
+            return Ok(true);
+        }
+
+        let pub_key_bytes = match &self.generator_public_key {
+            Some(pk) => *pk,
+            None => return Ok(false),
+        };
+
+        // 计算期望的 generation signature: SHA256(prev_gen_sig || generator_pubkey)
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(previous_generation_signature);
+        hasher.update(&pub_key_bytes);
+        let expected: [u8; 32] = hasher.finalize().into();
+
+        Ok(self.generation_signature.len() >= 32 && self.generation_signature[..32] == expected)
+    }
+
+    /// 验证区块签名（Ed25519，保留用于兼容）
     pub fn verify_signature(&self, public_key: &PublicKey) -> Result<()> {
-        // 序列化区块头（用于签名）
         let data = self.serialize_header_for_signing();
-        // 提取公钥
         let pk_bytes = match public_key {
             PublicKey::Ed25519(bytes) => bytes,
         };
         let pk = ed25519_dalek::PublicKey::from_bytes(pk_bytes)
             .map_err(|_| BlockchainError::InvalidSignature("invalid public key".to_string()))?;
-        // 转换签名
         let sig = EdSignature::from_bytes(&self.block_signature.0)
             .map_err(|_| BlockchainError::InvalidSignature("invalid signature".to_string()))?;
-        // 验证
         pk.verify(&data, &sig).map_err(|_| BlockchainError::InvalidSignature("signature verification failed".to_string()))?;
         Ok(())
     }

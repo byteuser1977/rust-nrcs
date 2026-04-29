@@ -89,6 +89,8 @@ pub trait AccountAssetRepository: Repository<AccountAssetModel> {
     async fn update_quantity(&self, account_id: i64, asset_id: i64, quantity: i64, height: i32) -> RepositoryResult<()>;
     async fn increase_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
     async fn decrease_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
+    // Unconfirmed quantity operations (for mempool pre-deduction)
+    async fn add_to_unconfirmed_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
 }
 
 #[async_trait]
@@ -103,6 +105,9 @@ pub trait AssetRepository: Repository<AssetModel> {
     async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>>;
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AssetModel>>;
     async fn find_tradable(&self, limit: i64) -> RepositoryResult<Vec<AssetModel>>;
+    // Asset quantity operations
+    async fn increase_quantity(&self, asset_id: i64, delta: i64) -> RepositoryResult<()>;
+    async fn decrease_quantity(&self, asset_id: i64, delta: i64) -> RepositoryResult<()>;
 }
 
 #[async_trait]
@@ -195,6 +200,8 @@ pub trait AccountCurrencyRepository: Repository<AccountCurrencyModel> {
     async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<AccountCurrencyModel>>;
     async fn find_by_account_and_currency(&self, account_id: i64, currency_id: i64) -> RepositoryResult<Option<AccountCurrencyModel>>;
     async fn update_units(&self, account_id: i64, currency_id: i64, units: i64) -> RepositoryResult<()>;
+    // Unconfirmed units operations (for mempool pre-deduction)
+    async fn add_to_unconfirmed_units(&self, account_id: i64, currency_id: i64, delta: i64) -> RepositoryResult<()>;
 }
 
 #[async_trait]
@@ -274,5 +281,74 @@ pub trait AccountGuaranteedBalanceRepository: Repository<AccountGuaranteedBalanc
     async fn find_by_account_and_height(&self, account_id: i64, height: i32) -> RepositoryResult<Option<AccountGuaranteedBalanceModel>>;
     async fn upsert_additions(&self, account_id: i64, height: i32, additions: i64) -> RepositoryResult<()>;
     async fn get_total_additions_since(&self, account_id: i64, since_height: i32, current_height: i32) -> RepositoryResult<i64>;
+}
+
+#[async_trait]
+pub trait AccountInfoRepository: Repository<AccountInfoModel> {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Option<AccountInfoModel>>;
+    async fn upsert(&self, model: &AccountInfoModel) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait AccountLeaseRepository: Repository<AccountLeaseModel> {
+    async fn find_by_account(&self, lessor_id: i64) -> RepositoryResult<Option<AccountLeaseModel>>;
+    async fn upsert(&self, model: &AccountLeaseModel) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait AccountPropertyRepository: Repository<AccountPropertyModel> {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountPropertyModel>>;
+    async fn find_by_property(&self, account_id: i64, property: &str) -> RepositoryResult<Option<AccountPropertyModel>>;
+    async fn upsert(&self, model: &AccountPropertyModel) -> RepositoryResult<()>;
+    async fn delete_by_id(&self, id: i64) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait AccountControlPhasingRepository: Repository<AccountControlPhasingModel> {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Option<AccountControlPhasingModel>>;
+    async fn upsert(&self, model: &AccountControlPhasingModel) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait AssetDeleteRepository: Repository<AssetDeleteModel> {
+    async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetDeleteModel>>;
+}
+
+#[async_trait]
+pub trait AssetDividendRepository: Repository<AssetDividendModel> {
+    async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetDividendModel>>;
+}
+
+#[async_trait]
+pub trait PhasingPollRepository: Repository<PhasingPollModel> {
+    async fn find_by_poll_id(&self, id: i64) -> RepositoryResult<Option<PhasingPollModel>>;
+    async fn upsert(&self, model: &PhasingPollModel) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait PhasingPollLinkedTransactionRepository: Repository<PhasingPollLinkedTransactionModel> {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingPollLinkedTransactionModel>>;
+}
+
+#[async_trait]
+pub trait PhasingPollResultRepository: Repository<PhasingPollResultModel> {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Option<PhasingPollResultModel>>;
+    async fn upsert(&self, model: &PhasingPollResultModel) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait PhasingPollVoterRepository: Repository<PhasingPollVoterModel> {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingPollVoterModel>>;
+}
+
+#[async_trait]
+pub trait PhasingVoteRepository: Repository<PhasingVoteModel> {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingVoteModel>>;
+}
+
+#[async_trait]
+pub trait PollResultRepository: Repository<PollResultModel> {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PollResultModel>>;
+    async fn upsert(&self, model: &PollResultModel) -> RepositoryResult<()>;
 }
 
