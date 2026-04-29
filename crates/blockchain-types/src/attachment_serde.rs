@@ -200,6 +200,19 @@ pub fn build_attachment_bytes_from_json(
         }
     }
 
+    // PublicKeyAnnouncement appendix（对应 Java: PublicKeyAnnouncement）
+    // 注意：Java 中顺序是 message -> encryptedMessage -> publicKeyAnnouncement -> encryptToSelfMessage
+    if let Some(pk_val) = att_map.get("recipientPublicKey") {
+        if let Some(pk_str) = pk_val.as_str() {
+            if let Ok(pk_bytes) = hex::decode(pk_str) {
+                let pk_version = get_appendix_version("version.PublicKeyAnnouncement", att_map);
+                put_version_and_data(&mut result, pk_version, |buf| {
+                    put_bytes(buf, &pk_bytes);
+                });
+            }
+        }
+    }
+
     // EncryptToSelfMessage appendix（对应 Java: EncryptToSelfMessage）
     if let Some(ets_msg) = att_map.get("encryptToSelfMessage") {
         if let Some(ets_obj) = ets_msg.as_object() {
@@ -225,18 +238,6 @@ pub fn build_attachment_bytes_from_json(
                 put_bytes(buf, &data_hex);
                 put_bytes(buf, &nonce_hex);
             });
-        }
-    }
-
-    // PublicKeyAnnouncement appendix（对应 Java: PublicKeyAnnouncement）
-    if let Some(pk_val) = att_map.get("recipientPublicKey") {
-        if let Some(pk_str) = pk_val.as_str() {
-            if let Ok(pk_bytes) = hex::decode(pk_str) {
-                let pk_version = get_appendix_version("version.PublicKeyAnnouncement", att_map);
-                put_version_and_data(&mut result, pk_version, |buf| {
-                    put_bytes(buf, &pk_bytes);
-                });
-            }
         }
     }
 
@@ -296,6 +297,10 @@ pub fn build_attachment_bytes_from_json(
 ///
 /// PhasingParams.putMyBytes():
 ///   votingModel(1B) + quorum(8B) + minBalance(8B) + whitelistLen(1B) + [accountId(8B)]... + holdingId(8B) + minBalanceModel(1B)
+///   + [如果 votingModel==TRANSACTION: linkedTransactionsIds]
+///   + [如果 votingModel==HASH: hashedSecret + algorithm]
+///   + [如果 votingModel==COMPOSITE: compositeVoting]
+///   + [如果 votingModel==PROPERTY: senderPropertyVoting + recipientPropertyVoting]
 fn serialize_phasing_appendix(buf: &mut Vec<u8>, version: u8, att_map: &Map<String, serde_json::Value>) {
     put_version_and_data(buf, version, |buf| {
         // finishHeight (4 bytes, i32 LE)
@@ -307,33 +312,31 @@ fn serialize_phasing_appendix(buf: &mut Vec<u8>, version: u8, att_map: &Map<Stri
         // === PhasingParams ===
         // votingModel (1 byte)
         let voting_model = att_map.get("phasingVotingModel")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as u8;
-        put_byte(buf, voting_model);
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i8;
 
-        // quorum (8 bytes, u64 LE - Java long)
+        put_byte(buf, voting_model as u8);
+
+        // quorum (8 bytes, i64 LE - Java long)
         let quorum = att_map.get("phasingQuorum")
             .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<u64>().ok())
-            .or_else(|| att_map.get("phasingQuorum").and_then(|v| v.as_u64()))
+            .and_then(|s| s.parse::<i64>().ok())
+            .or_else(|| att_map.get("phasingQuorum").and_then(|v| v.as_i64()))
             .unwrap_or(0);
-        put_u64(buf, quorum);
+        put_i64(buf, quorum);
 
-        // minBalance (8 bytes, u64 LE - Java long)
+        // minBalance (8 bytes, i64 LE - Java long)
         let min_balance = att_map.get("phasingMinBalance")
             .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<u64>().ok())
-            .or_else(|| att_map.get("phasingMinBalance").and_then(|v| v.as_u64()))
+            .and_then(|s| s.parse::<i64>().ok())
+            .or_else(|| att_map.get("phasingMinBalance").and_then(|v| v.as_i64()))
             .unwrap_or(0);
-        put_u64(buf, min_balance);
+        put_i64(buf, min_balance);
 
         // whitelist (1 byte count + 8 bytes each account ID)
         if let Some(whitelist_arr) = att_map.get("phasingWhitelist").and_then(|v| v.as_array()) {
             put_byte(buf, whitelist_arr.len() as u8);
             for account_val in whitelist_arr {
-                // accountId 可能超出 i64 范围（如 14411432778108101696）
-                // Java 使用有符号 long 存储，但 JSON API 返回正数字符串
-                // 字节表示上 i64 和 u64 是相同的（8 字节 LE）
                 let account_id = account_val.as_str()
                     .and_then(|s| s.parse::<u64>().ok())
                     .or_else(|| account_val.as_u64())
@@ -344,31 +347,109 @@ fn serialize_phasing_appendix(buf: &mut Vec<u8>, version: u8, att_map: &Map<Stri
             put_byte(buf, 0);
         }
 
-        // holdingId (8 bytes, 可能是大数值)
+        // holdingId (8 bytes, i64 LE)
         let holding_id = att_map.get("phasingHolding")
             .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<u64>().ok())
-            .or_else(|| att_map.get("phasingHolding").and_then(|v| v.as_u64()))
+            .and_then(|s| s.parse::<i64>().ok())
+            .or_else(|| att_map.get("phasingHolding").and_then(|v| v.as_i64()))
             .unwrap_or(0);
-        put_u64(buf, holding_id);
+        put_i64(buf, holding_id);
 
         // minBalanceModel (1 byte)
         let min_balance_model = att_map.get("phasingMinBalanceModel")
-            .and_then(|v| v.as_u64())
+            .and_then(|v| v.as_i64())
             .unwrap_or(0) as u8;
         put_byte(buf, min_balance_model);
 
-        // linkedFullHashes (1 byte count + 32 bytes each hash)
-        // 通常为空
-        put_byte(buf, 0);
+        // VotingModel::TRANSACTION = 4
+        // 对应 Java: PhasingParams.putMyBytes() 第 224-228 行
+        if voting_model == 4 {
+            if let Some(linked_txs) = att_map.get("phasingLinkedTransactions").and_then(|v| v.as_array()) {
+                put_byte(buf, linked_txs.len() as u8);
+                for tx_obj in linked_txs {
+                    if let Some(tx) = tx_obj.as_object() {
+                        // ChainTransactionId: chain(4B) + fullHash(32B)
+                        if let Some(chain) = tx.get("chain") {
+                            put_i32(buf, chain.as_i64().unwrap_or(0) as i32);
+                        } else {
+                            put_i32(buf, 0);
+                        }
+                        if let Some(full_hash) = tx.get("fullHash").and_then(|h| h.as_str()) {
+                            if let Ok(hash_bytes) = hex::decode(full_hash) {
+                                put_bytes(buf, &hash_bytes);
+                            } else {
+                                put_bytes(buf, &[0u8; 32]);
+                            }
+                        } else {
+                            put_bytes(buf, &[0u8; 32]);
+                        }
+                    }
+                }
+            } else {
+                put_byte(buf, 0);
+            }
+        }
 
-        // hashedSecret (1 byte length + data)
-        // 通常为空
-        put_byte(buf, 0);
+        // VotingModel::HASH = 5
+        // 对应 Java: PhasingParams.putMyBytes() 第 229-231 行
+        if voting_model == 5 {
+            if let Some(hashed_secret) = att_map.get("phasingHashedSecret").and_then(|h| h.as_str()) {
+                if let Ok(secret_bytes) = hex::decode(hashed_secret) {
+                    put_byte(buf, secret_bytes.len() as u8);
+                    put_bytes(buf, &secret_bytes);
+                } else {
+                    put_byte(buf, 0);
+                }
+            } else {
+                put_byte(buf, 0);
+            }
+            if let Some(algorithm) = att_map.get("phasingHashedSecretAlgorithm") {
+                put_byte(buf, algorithm.as_i64().unwrap_or(0) as u8);
+            } else {
+                put_byte(buf, 0);
+            }
+        }
+
+        // VotingModel::COMPOSITE = 6 和 PROPERTY = 7 暂时简化处理
+        // 实际使用时需要根据具体需求完善
+
+        // === AppendixPhasing 额外字段 ===
+        // linkedFullHashes (1 byte count + 32 bytes each hash)
+        // 对应 Java: AppendixPhasing.putMyBytes() 第 136-139 行
+        if let Some(linked_hashes) = att_map.get("phasingLinkedFullHashes").and_then(|v| v.as_array()) {
+            put_byte(buf, linked_hashes.len() as u8);
+            for hash_val in linked_hashes {
+                if let Some(hash_str) = hash_val.as_str() {
+                    if let Ok(hash_bytes) = hex::decode(hash_str) {
+                        put_bytes(buf, &hash_bytes);
+                    } else {
+                        put_bytes(buf, &[0u8; 32]);
+                    }
+                }
+            }
+        } else {
+            put_byte(buf, 0);
+        }
+
+        // hashedSecret (1 byte length + data) - AppendixPhasing 级别
+        // 对应 Java: AppendixPhasing.putMyBytes() 第 140-142 行
+        if let Some(hashed_secret) = att_map.get("phasingHashedSecret").and_then(|h| h.as_str()) {
+            if let Ok(secret_bytes) = hex::decode(hashed_secret) {
+                put_byte(buf, secret_bytes.len() as u8);
+                put_bytes(buf, &secret_bytes);
+            } else {
+                put_byte(buf, 0);
+            }
+        } else {
+            put_byte(buf, 0);
+        }
 
         // algorithm (1 byte)
-        // 通常为 0 (SHA-256)
-        put_byte(buf, 0);
+        if let Some(algorithm) = att_map.get("phasingHashedSecretAlgorithm") {
+            put_byte(buf, algorithm.as_i64().unwrap_or(0) as u8);
+        } else {
+            put_byte(buf, 0);
+        }
     });
 }
 
@@ -1505,6 +1586,18 @@ fn serialize_messaging_attachment(subtype: u8, att_map: &Map<String, serde_json:
                 put_i32(&mut buf, 0);
             }
         }
+        SUBTYPE_MESSAGING_ACCOUNT_PROPERTY_DELETE => {
+            // 对应 Java: MessagingAccountPropertyDelete.putMyBytes()
+            // Java: buffer.putLong(propertyId)
+            if let Some(prop) = att_map.get("property") {
+                put_i64(&mut buf, prop.as_str()
+                    .and_then(|s| s.parse::<i64>().ok())
+                    .or_else(|| prop.as_i64())
+                    .unwrap_or(0));
+            } else {
+                put_i64(&mut buf, 0);
+            }
+        }
         _ => {}
     }
 
@@ -1693,10 +1786,174 @@ fn serialize_account_control_attachment(subtype: u8, att_map: &Map<String, serde
                 put_u16(&mut buf, 0);
             }
         }
+        SUBTYPE_ACCOUNT_CONTROL_PHASING_ONLY => {
+            serialize_phasing_only_attachment(&mut buf, att_map);
+        }
         _ => {}
     }
 
     buf
+}
+
+/// 序列化 SetPhasingOnly 附件
+/// 对应 Java: SetPhasingOnly.putMyBytes()
+/// 格式: PhasingParams + maxFees(8B) + minDuration(2B) + maxDuration(2B)
+/// 
+/// JSON 格式:
+/// {
+///   "phasingControlParams": {
+///     "phasingVotingModel": ...,
+///     "phasingQuorum": ...,
+///     ...
+///   },
+///   "controlMaxFees": ...,
+///   "controlMinDuration": ...,
+///   "controlMaxDuration": ...
+/// }
+fn serialize_phasing_only_attachment(buf: &mut Vec<u8>, att_map: &Map<String, serde_json::Value>) {
+    // 获取 phasingControlParams 嵌套对象
+    let phasing_params_map = att_map.get("phasingControlParams")
+        .and_then(|v| v.as_object())
+        .map(|m| m as &Map<String, serde_json::Value>);
+    
+    // 序列化 PhasingParams
+    if let Some(params_map) = phasing_params_map {
+        serialize_phasing_params(buf, params_map);
+    } else {
+        // 如果没有 phasingControlParams，尝试直接从 att_map 读取（兼容旧格式）
+        serialize_phasing_params(buf, att_map);
+    }
+    
+    // maxFees (8 bytes, i64)
+    if let Some(max_fees) = att_map.get("controlMaxFees") {
+        put_i64(buf, max_fees.as_str()
+            .and_then(|s| s.parse::<i64>().ok())
+            .or_else(|| max_fees.as_i64())
+            .unwrap_or(0));
+    } else {
+        put_i64(buf, 0);
+    }
+    
+    // minDuration (2 bytes, i16)
+    if let Some(min_duration) = att_map.get("controlMinDuration") {
+        put_i16(buf, min_duration.as_i64().unwrap_or(0) as i16);
+    } else {
+        put_i16(buf, 0);
+    }
+    
+    // maxDuration (2 bytes, i16)
+    if let Some(max_duration) = att_map.get("controlMaxDuration") {
+        put_i16(buf, max_duration.as_i64().unwrap_or(0) as i16);
+    } else {
+        put_i16(buf, 0);
+    }
+}
+
+/// 序列化 PhasingParams
+/// 对应 Java: PhasingParams.putMyBytes()
+/// 格式: votingModel(1B) + quorum(8B) + minBalance(8B) + whitelistLen(1B) + [accountId(8B)]... 
+///       + holdingId(8B) + minBalanceModel(1B) + [额外字段根据votingModel]
+fn serialize_phasing_params(buf: &mut Vec<u8>, att_map: &Map<String, serde_json::Value>) {
+    let voting_model = att_map.get("phasingVotingModel")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0) as i8;
+    
+    put_byte(buf, voting_model as u8);
+    
+    if let Some(quorum) = att_map.get("phasingQuorum") {
+        put_i64(buf, quorum.as_str()
+            .and_then(|s| s.parse::<i64>().ok())
+            .or_else(|| quorum.as_i64())
+            .unwrap_or(0));
+    } else {
+        put_i64(buf, 0);
+    }
+    
+    if let Some(min_balance) = att_map.get("phasingMinBalance") {
+        put_i64(buf, min_balance.as_str()
+            .and_then(|s| s.parse::<i64>().ok())
+            .or_else(|| min_balance.as_i64())
+            .unwrap_or(0));
+    } else {
+        put_i64(buf, 0);
+    }
+    
+    if let Some(whitelist_arr) = att_map.get("phasingWhitelist").and_then(|v| v.as_array()) {
+        put_byte(buf, whitelist_arr.len() as u8);
+        for account_val in whitelist_arr {
+            let account_id = account_val.as_str()
+                .and_then(|s| s.parse::<u64>().ok())
+                .or_else(|| account_val.as_u64())
+                .unwrap_or(0);
+            put_u64(buf, account_id);
+        }
+    } else {
+        put_byte(buf, 0);
+    }
+    
+    if let Some(holding) = att_map.get("phasingHolding") {
+        put_i64(buf, holding.as_str()
+            .and_then(|s| s.parse::<i64>().ok())
+            .or_else(|| holding.as_i64())
+            .unwrap_or(0));
+    } else {
+        put_i64(buf, 0);
+    }
+    
+    if let Some(min_balance_model) = att_map.get("phasingMinBalanceModel") {
+        put_byte(buf, min_balance_model.as_i64().unwrap_or(0) as u8);
+    } else {
+        put_byte(buf, 0);
+    }
+    
+    // VotingModel::TRANSACTION = 4
+    if voting_model == 4 {
+        if let Some(linked_txs) = att_map.get("phasingLinkedTransactions").and_then(|v| v.as_array()) {
+            put_byte(buf, linked_txs.len() as u8);
+            for tx_obj in linked_txs {
+                if let Some(tx) = tx_obj.as_object() {
+                    if let Some(chain) = tx.get("chain") {
+                        put_i32(buf, chain.as_i64().unwrap_or(0) as i32);
+                    } else {
+                        put_i32(buf, 0);
+                    }
+                    if let Some(full_hash) = tx.get("fullHash").and_then(|h| h.as_str()) {
+                        if let Ok(hash_bytes) = hex::decode(full_hash) {
+                            put_bytes(buf, &hash_bytes);
+                        } else {
+                            put_bytes(buf, &[0u8; 32]);
+                        }
+                    } else {
+                        put_bytes(buf, &[0u8; 32]);
+                    }
+                }
+            }
+        } else {
+            put_byte(buf, 0);
+        }
+    }
+    
+    // VotingModel::HASH = 5
+    if voting_model == 5 {
+        if let Some(hashed_secret) = att_map.get("phasingHashedSecret").and_then(|h| h.as_str()) {
+            if let Ok(secret_bytes) = hex::decode(hashed_secret) {
+                put_byte(buf, secret_bytes.len() as u8);
+                put_bytes(buf, &secret_bytes);
+            } else {
+                put_byte(buf, 0);
+            }
+        } else {
+            put_byte(buf, 0);
+        }
+        if let Some(algorithm) = att_map.get("phasingHashedSecretAlgorithm") {
+            put_byte(buf, algorithm.as_i64().unwrap_or(0) as u8);
+        } else {
+            put_byte(buf, 0);
+        }
+    }
+    
+    // VotingModel::COMPOSITE = 6 和 PROPERTY = 7 暂时简化处理
+    // 实际使用时需要根据具体需求完善
 }
 
 #[cfg(test)]
