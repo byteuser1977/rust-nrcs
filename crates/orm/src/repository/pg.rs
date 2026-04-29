@@ -251,23 +251,23 @@ impl Repository<BlockModel> for PgBlockRepository {
                 payload_hash = $15, generator_id = $16
             WHERE db_id = $1
             "#,
-            block.db_id,
-            block.version,
-            block.timestamp,
-            block.previous_block_id,
-            block.total_amount,
-            block.total_fee,
-            block.payload_length,
-            block.previous_block_hash.as_deref(),
-            block.cumulative_difficulty.as_slice(),
-            block.base_target,
-            block.next_block_id,
-            block.height,
-            block.generation_signature.as_slice(),
-            block.block_signature.as_slice(),
-            block.payload_hash.as_slice(),
-            block.generator_id
         )
+        .bind(block.db_id)
+        .bind(block.version)
+        .bind(block.timestamp)
+        .bind(block.previous_block_id)
+        .bind(block.total_amount)
+        .bind(block.total_fee)
+        .bind(block.payload_length)
+        .bind(block.previous_block_hash.as_deref())
+        .bind(block.cumulative_difficulty.as_slice())
+        .bind(block.base_target)
+        .bind(block.next_block_id)
+        .bind(block.height)
+        .bind(block.generation_signature.as_slice())
+        .bind(block.block_signature.as_slice())
+        .bind(block.payload_hash.as_slice())
+        .bind(block.generator_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -275,7 +275,8 @@ impl Repository<BlockModel> for PgBlockRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM block WHERE db_id = $1", db_id)
+        sqlx::query("DELETE FROM block WHERE db_id = $1")
+            .bind(db_id)
             .execute(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -1582,13 +1583,13 @@ impl AccountRepository for PgAccountRepository {
         sqlx::query(
             r#"
             UPDATE account
-            SET balance = $2, unconfirmed_balance = $3
-            WHERE id = $1 AND latest = TRUE
+            SET balance = $1, unconfirmed_balance = $2
+            WHERE id = $3 AND latest = TRUE
             "#,
-            account_id,
-            balance,
-            unconfirmed_balance
         )
+        .bind(balance)
+        .bind(unconfirmed_balance)
+        .bind(account_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1617,30 +1618,46 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn add_to_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+        if amount < 0 {
+            let account = self.find_by_account_id(account_id).await?;
+            if let Some(acc) = account {
+                let new_balance = acc.balance.checked_add(amount)
+                    .ok_or_else(|| RepositoryError::Validation(
+                        format!("balance overflow for account {}", account_id)
+                    ))?;
+                if new_balance < 0 {
+                    return Err(RepositoryError::Validation(
+                        format!("insufficient balance for account {}: have {}, need {}",
+                            account_id, acc.balance, -amount)
+                    ));
+                }
+            }
+        }
+
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET balance = balance + $2
-            WHERE id = $1 AND latest = TRUE
+            SET balance = balance + $1
+            WHERE id = $2 AND latest = TRUE
             "#,
-            account_id,
-            amount
         )
+        .bind(amount)
+        .bind(account_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
-        
+
         if result.rows_affected() == 0 {
             let _account = self.get_or_create(account_id).await?;
             sqlx::query(
                 r#"
                 UPDATE account
-                SET balance = balance + $2
-                WHERE id = $1 AND latest = TRUE
+                SET balance = balance + $1
+                WHERE id = $2 AND latest = TRUE
                 "#,
-                account_id,
-                amount
             )
+            .bind(amount)
+            .bind(account_id)
             .execute(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -1649,30 +1666,46 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+        if amount < 0 {
+            let account = self.find_by_account_id(account_id).await?;
+            if let Some(acc) = account {
+                let new_balance = acc.unconfirmed_balance.checked_add(amount)
+                    .ok_or_else(|| RepositoryError::Validation(
+                        format!("unconfirmed balance overflow for account {}", account_id)
+                    ))?;
+                if new_balance < 0 {
+                    return Err(RepositoryError::Validation(
+                        format!("insufficient unconfirmed balance for account {}: have {}, need {}",
+                            account_id, acc.unconfirmed_balance, -amount)
+                    ));
+                }
+            }
+        }
+
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET unconfirmed_balance = unconfirmed_balance + $2
-            WHERE id = $1 AND latest = TRUE
+            SET unconfirmed_balance = unconfirmed_balance + $1
+            WHERE id = $2 AND latest = TRUE
             "#,
-            account_id,
-            amount
         )
+        .bind(amount)
+        .bind(account_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
-        
+
         if result.rows_affected() == 0 {
             let _account = self.get_or_create(account_id).await?;
             sqlx::query(
                 r#"
                 UPDATE account
-                SET unconfirmed_balance = unconfirmed_balance + $2
-                WHERE id = $1 AND latest = TRUE
+                SET unconfirmed_balance = unconfirmed_balance + $1
+                WHERE id = $2 AND latest = TRUE
                 "#,
-                account_id,
-                amount
             )
+            .bind(amount)
+            .bind(account_id)
             .execute(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -1684,27 +1717,27 @@ impl AccountRepository for PgAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET balance = balance + $2, unconfirmed_balance = unconfirmed_balance + $2
-            WHERE id = $1 AND latest = TRUE
+            SET balance = balance + $1, unconfirmed_balance = unconfirmed_balance + $1
+            WHERE id = $2 AND latest = TRUE
             "#,
-            account_id,
-            amount
         )
+        .bind(amount)
+        .bind(account_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
-        
+
         if result.rows_affected() == 0 {
             let _account = self.get_or_create(account_id).await?;
             sqlx::query(
                 r#"
                 UPDATE account
-                SET balance = balance + $2, unconfirmed_balance = unconfirmed_balance + $2
-                WHERE id = $1 AND latest = TRUE
+                SET balance = balance + $1, unconfirmed_balance = unconfirmed_balance + $1
+                WHERE id = $2 AND latest = TRUE
                 "#,
-                account_id,
-                amount
             )
+            .bind(amount)
+            .bind(account_id)
             .execute(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -1724,12 +1757,12 @@ impl AccountRepository for PgAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET forged_balance = forged_balance + $2
-            WHERE id = $1 AND latest = TRUE
+            SET forged_balance = forged_balance + $1
+            WHERE id = $2 AND latest = TRUE
             "#,
-            account_id,
-            amount
         )
+        .bind(amount)
+        .bind(account_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1739,12 +1772,12 @@ impl AccountRepository for PgAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET forged_balance = forged_balance + $2
-                WHERE id = $1 AND latest = TRUE
+                SET forged_balance = forged_balance + $1
+                WHERE id = $2 AND latest = TRUE
                 "#,
-                account_id,
-                amount
             )
+            .bind(amount)
+            .bind(account_id)
             .execute(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -1763,15 +1796,15 @@ impl Repository<AccountModel> for PgAccountRepository {
                 active_lessee_id, has_control_phasing, height, latest
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
-            account.id,
-            account.balance,
-            account.unconfirmed_balance,
-            account.forged_balance,
-            account.active_lessee_id,
-            account.has_control_phasing,
-            account.height,
-            account.latest
         )
+        .bind(account.id)
+        .bind(account.balance)
+        .bind(account.unconfirmed_balance)
+        .bind(account.forged_balance)
+        .bind(account.active_lessee_id)
+        .bind(account.has_control_phasing)
+        .bind(account.height)
+        .bind(account.latest)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1798,15 +1831,15 @@ impl Repository<AccountModel> for PgAccountRepository {
                 active_lessee_id = $5, has_control_phasing = $6, height = $7, latest = $8
             WHERE db_id = $1
             "#,
-            account.db_id,
-            account.balance,
-            account.unconfirmed_balance,
-            account.forged_balance,
-            account.active_lessee_id,
-            account.has_control_phasing,
-            account.height,
-            account.latest
         )
+        .bind(account.db_id)
+        .bind(account.balance)
+        .bind(account.unconfirmed_balance)
+        .bind(account.forged_balance)
+        .bind(account.active_lessee_id)
+        .bind(account.has_control_phasing)
+        .bind(account.height)
+        .bind(account.latest)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1894,14 +1927,14 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         sqlx::query(
             r#"
             UPDATE account_asset
-            SET quantity = $3, height = $4, latest = TRUE
-            WHERE account_id = $1 AND asset_id = $2
+            SET quantity = $1, height = $2, latest = TRUE
+            WHERE account_id = $3 AND asset_id = $4
             "#,
-            account_id,
-            asset_id,
-            quantity,
-            height
         )
+        .bind(quantity)
+        .bind(height)
+        .bind(account_id)
+        .bind(asset_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1912,13 +1945,13 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         sqlx::query(
             r#"
             UPDATE account_asset
-            SET quantity = quantity + $3, latest = TRUE
-            WHERE account_id = $1 AND asset_id = $2
+            SET quantity = quantity + $1, latest = TRUE
+            WHERE account_id = $2 AND asset_id = $3
             "#,
-            account_id,
-            asset_id,
-            delta
         )
+        .bind(delta)
+        .bind(account_id)
+        .bind(asset_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1929,13 +1962,13 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         let result = sqlx::query(
             r#"
             UPDATE account_asset
-            SET quantity = quantity - $3, latest = TRUE
-            WHERE account_id = $1 AND asset_id = $2 AND quantity >= $3
+            SET quantity = quantity - $1, latest = TRUE
+            WHERE account_id = $2 AND asset_id = $3 AND quantity >= $1
             "#,
-            account_id,
-            asset_id,
-            delta
         )
+        .bind(delta)
+        .bind(account_id)
+        .bind(asset_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1950,13 +1983,13 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         sqlx::query(
             r#"
             UPDATE account_asset
-            SET unconfirmed_quantity = unconfirmed_quantity + $3, latest = TRUE
-            WHERE account_id = $1 AND asset_id = $2
+            SET unconfirmed_quantity = unconfirmed_quantity + $1, latest = TRUE
+            WHERE account_id = $2 AND asset_id = $3
             "#,
-            account_id,
-            asset_id,
-            delta
         )
+        .bind(delta)
+        .bind(account_id)
+        .bind(asset_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1973,13 +2006,13 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
                 account_id, asset_id, quantity, unconfirmed_quantity, height, latest
             ) VALUES ($1, $2, $3, $4, $5, $6)
             "#,
-            aa.account_id,
-            aa.asset_id,
-            aa.quantity,
-            aa.unconfirmed_quantity,
-            aa.height,
-            aa.latest
         )
+        .bind(aa.account_id)
+        .bind(aa.asset_id)
+        .bind(aa.quantity)
+        .bind(aa.unconfirmed_quantity)
+        .bind(aa.height)
+        .bind(aa.latest)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2005,12 +2038,12 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
                 quantity = $2, unconfirmed_quantity = $3, height = $4, latest = $5
             WHERE db_id = $1
             "#,
-            aa.db_id,
-            aa.quantity,
-            aa.unconfirmed_quantity,
-            aa.height,
-            aa.latest
         )
+        .bind(aa.db_id)
+        .bind(aa.quantity)
+        .bind(aa.unconfirmed_quantity)
+        .bind(aa.height)
+        .bind(aa.latest)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2104,6 +2137,38 @@ impl AssetRepository for PgAssetRepository {
         .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
+
+    async fn increase_quantity(&self, asset_id: i64, delta: i64) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE asset
+            SET quantity = quantity + $1, latest = TRUE
+            WHERE id = $2 AND latest = TRUE
+            "#,
+        )
+        .bind(delta)
+        .bind(asset_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn decrease_quantity(&self, asset_id: i64, delta: i64) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            UPDATE asset
+            SET quantity = quantity - $1, latest = TRUE
+            WHERE id = $2 AND latest = TRUE AND quantity >= $1
+            "#,
+        )
+        .bind(delta)
+        .bind(asset_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -2116,17 +2181,17 @@ impl Repository<AssetModel> for PgAssetRepository {
                 has_control_phasing, initial_quantity, height, latest
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
-            asset.id,
-            asset.account_id,
-            asset.name,
-            asset.description,
-            asset.quantity,
-            asset.decimals,
-            asset.has_control_phasing,
-            asset.initial_quantity,
-            asset.height,
-            asset.latest
         )
+        .bind(asset.id)
+        .bind(asset.account_id)
+        .bind(&asset.name)
+        .bind(&asset.description)
+        .bind(asset.quantity)
+        .bind(asset.decimals)
+        .bind(asset.has_control_phasing)
+        .bind(asset.initial_quantity)
+        .bind(asset.height)
+        .bind(asset.latest)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2969,7 +3034,7 @@ impl PgTaggedDataRepository {
 
 #[async_trait]
 impl TaggedDataRepository for PgTaggedDataRepository {
-    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<TaggedDataModel>> {
+    async fn find_by_data_id(&self, id: i64) -> RepositoryResult<Option<TaggedDataModel>> {
         let record = sqlx::query_as::<_, TaggedDataModel>(
             "SELECT * FROM tagged_data WHERE id = $1 AND latest = TRUE LIMIT 1"
         )
@@ -2978,18 +3043,6 @@ impl TaggedDataRepository for PgTaggedDataRepository {
         .await
         .map_err(RepositoryError::DbError)?;
         Ok(record)
-    }
-
-    async fn find_by_channel(&self, channel: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
-        let records = sqlx::query_as::<_, TaggedDataModel>(
-            "SELECT * FROM tagged_data WHERE channel = $1 AND latest = TRUE ORDER BY height DESC LIMIT $2"
-        )
-        .bind(channel)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(RepositoryError::DbError)?;
-        Ok(records)
     }
 
     async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
@@ -3016,10 +3069,10 @@ impl TaggedDataRepository for PgTaggedDataRepository {
         Ok(records)
     }
 
-    async fn search(&self, query: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
-        let pattern = format!("%{}%", query);
+    async fn search_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
+        let pattern = format!("%{}%", tag);
         let records = sqlx::query_as::<_, TaggedDataModel>(
-            "SELECT * FROM tagged_data WHERE (name LIKE $1 OR description LIKE $1) AND latest = TRUE ORDER BY height DESC LIMIT $2"
+            "SELECT * FROM tagged_data WHERE (tags LIKE $1 OR parsed_tags LIKE $1) AND latest = TRUE ORDER BY height DESC LIMIT $2"
         )
         .bind(&pattern)
         .bind(limit)
@@ -3036,8 +3089,9 @@ impl Repository<TaggedDataModel> for PgTaggedDataRepository {
         sqlx::query(
             r#"
             INSERT INTO tagged_data (
-                id, account_id, name, description, parsed_tags, tags, type, channel,
-                data, is_text, filename, hash, timestamp, height, latest
+                id, account_id, name, description, tags, parsed_tags, type,
+                data, is_text, filename, channel, block_timestamp,
+                transaction_timestamp, height, latest
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             "#,
         )
@@ -3045,15 +3099,15 @@ impl Repository<TaggedDataModel> for PgTaggedDataRepository {
         .bind(data.account_id)
         .bind(&data.name)
         .bind(&data.description)
-        .bind(&data.parsed_tags)
         .bind(&data.tags)
+        .bind(&data.parsed_tags)
         .bind(&data.type_)
-        .bind(&data.channel)
         .bind(&data.data)
         .bind(data.is_text)
         .bind(&data.filename)
-        .bind(&data.hash)
-        .bind(data.timestamp)
+        .bind(&data.channel)
+        .bind(data.block_timestamp)
+        .bind(data.transaction_timestamp)
         .bind(data.height)
         .bind(data.latest)
         .execute(&self.pool)
@@ -3149,31 +3203,21 @@ impl PurchaseRepository for PgPurchaseRepository {
         Ok(records)
     }
 
-    async fn find_pending_by_buyer(&self, buyer_id: i64) -> RepositoryResult<Vec<PurchaseModel>> {
+    async fn find_by_goods(&self, goods_id: i64, limit: i64) -> RepositoryResult<Vec<PurchaseModel>> {
         let records = sqlx::query_as::<_, PurchaseModel>(
-            "SELECT * FROM purchase WHERE buyer_id = $1 AND latest = TRUE AND pending = TRUE ORDER BY height DESC"
+            "SELECT * FROM purchase WHERE goods_id = $1 AND latest = TRUE ORDER BY height DESC LIMIT $2"
         )
-        .bind(buyer_id)
+        .bind(goods_id)
+        .bind(limit)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
 
-    async fn find_pending_by_seller(&self, seller_id: i64) -> RepositoryResult<Vec<PurchaseModel>> {
-        let records = sqlx::query_as::<_, PurchaseModel>(
-            "SELECT * FROM purchase WHERE seller_id = $1 AND latest = TRUE AND pending = TRUE ORDER BY height DESC"
-        )
-        .bind(seller_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(RepositoryError::DbError)?;
-        Ok(records)
-    }
-
-    async fn update_delivery_deadline(&self, purchase_id: i64, deadline: i32) -> RepositoryResult<()> {
-        sqlx::query("UPDATE purchase SET delivery_deadline_timestamp = $1 WHERE id = $2 AND latest = TRUE")
-            .bind(deadline)
+    async fn update_pending(&self, purchase_id: i64, pending: bool) -> RepositoryResult<()> {
+        sqlx::query("UPDATE purchase SET pending = $1 WHERE id = $2 AND latest = TRUE")
+            .bind(pending)
             .bind(purchase_id)
             .execute(&self.pool)
             .await
@@ -3181,13 +3225,30 @@ impl PurchaseRepository for PgPurchaseRepository {
         Ok(())
     }
 
-    async fn set_pending(&self, purchase_id: i64, pending: bool) -> RepositoryResult<()> {
-        sqlx::query("UPDATE purchase SET pending = $1 WHERE id = $2 AND latest = TRUE")
-            .bind(pending)
-            .bind(purchase_id)
-            .execute(&self.pool)
-            .await
-            .map_err(RepositoryError::DbError)?;
+    async fn set_delivered(&self, purchase_id: i64, goods: &[u8], nonce: &[u8]) -> RepositoryResult<()> {
+        sqlx::query(
+            "UPDATE purchase SET goods = $1, goods_nonce = $2, pending = FALSE WHERE id = $3 AND latest = TRUE"
+        )
+        .bind(goods)
+        .bind(nonce)
+        .bind(purchase_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn set_refund(&self, purchase_id: i64, refund: i64, note: &[u8], nonce: &[u8]) -> RepositoryResult<()> {
+        sqlx::query(
+            "UPDATE purchase SET refund = $1, refund_note = $2, refund_nonce = $3 WHERE id = $4 AND latest = TRUE"
+        )
+        .bind(refund)
+        .bind(note)
+        .bind(nonce)
+        .bind(purchase_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
         Ok(())
     }
 }
@@ -3199,9 +3260,10 @@ impl Repository<PurchaseModel> for PgPurchaseRepository {
             r#"
             INSERT INTO purchase (
                 id, buyer_id, goods_id, seller_id, quantity, price, deadline,
-                note, name, goods, has_goods_note, has_note, timestamp,
-                pending, height, latest, feedback_notes, public_feedback
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                note, nonce, timestamp, pending, goods, goods_nonce, goods_is_text,
+                refund_note, refund_nonce, has_feedback_notes, has_public_feedbacks,
+                discount, refund, height, latest
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
             "#,
         )
         .bind(purchase.id)
@@ -3212,16 +3274,20 @@ impl Repository<PurchaseModel> for PgPurchaseRepository {
         .bind(purchase.price)
         .bind(purchase.deadline)
         .bind(&purchase.note)
-        .bind(&purchase.name)
-        .bind(&purchase.goods)
-        .bind(purchase.has_goods_note)
-        .bind(purchase.has_note)
+        .bind(&purchase.nonce)
         .bind(purchase.timestamp)
         .bind(purchase.pending)
+        .bind(&purchase.goods)
+        .bind(&purchase.goods_nonce)
+        .bind(purchase.goods_is_text)
+        .bind(&purchase.refund_note)
+        .bind(&purchase.refund_nonce)
+        .bind(purchase.has_feedback_notes)
+        .bind(purchase.has_public_feedbacks)
+        .bind(purchase.discount)
+        .bind(purchase.refund)
         .bind(purchase.height)
         .bind(purchase.latest)
-        .bind(&purchase.feedback_notes)
-        .bind(&purchase.public_feedback)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -3428,6 +3494,18 @@ impl VoteRepository for PgVoteRepository {
         .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
+
+    async fn find_by_poll_and_voter(&self, poll_id: i64, voter_id: i64) -> RepositoryResult<Option<VoteModel>> {
+        let record = sqlx::query_as::<_, VoteModel>(
+            "SELECT * FROM vote WHERE poll_id = $1 AND voter_id = $2 LIMIT 1"
+        )
+        .bind(poll_id)
+        .bind(voter_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
 }
 
 #[async_trait]
@@ -3514,30 +3592,31 @@ impl ShufflingRepository for PgShufflingRepository {
         Ok(record)
     }
 
-    async fn find_by_assignee(&self, account_id: i64) -> RepositoryResult<Vec<ShufflingModel>> {
+    async fn find_by_issuer(&self, issuer_id: i64) -> RepositoryResult<Vec<ShufflingModel>> {
         let records = sqlx::query_as::<_, ShufflingModel>(
-            "SELECT * FROM shuffling WHERE assignee_id = $1 AND latest = TRUE"
+            "SELECT * FROM shuffling WHERE issuer_id = $1 AND latest = TRUE ORDER BY height DESC"
         )
-        .bind(account_id)
+        .bind(issuer_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
 
-    async fn find_active(&self, height: i32) -> RepositoryResult<Vec<ShufflingModel>> {
+    async fn find_active(&self, limit: i64) -> RepositoryResult<Vec<ShufflingModel>> {
         let records = sqlx::query_as::<_, ShufflingModel>(
-            "SELECT * FROM shuffling WHERE blocks_left > 0 AND latest = TRUE"
+            "SELECT * FROM shuffling WHERE latest = TRUE AND stage < 5 ORDER BY height DESC LIMIT $1"
         )
+        .bind(limit)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
 
-    async fn update_assignee(&self, shuffling_id: i64, assignee_id: i64) -> RepositoryResult<()> {
-        sqlx::query("UPDATE shuffling SET assignee_id = $1 WHERE id = $2 AND latest = TRUE")
-            .bind(assignee_id)
+    async fn update_stage(&self, shuffling_id: i64, stage: i32) -> RepositoryResult<()> {
+        sqlx::query("UPDATE shuffling SET stage = $1 WHERE id = $2 AND latest = TRUE")
+            .bind(stage)
             .bind(shuffling_id)
             .execute(&self.pool)
             .await
@@ -3552,23 +3631,23 @@ impl Repository<ShufflingModel> for PgShufflingRepository {
         sqlx::query(
             r#"
             INSERT INTO shuffling (
-                id, issuer_id, amount, participant_count, registration_period,
-                processing_period, shuffling_state, assignee_id, blocks_left,
-                amount_index, recipient_index, height, latest
+                id, holding_id, holding_type, issuer_id, amount, participant_count,
+                blocks_remaining, stage, assignee_account_id, registrant_count,
+                recipient_public_keys, height, latest
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             "#,
         )
         .bind(shuffling.id)
+        .bind(shuffling.holding_id)
+        .bind(shuffling.holding_type)
         .bind(shuffling.issuer_id)
         .bind(shuffling.amount)
         .bind(shuffling.participant_count)
-        .bind(shuffling.registration_period)
-        .bind(shuffling.processing_period)
-        .bind(shuffling.shuffling_state)
-        .bind(shuffling.assignee_id)
-        .bind(shuffling.blocks_left)
-        .bind(shuffling.amount_index)
-        .bind(shuffling.recipient_index)
+        .bind(shuffling.blocks_remaining)
+        .bind(shuffling.stage)
+        .bind(shuffling.assignee_account_id)
+        .bind(shuffling.registrant_count)
+        .bind(&shuffling.recipient_public_keys)
         .bind(shuffling.height)
         .bind(shuffling.latest)
         .execute(&self.pool)
