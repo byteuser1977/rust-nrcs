@@ -162,14 +162,15 @@ mod tests {
     #[test]
     fn test_peer_count_checks() {
         let config = P2PConfig::default();
-        
+
         assert!(config.has_enough_connected_peers(MAX_CONNECTIONS));
         assert!(!config.has_enough_connected_peers(10));
-        
+
         assert!(config.too_many_known_peers(3000));
         assert!(!config.too_many_known_peers(100));
-        
-        assert!(config.too_few_known_peers(50));
-        assert!(!config.too_few_known_peers(150));
+
+        // MIN_KNOWN_PEERS = 1000
+        assert!(config.too_few_known_peers(500));   // 500 < 1000
+        assert!(!config.too_few_known_peers(1500)); // 1500 >= 1000
     }
 }

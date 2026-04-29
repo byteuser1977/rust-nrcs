@@ -7,6 +7,7 @@ use axum::{
     Json,
 };
 use std::time::Instant;
+use p2p::PeerState;
 use crate::handlers::network::{state::NetworkApiState, dto::*};
 use crate::core::ApiError;
 
@@ -28,9 +29,9 @@ pub async fn get_peers(
                     address: p.address.to_string(),
                     port: p.port,
                     state: match p.state {
-                        crate::p2p::peer::PeerState::NonConnected => 0,
-                        crate::p2p::peer::PeerState::Connected => 1,
-                        crate::p2p::peer::PeerState::Disconnected => 2,
+                        PeerState::NonConnected => 0,
+                        PeerState::Connected => 1,
+                        PeerState::Disconnected => 2,
                     },
                     announced_address: p.announced_address.clone()
                         .unwrap_or_else(|| p.address.to_string()),
@@ -81,9 +82,9 @@ pub async fn get_peer(
                 "address": peer.address.to_string(),
                 "port": peer.port,
                 "state": match peer.state {
-                    crate::p2p::peer::PeerState::NonConnected => 0,
-                    crate::p2p::peer::PeerState::Connected => 1,
-                    crate::p2p::peer::PeerState::Disconnected => 2,
+                    PeerState::NonConnected => 0,
+                    PeerState::Connected => 1,
+                    PeerState::Disconnected => 2,
                 },
                 "announcedAddress": peer.announced_address.as_deref()
                     .unwrap_or(&peer.address.to_string()),

@@ -1,2 +1,33 @@
+# NRCS 集成测试配置
+
 [p2p]
-bootstrap_nodes = ["192.168.2.164:17974"]
+listen_addr = "/ip4/0.0.0.0/tcp/17975"
+external_addr = "/ip4/0.0.0.0/tcp/17975"
+bootstrap_nodes = [
+  "/ip4/192.168.110.214/tcp/17974",
+]
+max_connections = 2000
+connection_ttl_secs = 600
+protocol_id = "/nrcs/1.0.0"
+
+[api]
+host = "0.0.0.0"
+port = 17977
+cors_allowed_origins = ["*"]
+debug = true
+
+[database]
+url = "sqlite://nrcs.db?mode=rwc"
+pool_size = 10
+
+[mining]
+enabled = false
+
+[consensus]
+algorithm = "pos"
+
+[logging]
+# 日志配置
+level = "debug"  # trace / debug / info / warn / error
+format = "json"  # json / text
+output = "stdout"  # stdout / file
