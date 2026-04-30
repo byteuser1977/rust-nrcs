@@ -12,6 +12,18 @@ use tracing::info;
 use num_bigint::BigUint;
 use num_traits::{Zero, ToPrimitive};
 
+/// 计算区块 Payload Hash（对应 Java: digest.update(transaction.getBytes())）
+fn compute_payload_hash_from_bytes(txs: &[Transaction]) -> anyhow::Result<Hash256> {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    for tx in txs {
+        hasher.update(tx.get_bytes());
+    }
+    let hash = hasher.finalize();
+    let arr: [u8; 32] = hash.try_into().map_err(|_| anyhow::anyhow!("hash length mismatch"))?;
+    Ok(Hash256(arr))
+}
+
 pub struct ChainService {
     block_repo: Arc<dyn BlockRepository>,
     tx_repo: Arc<dyn orm::TransactionRepository>,
@@ -133,8 +145,8 @@ impl ChainService {
         let pubkey = pubkey_opt.ok_or_else(|| anyhow::anyhow!("missing public key for generator"))?;
         block.verify_signature(&pubkey)?;
 
-        // Verify payload hash
-        let computed_payload = Block::compute_merkle_root(&block.transactions)?;
+        // Verify payload hash（对应 Java: digest.update(transaction.getBytes())）
+        let computed_payload = compute_payload_hash_from_bytes(&block.transactions)?;
         if computed_payload != block.payload_hash {
             return Err(anyhow::anyhow!("payload hash mismatch"));
         }
@@ -199,8 +211,8 @@ impl ChainService {
             }
         };
 
-        // Compute payload hash
-        let payload_hash = Block::compute_merkle_root(&transactions)?;
+        // Compute payload hash（对应 Java: digest.update(transaction.getBytes())）
+        let payload_hash = compute_payload_hash_from_bytes(&transactions)?;
 
         // Calculate next difficulty
         let recent_blocks: Vec<Block> = self.block_repo

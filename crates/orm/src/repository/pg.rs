@@ -1372,7 +1372,7 @@ impl PgTransactionRepository {
 impl TransactionRepository for PgTransactionRepository {
     async fn find_by_txid(&self, id: i64) -> RepositoryResult<Option<TransactionModel>> {
         let record = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE id = $1"
+            "SELECT * FROM \"transaction\" WHERE id = $1"
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -1383,7 +1383,7 @@ impl TransactionRepository for PgTransactionRepository {
 
     async fn find_by_full_hash(&self, full_hash: &[u8]) -> RepositoryResult<Option<TransactionModel>> {
         let record = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE full_hash = $1"
+            "SELECT * FROM \"transaction\" WHERE full_hash = $1"
         )
         .bind(full_hash)
         .fetch_optional(&self.pool)
@@ -1394,7 +1394,7 @@ impl TransactionRepository for PgTransactionRepository {
 
     async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
         let records = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE sender_id = $1 ORDER BY timestamp DESC LIMIT $2"
+            "SELECT * FROM \"transaction\" WHERE sender_id = $1 ORDER BY timestamp DESC LIMIT $2"
         )
         .bind(sender_id)
         .bind(limit)
@@ -1406,7 +1406,7 @@ impl TransactionRepository for PgTransactionRepository {
 
     async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
         let records = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE recipient_id = $1 ORDER BY timestamp DESC LIMIT $2"
+            "SELECT * FROM \"transaction\" WHERE recipient_id = $1 ORDER BY timestamp DESC LIMIT $2"
         )
         .bind(recipient_id)
         .bind(limit)
@@ -1418,7 +1418,7 @@ impl TransactionRepository for PgTransactionRepository {
 
     async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<TransactionModel>> {
         let records = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE block_id = $1 ORDER BY transaction_index ASC"
+            "SELECT * FROM \"transaction\" WHERE block_id = $1 ORDER BY transaction_index ASC"
         )
         .bind(block_id)
         .fetch_all(&self.pool)
@@ -1429,7 +1429,7 @@ impl TransactionRepository for PgTransactionRepository {
 
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<TransactionModel>> {
         let records = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE height = $1 ORDER BY transaction_index ASC"
+            "SELECT * FROM \"transaction\" WHERE height = $1 ORDER BY transaction_index ASC"
         )
         .bind(height)
         .fetch_all(&self.pool)
@@ -1448,7 +1448,7 @@ impl Repository<TransactionModel> for PgTransactionRepository {
     async fn insert(&self, tx: &TransactionModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO transaction (
+            INSERT INTO "transaction" (
                 id, deadline, recipient_id, amount, fee, full_hash,
                 height, block_id, block_timestamp, transaction_index, signature, timestamp, type, subtype,
                 sender_id, referenced_transaction_full_hash,
@@ -1498,7 +1498,7 @@ impl Repository<TransactionModel> for PgTransactionRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TransactionModel>> {
         let record = sqlx::query_as::<_, TransactionModel>(
-            "SELECT * FROM transaction WHERE db_id = $1"
+            "SELECT * FROM \"transaction\" WHERE db_id = $1"
         )
         .bind(db_id)
         .fetch_optional(&self.pool)

@@ -64,6 +64,10 @@ impl BlockchainVerifier {
         let mut total_fee: u64 = 0;
         let mut total_payload_length: u32 = 0;
 
+        // 对应 Java BlockchainProcessor.validateTransactions() 中的 hasPrunedTransactions 检测
+        // 当 P2P 同步时，prunable attachment 数据可能被裁剪以节省带宽
+        let mut has_pruned_transactions = false;
+
         for (idx, tx) in block.transactions.iter().enumerate() {
             // 1. 验证交易基本字段
             tx.validate_basic()
@@ -88,15 +92,21 @@ impl BlockchainVerifier {
                     format!("transaction {} fee overflow", tx.id)
                 ))?;
 
-            // 4. 累加payload长度 (approximate: header + attachment bytes)
-            let tx_payload_len = 176 + tx.attachment_bytes.len() as u32; // MIN_TRANSACTION_SIZE + attachment
+            // 4. 累加 payload 长度（对应 Java: payloadLength += transaction.getFullSize()）
+            // 基础大小 176 = signatureOffset(96) + signature(64) + version扩展(16)
+            let tx_payload_len = 176 + tx.attachment_bytes.len() as u32;
             total_payload_length = total_payload_length.checked_add(tx_payload_len)
                 .ok_or_else(|| BlockchainError::InvalidTransaction(
                     format!("transaction {} payload length overflow", tx.id)
                 ))?;
+
+            // 5. 检测 pruned transaction（对应 Java: IPrunable && !hasPrunableData()）
+            if !has_pruned_transactions && Self::is_transaction_pruned(tx) {
+                has_pruned_transactions = true;
+            }
         }
 
-        // 5. 验证区块头中的总金额和总费用
+        // 6. 验证区块头中的总金额和总费用
         if total_amount != block.total_amount {
             return Err(BlockchainError::InvalidTransaction(
                 format!("total amount mismatch: header={}, computed={}", block.total_amount, total_amount)
@@ -108,21 +118,52 @@ impl BlockchainVerifier {
             ));
         }
 
-        // 6. 验证payload长度
-        if block.payload_length != total_payload_length {
+        // 7. 验证 payload length（对应 Java BlockchainProcessor.java:1157）
+        // Java 逻辑:
+        //   无 pruned transactions → 必须精确匹配 (payloadLength == header)
+        //   有 pruned transactions → 允许 <= (payloadLength <= header，因为数据被裁剪)
+        let payload_match = if has_pruned_transactions {
+            total_payload_length <= block.payload_length
+        } else {
+            total_payload_length == block.payload_length
+        };
+
+        if !payload_match {
             return Err(BlockchainError::InvalidTransaction(
-                format!("payload length mismatch: header={}, computed={}", block.payload_length, total_payload_length)
+                format!(
+                    "payload length mismatch: header={}, computed={}, has_pruned={}",
+                    block.payload_length, total_payload_length, has_pruned_transactions
+                )
             ));
+        } else if has_pruned_transactions && total_payload_length < block.payload_length {
+            debug!(
+                "Payload length with pruned data: computed={}, block_header={}",
+                total_payload_length, block.payload_length
+            );
         }
 
         Ok(())
     }
 
+    /// 检测交易是否包含被裁剪的 prunable attachment 数据
+    ///
+    /// 对应 Java: appendage instanceof IPrunable && !appendage.hasPrunableData()
+    ///
+    /// P2P GetNextBlocks 返回的 JSON 中，prunable attachment 的实际数据可能被裁剪，
+    /// 只保留 hash 用于验证。这导致从 JSON 重建的 attachment_bytes 比原始数据短。
+    fn is_transaction_pruned(tx: &Transaction) -> bool {
+        tx.has_prunable_message || tx.has_prunable_encrypted_message || tx.has_prunable_attachment
+    }
+
+    /// 计算区块的 Payload Hash
+    ///
+    /// 对应 Java: BlockchainProcessor.validateTransactions() 中的 digest.update(transaction.getBytes())
+    /// 使用 SHA256( tx1.getBytes() + tx2.getBytes() + ... + txN.getBytes() )
     fn compute_payload_hash(&self, txs: &[Transaction]) -> Result<Hash256> {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         for tx in txs {
-            hasher.update(tx.full_hash.0);
+            hasher.update(tx.get_bytes());
         }
         let hash = hasher.finalize();
         let arr: [u8; 32] = hash.into();
@@ -233,7 +274,7 @@ impl BlockchainVerifier {
 
             sqlx::query(
                 r#"
-                INSERT INTO transaction (
+                INSERT INTO "transaction" (
                     id, deadline, sender_id, recipient_id, amount,
                     fee, height, block_id, transaction_index, timestamp,
                     type, subtype, block_timestamp, full_hash, signature,
@@ -423,6 +464,45 @@ impl BlockchainVerifier {
 
         Ok(())
     }
+
+    /// 清理已插入但 accept 失败的区块数据
+    ///
+    /// 当 insert 成功但 accept（apply_unconfirmed/apply）失败时调用，
+    /// 删除指定高度的区块及其所有交易，保持数据库一致性
+    async fn cleanup_inserted_block(&self, height: i32) -> anyhow::Result<()> {
+        let mut db_tx = self.pool.begin().await
+            .map_err(|e| anyhow::anyhow!("Failed to begin cleanup transaction: {}", e))?;
+
+        if let Some(block_model) = self.block_repo.find_by_height(height).await
+            .map_err(|e| anyhow::anyhow!("Failed to find block at height {}: {}", height, e))?
+        {
+            let block_id = block_model.id;
+
+            let txs = self.tx_repo.find_by_block(block_id).await
+                .map_err(|e| anyhow::anyhow!("Failed to find transactions for block {}: {}", block_id, e))?;
+
+            for tx in &txs {
+                sqlx::query("DELETE FROM \"transaction\" WHERE db_id = ?")
+                    .bind(tx.db_id)
+                    .execute(&mut *db_tx)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to delete transaction {}: {}", tx.db_id, e))?;
+            }
+
+            debug!("Cleaned up {} transactions from block {}", txs.len(), block_id);
+
+            sqlx::query("DELETE FROM block WHERE db_id = ?")
+                .bind(block_model.db_id)
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to delete block {}: {}", block_model.db_id, e))?;
+
+            debug!("Cleaned up block at height={}, id={}", height, block_id);
+        }
+
+        db_tx.commit().await
+            .map_err(|e| anyhow::anyhow!("Failed to commit cleanup transaction: {}", e))
+    }
 }
 
 #[async_trait]
@@ -585,34 +665,45 @@ impl BlockVerifier for BlockchainVerifier {
             block.cumulative_difficulty = biguint_to_signed_bytes_be(diff_add);
         }
 
-        // Step 5 & 6: Wrap insert and accept in a database transaction
+        // Step 5: Insert block to database（独立事务）
         // 对应 Java: Db.beginTransaction() / Db.commitTransaction()
-        let mut db_tx = self.pool.begin().await
-            .map_err(|e| anyhow::anyhow!("Failed to begin database transaction: {}", e))?;
+        // 注意：insert 和 accept 必须拆分为两个独立事务，因为：
+        //   - insert_block_tx 使用 db_tx 连接写入
+        //   - accept_block 内部调用 tx_processor.apply_unconfirmed() 使用 tx_processor 自有的 pool 连接
+        //   - SQLite 不允许两个不同连接同时持有写锁（SQLITE_BUSY, error code 5）
+        {
+            let mut insert_tx = self.pool.begin().await
+                .map_err(|e| anyhow::anyhow!("Failed to begin insert transaction: {}", e))?;
 
-        // Step 5: Insert block to database
-        match self.insert_block_tx(&block, &mut db_tx).await {
-            Ok(()) => {}
-            Err(e) => {
-                db_tx.rollback().await.ok();
-                return Err(e);
+            match self.insert_block_tx(&block, &mut insert_tx).await {
+                Ok(()) => {
+                    insert_tx.commit().await
+                        .map_err(|e| anyhow::anyhow!("Failed to commit insert transaction: {}", e))?;
+                }
+                Err(e) => {
+                    insert_tx.rollback().await.ok();
+                    return Err(e);
+                }
             }
         }
 
-        // Step 6: Execute accept flow (two-phase transaction commit)
-        match self.accept_block_tx(&block, &mut db_tx).await {
+        // Step 6: Execute accept flow（tx_processor 使用自有连接，无锁冲突）
+        // 对应 Java: BlockProcessor.accept()
+        // 如果 accept 失败，需要清理已插入的区块数据
+        match self.accept_block(&block).await {
             Ok(()) => {
-                db_tx.commit().await
-                    .map_err(|e| anyhow::anyhow!("Failed to commit database transaction: {}", e))?;
                 info!("Block accepted: height={}, id={}, txs={}", block_height, block_id, block.transactions.len());
                 Ok(())
             }
             Err(e) => {
-                db_tx.rollback().await.ok();
                 warn!(
-                    "❌ Failed to accept block at height={}: {}",
+                    "❌ Failed to accept block at height={}: {}, cleaning up inserted block",
                     block_height, e
                 );
+                // accept 失败时回滚：删除已插入的区块和交易数据
+                if let Err(cleanup_err) = self.cleanup_inserted_block(block.height as i32).await {
+                    error!("Failed to cleanup block at height {}: {}", block_height, cleanup_err);
+                }
                 Err(e)
             }
         }
@@ -720,7 +811,7 @@ impl BlockVerifier for BlockchainVerifier {
                 .map_err(|e| anyhow::anyhow!("Failed to find transactions for block {}: {}", block_id, e))?;
 
             for tx in &txs {
-                sqlx::query("DELETE FROM transaction WHERE db_id = ?")
+                sqlx::query("DELETE FROM \"transaction\" WHERE db_id = ?")
                     .bind(tx.db_id)
                     .execute(&mut *db_tx)
                     .await

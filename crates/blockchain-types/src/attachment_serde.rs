@@ -2712,8 +2712,7 @@ mod tests {
         let signing_bytes = tx.serialize_for_signing();
         let full_hash_bytes = tx.serialize_for_full_hash();
         
-        println!("\nP2P No FullHash Detailed Debug:");
-        println!("=== serialize_for_signing ({} bytes) ===", signing_bytes.len());
+        println!("\n=== serialize_for_signing ({} bytes) ===", signing_bytes.len());
         println!("  type: {} (0x{:02x})", signing_bytes[0], signing_bytes[0]);
         println!("  version|subtype: {} (0x{:02x})", signing_bytes[1], signing_bytes[1]);
         println!("  timestamp: {} (LE i32)", i32::from_le_bytes([signing_bytes[2], signing_bytes[3], signing_bytes[4], signing_bytes[5]]));
@@ -2732,37 +2731,31 @@ mod tests {
             signing_bytes[60], signing_bytes[61], signing_bytes[62], signing_bytes[63]
         ]));
         println!("  refTxHash: {}", hex::encode(&signing_bytes[64..96]));
-        
-        println!("\n=== serialize_for_full_hash ({} bytes) ===", full_hash_bytes.len());
-        println!("  [signing part]: {} bytes", signing_bytes.len());
-        println!("  zeroSignature: {} bytes of zeros @ offset {}", 64, signing_bytes.len());
-        
-        let flags_offset = signing_bytes.len() + 64;
-        println!("  flags: {} (LE u32) @ offset {}", 
-                  u32::from_le_bytes([
-                      full_hash_bytes[flags_offset], full_hash_bytes[flags_offset+1],
-                      full_hash_bytes[flags_offset+2], full_hash_bytes[flags_offset+3]
-                  ]), flags_offset);
-        println!("  ecBlockHeight: {} @ offset {}", 
-                  u32::from_le_bytes([
-                      full_hash_bytes[flags_offset+4], full_hash_bytes[flags_offset+5],
-                      full_hash_bytes[flags_offset+6], full_hash_bytes[flags_offset+7]
-                  ]), flags_offset + 4);
-        println!("  ecBlockId: {} @ offset {}",
-                  u64::from_le_bytes([
-                      full_hash_bytes[flags_offset+8], full_hash_bytes[flags_offset+9],
-                      full_hash_bytes[flags_offset+10], full_hash_bytes[flags_offset+11],
-                      full_hash_bytes[flags_offset+12], full_hash_bytes[flags_offset+13],
-                      full_hash_bytes[flags_offset+14], full_hash_bytes[flags_offset+15]
-                  ]), flags_offset + 8);
-        
-        let att_offset = flags_offset + 16;
-        println!("  attachmentBytes: {} bytes @ offset {}", 
-                  full_hash_bytes.len() - att_offset, att_offset);
-        println!("  attachmentBytes hex: {}", hex::encode(&full_hash_bytes[att_offset..]));
-        
+        println!("  zeroSignature pad: {} bytes @ offset 96", if signing_bytes.len() > 96 { signing_bytes.len() - 96 } else { 0 });
+
+        let sig_end = 96 + 64;
+        if signing_bytes.len() > sig_end {
+            println!("  flags: {} (LE u32) @ offset {}", u32::from_le_bytes([
+                signing_bytes[sig_end], signing_bytes[sig_end+1],
+                signing_bytes[sig_end+2], signing_bytes[sig_end+3]
+            ]), sig_end);
+            println!("  ecBlockHeight: {} @ offset {}", u32::from_le_bytes([
+                signing_bytes[sig_end+4], signing_bytes[sig_end+5],
+                signing_bytes[sig_end+6], signing_bytes[sig_end+7]
+            ]), sig_end + 4);
+            println!("  ecBlockId: {} @ offset {}", u64::from_le_bytes([
+                signing_bytes[sig_end+8], signing_bytes[sig_end+9],
+                signing_bytes[sig_end+10], signing_bytes[sig_end+11],
+                signing_bytes[sig_end+12], signing_bytes[sig_end+13],
+                signing_bytes[sig_end+14], signing_bytes[sig_end+15]
+            ]), sig_end + 8);
+            let att_offset = sig_end + 16;
+            println!("  attachmentBytes: {} bytes @ offset {}", signing_bytes.len() - att_offset, att_offset);
+        }
+
         println!("\n=== Summary ===");
-        println!("  total serialize_for_full_hash size: {} bytes", full_hash_bytes.len());
+        println!("  serialize_for_signing == serialize_for_full_hash: {}", signing_bytes.len() == full_hash_bytes.len());
+        println!("  total size: {} bytes", full_hash_bytes.len());
         println!("  calculated full_hash: {}", hex::encode(&tx.full_hash.0));
         println!("  expected full_hash: a546e8db59204007db3b0cb08312f001155a17140039b8aa51b8317d44248a82");
         

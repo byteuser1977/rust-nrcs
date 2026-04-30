@@ -216,11 +216,11 @@ impl BlockValidator {
     
     fn compute_payload_hash(&self, transactions: &[Transaction]) -> Hash256 {
         let mut hasher = Sha256::new();
-        
+
         for tx in transactions {
-            hasher.update(&tx.full_hash.0);
+            hasher.update(tx.get_bytes());
         }
-        
+
         let hash = hasher.finalize();
         let mut arr = [0u8; 32];
         arr.copy_from_slice(&hash);

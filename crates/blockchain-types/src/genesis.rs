@@ -99,7 +99,7 @@ pub fn create_genesis_block() -> Result<Block, Box<dyn std::error::Error>> {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     for tx in &transactions {
-        hasher.update(&tx.serialize_for_signing());
+        hasher.update(tx.get_bytes());
     }
     let payload_hash = hasher.finalize();
     

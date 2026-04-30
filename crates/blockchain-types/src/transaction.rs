@@ -585,13 +585,14 @@ impl Transaction {
 
     pub fn calculate_full_hash(&self) -> Result<Hash256> {
         use sha2::{Digest, Sha256};
-        
-        let data = self.serialize_for_full_hash();
-        
+
+        // 对应 Java: zeroSignature(getBytes()) 作为 data
+        let data = self.serialize_for_signing();
+
         let mut hasher = Sha256::new();
         hasher.update(&self.signature.0);
         let signature_hash = hasher.finalize();
-        
+
         let mut hasher = Sha256::new();
         hasher.update(&data);
         hasher.update(&signature_hash);
@@ -616,10 +617,13 @@ impl Transaction {
         Ok(Hash256(arr))
     }
 
-    pub fn serialize_for_signing(&self) -> Vec<u8> {
+    /// 序列化交易基础字段（type ~ refTxHash，共 96 字节）
+    ///
+    /// 对应 Java Transaction.bytes() 的前 signatureOffset 个字节
+    fn serialize_base_fields(&self) -> Vec<u8> {
         const GENESIS_CREATOR_ID: i64 = -80957052124787088i64;
-        
-        let mut buf = Vec::new();
+
+        let mut buf = Vec::with_capacity(96);
         buf.extend_from_slice(&self.type_id.to_byte().to_le_bytes());
         buf.extend_from_slice(&((self.subtype & 0x0f) | (self.version << 4)).to_le_bytes());
         buf.extend_from_slice(&self.timestamp.to_le_bytes());
@@ -643,11 +647,19 @@ impl Transaction {
         buf
     }
 
-    pub fn serialize_for_full_hash(&self) -> Vec<u8> {
-        let mut buf = self.serialize_for_signing();
+    /// 序列化用于签名验证的数据（signature 部分为零填充）
+    ///
+    /// 对应 Java: zeroSignature(getBytes())
+    /// 用于 Curve25519 verify() 的 message 参数
+    pub fn serialize_for_signing(&self) -> Vec<u8> {
+        let mut buf = self.serialize_base_fields();
 
+        // signature 占位（64 字节零填充）
+        // 对应 Java: zeroSignature() 将 signatureOffset ~ signatureOffset+63 置零
         buf.extend_from_slice(&[0u8; 64]);
 
+        // version > 0 时的扩展字段
+        // 对应 Java: bytes() 中 if (this.getVersion() > 0) 分支
         if self.version > 0 {
             let flags = self.get_flags();
             buf.extend_from_slice(&flags.to_le_bytes());
@@ -655,9 +667,40 @@ impl Transaction {
             buf.extend_from_slice(&self.ec_block_id.unwrap_or(0).to_le_bytes());
         }
 
+        // attachment 数据
+        // 对应 Java: appendages.putBytes(buffer)
         buf.extend_from_slice(&self.attachment_bytes);
 
         buf
+    }
+
+    /// 获取完整交易字节数据（包含实际签名）
+    ///
+    /// 对应 Java: Transaction.getBytes()
+    /// 用于 payload hash 计算：SHA256(tx1.getBytes() + tx2.getBytes() + ...)
+    pub fn get_bytes(&self) -> Vec<u8> {
+        let mut buf = self.serialize_base_fields();
+
+        // 实际签名数据（64 字节）
+        buf.extend_from_slice(&self.signature.0);
+
+        // version > 0 时的扩展字段
+        if self.version > 0 {
+            let flags = self.get_flags();
+            buf.extend_from_slice(&flags.to_le_bytes());
+            buf.extend_from_slice(&self.ec_block_height.unwrap_or(0).to_le_bytes());
+            buf.extend_from_slice(&self.ec_block_id.unwrap_or(0).to_le_bytes());
+        }
+
+        // attachment 数据
+        buf.extend_from_slice(&self.attachment_bytes);
+
+        buf
+    }
+
+    pub fn serialize_for_full_hash(&self) -> Vec<u8> {
+        // serialize_for_signing() 已包含完整数据（对应 Java zeroSignature(getBytes())）
+        self.serialize_for_signing()
     }
 
     fn get_flags(&self) -> u32 {

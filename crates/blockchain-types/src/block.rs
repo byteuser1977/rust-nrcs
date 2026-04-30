@@ -716,12 +716,36 @@ impl Block {
         Ok(hashes[0])
     }
 
+    /// 计算区块 Payload Hash（对应 Java: digest.update(transaction.getBytes())）
+    ///
+    /// 使用 SHA256( tx1.getBytes() + tx2.getBytes() + ... + txN.getBytes() )
+    pub fn compute_payload_hash_from_bytes(transactions: &[Transaction]) -> Result<Hash256> {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        for tx in transactions {
+            hasher.update(tx.get_bytes());
+        }
+        let hash = hasher.finalize();
+        let arr: [u8; 32] = hash.try_into().map_err(|_| BlockchainError::InvalidHash("hash length mismatch".to_string()))?;
+        Ok(Hash256(arr))
+    }
+
     /// 验证区块基本字段
     pub fn validate_basic(&self) -> Result<()> {
         if self.version != BLOCK_VERSION {
             return Err(BlockchainError::InvalidTransaction(format!("unsupported block version: {}", self.version)));
         }
-        if self.payload_length as usize != self.transactions.iter().map(|tx| tx.size()).sum::<usize>() {
+        // 验证 payload length（对应 Java BlockchainProcessor.java:1157）
+        // 当 P2P 同步时，prunable attachment 数据可能被裁剪导致计算值偏小
+        let has_pruned = self.transactions.iter()
+            .any(|tx| tx.has_prunable_message || tx.has_prunable_encrypted_message || tx.has_prunable_attachment);
+        let computed_payload = self.transactions.iter().map(|tx| tx.size()).sum::<usize>();
+        let payload_match = if has_pruned {
+            computed_payload <= self.payload_length as usize
+        } else {
+            computed_payload == self.payload_length as usize
+        };
+        if !payload_match {
             return Err(BlockchainError::InvalidTransaction("payload length mismatch".to_string()));
         }
         // 验证时间戳合理性（不能超过当前时间太多，也不能太早）
@@ -754,8 +778,8 @@ impl Block {
             tx.validate_basic()?;
         }
 
-        // 重算 payload_hash 并验证
-        let computed_payload_hash = Self::compute_merkle_root(&self.transactions)?;
+        // 重算 payload_hash 并验证（对应 Java: digest.update(transaction.getBytes())）
+        let computed_payload_hash = Self::compute_payload_hash_from_bytes(&self.transactions)?;
         if computed_payload_hash != self.payload_hash {
             return Err(BlockchainError::InvalidTransaction("payload hash mismatch".to_string()));
         }

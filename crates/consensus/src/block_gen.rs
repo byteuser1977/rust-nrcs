@@ -169,13 +169,11 @@ impl BlockGenerator {
     
     fn calculate_payload_hash(&self, transactions: &[Transaction]) -> Hash256 {
         let mut hasher = Sha256::new();
-        
+
         for tx in transactions {
-            if let Ok(tx_hash) = tx.compute_hash() {
-                hasher.update(tx_hash.0);
-            }
+            hasher.update(tx.get_bytes());
         }
-        
+
         let hash = hasher.finalize();
         let mut arr = [0u8; 32];
         arr.copy_from_slice(&hash);

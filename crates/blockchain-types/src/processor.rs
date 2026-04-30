@@ -78,9 +78,7 @@ impl BlockchainProcessor {
         use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         for tx in txs {
-            let bytes = serde_json::to_vec(tx)
-                .map_err(|e| BlockchainError::Serialization(e.into()))?;
-            hasher.update(bytes);
+            hasher.update(tx.get_bytes());
         }
         let hash = hasher.finalize();
         let arr: [u8; 32] = hash.try_into().unwrap();

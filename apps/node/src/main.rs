@@ -183,7 +183,18 @@ async fn main() -> Result<()> {
             return Err(anyhow::anyhow!("PostgreSQL is temporarily disabled. Please use SQLite."));
         }
         DatabaseType::SQLite => {
-            let pool = SqlitePool::connect(&database_url)
+            use sqlx::sqlite::SqliteConnectOptions;
+
+            let db_path = database_url.strip_prefix("sqlite://")
+                .unwrap_or(&database_url);
+
+            let pool = SqlitePool::connect_with(
+                SqliteConnectOptions::new()
+                    .filename(db_path)
+                    .create_if_missing(true)
+                    .busy_timeout(std::time::Duration::from_secs(30))
+                    .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            )
                 .await
                 .context("Failed to connect to SQLite database")?;
             
