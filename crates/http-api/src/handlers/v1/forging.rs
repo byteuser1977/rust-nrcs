@@ -23,34 +23,41 @@ impl RequestHandler for StartForgingHandler {
     fn parameters(&self) -> Vec<&'static str> {
         vec!["secretPhrase"]
     }
-    
+
     fn api_tags(&self) -> Vec<ApiTag> {
         vec![ApiTag::Forging]
     }
-    
+
     fn require_post(&self) -> bool {
         true
     }
-    
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let secret_phrase = req.require_string("secretPhrase")?;
-        
+
+        let forging = state.forging_service.as_ref()
+            .ok_or_else(|| ApiError::Internal("Forging service not available".to_string()))?;
+
+        forging.start_forging(&secret_phrase).await
+            .map_err(|e| ApiError::Validation(e))?;
+
+        // 获取锻造者信息
         let seed = crypto::sha256(secret_phrase.as_bytes());
         let kp = crypto::keypair_from_seed(&seed);
         let public_key = kp.public_key();
         let pk_bytes = public_key.as_bytes();
-        let hash = crypto::sha256(pk_bytes);
-        let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(&hash[0..8]);
-        let account_id = u64::from_le_bytes(bytes);
-        
+        let account_id = crypto::account_id_from_public_key(pk_bytes);
+
+        let forgers = forging.get_forgers();
+        let forger = forgers.iter().find(|f| f.account_id == account_id);
+
         let mut builder = RsRespBuilder::new();
         builder
             .insert("account", account_id.to_string())
             .insert("accountRS", format_account_rs(account_id))
-            .insert("deadline", 0i64)
-            .insert("hitTime", 0i64);
-        
+            .insert("deadline", forger.map(|f| f.deadline as i64).unwrap_or(0))
+            .insert("hitTime", forger.map(|f| f.hit_time as i64).unwrap_or(0));
+
         Ok(builder.build())
     }
 }
@@ -68,37 +75,37 @@ impl RequestHandler for StopForgingHandler {
     fn parameters(&self) -> Vec<&'static str> {
         vec!["secretPhrase"]
     }
-    
+
     fn api_tags(&self) -> Vec<ApiTag> {
         vec![ApiTag::Forging]
     }
-    
+
     fn require_post(&self) -> bool {
         true
     }
-    
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let secret_phrase = req.get_string("secretPhrase");
-        
-        let account_id = if let Some(sp) = secret_phrase {
-            let seed = crypto::sha256(sp.as_bytes());
-            let kp = crypto::keypair_from_seed(&seed);
-            let public_key = kp.public_key();
-            let pk_bytes = public_key.as_bytes();
-            let hash = crypto::sha256(pk_bytes);
-            let mut bytes = [0u8; 8];
-            bytes.copy_from_slice(&hash[0..8]);
-            u64::from_le_bytes(bytes)
-        } else {
-            0u64
-        };
-        
+
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let secret_phrase = req.require_string("secretPhrase")?;
+
+        let forging = state.forging_service.as_ref()
+            .ok_or_else(|| ApiError::Internal("Forging service not available".to_string()))?;
+
+        // 计算 account_id 用于返回
+        let seed = crypto::sha256(secret_phrase.as_bytes());
+        let kp = crypto::keypair_from_seed(&seed);
+        let public_key = kp.public_key();
+        let pk_bytes = public_key.as_bytes();
+        let account_id = crypto::account_id_from_public_key(pk_bytes);
+
+        forging.stop_forging(&secret_phrase).await
+            .map_err(|e| ApiError::Validation(e))?;
+
         let mut builder = RsRespBuilder::new();
         builder
             .insert("account", account_id.to_string())
             .insert("accountRS", format_account_rs(account_id))
             .insert("stopped", true);
-        
+
         Ok(builder.build())
     }
 }
@@ -116,15 +123,30 @@ impl RequestHandler for GetForgingHandler {
     fn parameters(&self) -> Vec<&'static str> {
         vec!["secretPhrase", "adminPassword"]
     }
-    
+
     fn api_tags(&self) -> Vec<ApiTag> {
         vec![ApiTag::Forging]
     }
-    
-    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+
+    async fn process_request(&self, _req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let forging = state.forging_service.as_ref()
+            .ok_or_else(|| ApiError::Internal("Forging service not available".to_string()))?;
+
+        let forgers = forging.get_forgers();
+
+        let forger_values: Vec<serde_json::Value> = forgers.iter().map(|f| {
+            json!({
+                "account": f.account_id.to_string(),
+                "accountRS": format_account_rs(f.account_id),
+                "effectiveBalanceNRCS": f.effective_balance,
+                "hitTime": f.hit_time,
+                "deadline": f.deadline
+            })
+        }).collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("forgers", json!([]));
-        
+        builder.insert("forgers", json!(forger_values));
+
         Ok(builder.build())
     }
 }
@@ -142,46 +164,52 @@ impl RequestHandler for GetNextBlockGeneratorsHandler {
     fn parameters(&self) -> Vec<&'static str> {
         vec!["limit"]
     }
-    
+
     fn api_tags(&self) -> Vec<ApiTag> {
         vec![ApiTag::Forging]
     }
-    
+
     async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let limit = req.get_i32("limit").unwrap_or(10) as usize;
-        
+
         let latest_block = state.block_repo
             .find_latest()
             .await
             .map_err(ApiError::Repository)?;
-        
+
         let (last_block_id, last_block_height, timestamp) = match latest_block {
             Some(b) => (b.id.to_string(), b.height, b.timestamp),
             None => ("0".to_string(), 0, 0),
         };
-        
-        let generators: Vec<serde_json::Value> = (0..limit)
-            .map(|i| json!({
-                "account": format!("{}", i),
-                "accountRS": format_account_rs(i as u64),
-                "effectiveBalanceNRCS": 1000,
-                "hitTime": timestamp + (i as i32 * 60),
-                "deadline": i as i64 * 60
-            }))
-            .collect();
-        
+
+        let forging = state.forging_service.as_ref();
+        let generators: Vec<serde_json::Value> = if let Some(f) = forging {
+            let forgers = f.get_forgers();
+            forgers.into_iter().take(limit).map(|g| {
+                json!({
+                    "account": g.account_id.to_string(),
+                    "accountRS": format_account_rs(g.account_id),
+                    "effectiveBalanceNRCS": g.effective_balance,
+                    "hitTime": g.hit_time,
+                    "deadline": g.deadline
+                })
+            }).collect()
+        } else {
+            vec![]
+        };
+
         let mut builder = RsRespBuilder::new();
         builder
             .insert("lastBlock", last_block_id)
             .insert("height", last_block_height)
             .insert("generators", json!(generators));
-        
+
         Ok(builder.build())
     }
 }
 
 fn format_account_rs(account_id: u64) -> String {
-    format!("NRCS-{}-{}-{}", 
+    format!("NRCS-{}-{}-{}",
         account_id % 10000,
         (account_id / 10000) % 10000,
         (account_id / 100000000) % 10000

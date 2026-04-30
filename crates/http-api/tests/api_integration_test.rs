@@ -418,6 +418,7 @@ fn create_test_state() -> ApiState {
         asset_repo,
         account_asset_repo,
         p2p_manager: None,
+        forging_service: None,
     }
 }
 

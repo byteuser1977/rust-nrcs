@@ -476,6 +476,23 @@ async fn start_node(
         account_config,
     ));
     
+    // 创建锻造服务
+    let forging_service = Arc::new(forging::ForgingService::new(
+        Arc::clone(&block_repo),
+        Arc::clone(&tx_repo),
+        Arc::clone(&account_repo),
+        Arc::clone(&block_verifier),
+        Arc::clone(&peers),
+        Arc::clone(&p2p_config),
+    ));
+
+    // 启动出块循环
+    let forging_for_loop = Arc::clone(&forging_service);
+    tokio::spawn(async move {
+        forging_for_loop.run().await;
+    });
+    info!("Forging service started");
+
     let api_state = ApiState {
         account_manager,
         tx_processor,
@@ -484,6 +501,7 @@ async fn start_node(
         asset_repo,
         account_asset_repo,
         p2p_manager: None,
+        forging_service: Some(forging_service),
     };
     
     let api_addr: SocketAddr = format!("{}:{}", cfg.api.host, cfg.api.port)

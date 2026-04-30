@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use anyhow::Result;
 use tokio::sync::RwLock;
 use tokio::time::Duration;
 use tracing::{error, info, warn};
@@ -64,14 +65,13 @@ impl ForgingService {
     }
 
     /// 注册锻造者
-    pub async fn start_forging(&self, secret_phrase: &str) -> Result<(), String> {
-        // 先通过 Generator 计算 account_id
+    pub async fn start_forging(&self, secret_phrase: &str) -> Result<()> {
         let generator = consensus::Generator::new(secret_phrase)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
         let account_id = generator.get_account_id();
 
         self.registry.start_forging(secret_phrase)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
 
         self.secret_map.write().await.insert(account_id, secret_phrase.to_string());
 
@@ -80,14 +80,13 @@ impl ForgingService {
     }
 
     /// 注销锻造者
-    pub async fn stop_forging(&self, secret_phrase: &str) -> Result<(), String> {
-        // 需要先计算 account_id 以便从 secret_map 中移除
+    pub async fn stop_forging(&self, secret_phrase: &str) -> Result<()> {
         let generator = consensus::Generator::new(secret_phrase)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
         let account_id = generator.get_account_id();
 
         self.registry.stop_forging(secret_phrase)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
 
         self.secret_map.write().await.remove(&account_id);
 
@@ -123,14 +122,12 @@ impl ForgingService {
     }
 
     /// 单次出块尝试
-    async fn try_forge(&self) -> Result<(), String> {
+    async fn try_forge(&self) -> Result<()> {
         // 1. 获取最新区块
-        let last_block_model = self.block_repo.find_latest().await
-            .map_err(|e| format!("Failed to get latest block: {}", e))?;
+        let last_block_model = self.block_repo.find_latest().await?;
 
         let last_block = match last_block_model {
-            Some(model) => model.to_domain()
-                .map_err(|e| format!("Failed to convert block: {:?}", e))?,
+            Some(model) => model.to_domain()?,
             None => return Ok(()),
         };
 
@@ -210,7 +207,7 @@ impl ForgingService {
     }
 
     /// 更新所有锻造者的 hit_time
-    async fn update_generators(&self, last_block: &Block) -> Result<(), String> {
+    async fn update_generators(&self, last_block: &Block) -> Result<()> {
         let secret_map = self.secret_map.read().await;
 
         for (account_id, secret_phrase) in secret_map.iter() {
@@ -249,7 +246,6 @@ impl ForgingService {
     /// 对应 Java: Generator.verifyHit(lastBlock, timestamp)
     fn verify_hit(&self, forger: &GeneratorInfo, last_block: &Block, timestamp: u32) -> bool {
         use num_bigint::BigUint;
-        use num_traits::Zero;
 
         let elapsed_time = timestamp as i64 - last_block.timestamp as i64;
         if elapsed_time <= 0 {
@@ -303,5 +299,34 @@ impl ForgingService {
             epoch_seconds,
             &self.peers,
         ).await;
+    }
+}
+
+/// 实现 http-api 的 ForgingApi trait
+#[async_trait::async_trait]
+impl http_api::state::ForgingApi for ForgingService {
+    async fn start_forging(&self, secret_phrase: &str) -> std::result::Result<(), String> {
+        ForgingService::start_forging(self, secret_phrase).await
+            .map_err(|e| e.to_string())
+    }
+
+    async fn stop_forging(&self, secret_phrase: &str) -> std::result::Result<(), String> {
+        ForgingService::stop_forging(self, secret_phrase).await
+            .map_err(|e| e.to_string())
+    }
+
+    fn get_forgers(&self) -> Vec<http_api::state::ForgingInfo> {
+        self.registry.get_all_generators().into_iter().map(|g| {
+            http_api::state::ForgingInfo {
+                account_id: g.account_id,
+                hit_time: g.hit_time,
+                effective_balance: g.effective_balance.to_string(),
+                deadline: g.deadline,
+            }
+        }).collect()
+    }
+
+    fn get_forger_count(&self) -> usize {
+        self.registry.get_generator_count()
     }
 }

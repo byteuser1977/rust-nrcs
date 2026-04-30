@@ -7,6 +7,31 @@ use tx_engine::TransactionProcessor;
 use ::account::AccountManager;
 use p2p::P2PManager;
 
+/// Forging service API trait
+///
+/// 定义 forging 相关的 API 接口，由 node 层的 ForgingService 实现。
+/// 避免 http-api 对 node 的循环依赖。
+#[async_trait::async_trait]
+pub trait ForgingApi: Send + Sync {
+    /// 注册锻造者
+    async fn start_forging(&self, secret_phrase: &str) -> std::result::Result<(), String>;
+    /// 注销锻造者
+    async fn stop_forging(&self, secret_phrase: &str) -> std::result::Result<(), String>;
+    /// 获取所有锻造者信息
+    fn get_forgers(&self) -> Vec<ForgingInfo>;
+    /// 获取锻造者数量
+    fn get_forger_count(&self) -> usize;
+}
+
+/// 锻造者信息（API 层）
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ForgingInfo {
+    pub account_id: u64,
+    pub hit_time: u64,
+    pub effective_balance: String,
+    pub deadline: u64,
+}
+
 /// Global API state (shared across all handlers)
 #[derive(Clone)]
 pub struct ApiState {
@@ -17,4 +42,5 @@ pub struct ApiState {
     pub asset_repo: Arc<dyn AssetRepository>,
     pub account_asset_repo: Arc<dyn AccountAssetRepository>,
     pub p2p_manager: Option<Arc<P2PManager>>,
+    pub forging_service: Option<Arc<dyn ForgingApi>>,
 }
