@@ -5651,7 +5651,7 @@ impl Repository<PollResultModel> for SqlitePollResultRepository {
             "#,
         )
         .bind(model.poll_id)
-        .bind(&model.result)
+        .bind(model.result)
         .bind(model.weight)
         .bind(model.height)
         .execute(&self.pool)
@@ -5680,7 +5680,7 @@ impl Repository<PollResultModel> for SqlitePollResultRepository {
             "#,
         )
         .bind(model.poll_id)
-        .bind(&model.result)
+        .bind(model.result)
         .bind(model.height)
         .bind(model.db_id)
         .execute(&self.pool)
@@ -5738,7 +5738,7 @@ impl PollResultRepository for SqlitePollResultRepository {
             "SELECT * FROM poll_result WHERE poll_id = ? AND result = ?"
         )
         .bind(model.poll_id)
-        .bind(&model.result)
+        .bind(model.result)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
