@@ -189,22 +189,12 @@ impl BlockGenerator {
     }
     
     fn sign_block(&self, block: &Block, secret_phrase: &str) -> std::result::Result<Hash512, String> {
+        // 对应 Java: Crypto.sign(block.getHeader(), secretPhrase)
         let header_data = Self::serialize_block_header(block);
-        
-        let mut hasher = Sha256::new();
-        hasher.update(secret_phrase.as_bytes());
-        let key_hash = hasher.finalize();
-        
-        let mut hasher = Sha256::new();
-        hasher.update(&header_data);
-        hasher.update(key_hash);
-        let sig_hash = hasher.finalize();
-        
-        let mut signature = [0u8; 64];
-        signature[..32].copy_from_slice(&sig_hash);
-        signature[32..].copy_from_slice(&sig_hash);
-        
-        Ok(Hash512(signature))
+        let seed = crypto::sha256(secret_phrase.as_bytes());
+        let keypair = crypto::keypair_from_seed(&seed);
+        let sig = keypair.sign(&header_data);
+        Ok(Hash512(sig))
     }
     
     pub fn serialize_block_header(block: &Block) -> Vec<u8> {

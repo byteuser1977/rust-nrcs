@@ -81,21 +81,19 @@ impl Generator {
     }
     
     fn derive_public_key(secret_phrase: &str) -> GeneratorResult<Vec<u8>> {
-        use sha2::{Sha256, Digest};
-        let mut hasher = Sha256::new();
-        hasher.update(secret_phrase.as_bytes());
-        let hash = hasher.finalize();
-        Ok(hash.to_vec())
+        // 对应 Java: Curve25519.keygen(P, s, SHA256(secretPhrase))
+        let seed = crypto::sha256(secret_phrase.as_bytes());
+        let keypair = crypto::keypair_from_seed(&seed);
+        let pub_key = keypair.public_key();
+        match pub_key {
+            crypto::PublicKey::Curve25519(bytes) => Ok(bytes.to_vec()),
+            _ => Err(GeneratorError::InvalidSecretPhrase),
+        }
     }
     
     fn derive_account_id(public_key: &[u8]) -> AccountId {
-        use sha2::{Sha256, Digest};
-        let mut hasher = Sha256::new();
-        hasher.update(public_key);
-        let hash = hasher.finalize();
-        let mut arr = [0u8; 8];
-        arr.copy_from_slice(&hash[..8]);
-        u64::from_le_bytes(arr)
+        // 对应 Java: account_id = SHA256(publicKey)[0..8] 反序转 long
+        crypto::account_id_from_public_key(public_key)
     }
     
     pub fn get_account_id(&self) -> AccountId {

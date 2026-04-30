@@ -53,6 +53,8 @@ use orm::repository::sqlite::SqliteAccountGuaranteedBalanceRepository;
 
 use p2p::BlockchainVerifier;
 
+mod forging;
+
 enum DatabaseType {
     PostgreSQL,
     SQLite,

@@ -205,6 +205,7 @@ pub use crypto::{generate_keypair, keypair_from_seed, sign, verify};
 pub use crypto::{
     generate_keypair_from_passphrase, derive_account_id,
     derive_public_key, validate_account_address, sign_transaction_bytes,
+    account_id_from_public_key,
 };
 
 // Passphrase 模块函数

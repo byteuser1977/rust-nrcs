@@ -8,6 +8,7 @@ authors = ["ByteChain <dev@bytechain.cn>"]
 
 [dependencies]
 blockchain-types = { path = "../blockchain-types" }
+crypto = { path = "../crypto" }
 thiserror = "1.0"
 num-bigint = "0.4"
 num-traits = "0.2"
