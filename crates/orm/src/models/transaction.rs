@@ -88,6 +88,7 @@ impl TransactionModel {
             full_hash,
             referenced_transaction_full_hash,
             attachment_bytes: self.attachment_bytes.clone().unwrap_or_default(),
+            attachment_json: None,
             phased: self.phased,
             has_message: self.has_message,
             has_encrypted_message: self.has_encrypted_message,

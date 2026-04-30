@@ -39,7 +39,7 @@ impl RequestHandler for StartForgingHandler {
             .ok_or_else(|| ApiError::Internal("Forging service not available".to_string()))?;
 
         forging.start_forging(&secret_phrase).await
-            .map_err(|e| ApiError::Validation(e))?;
+            .map_err(ApiError::Validation)?;
 
         // 获取锻造者信息
         let seed = crypto::sha256(secret_phrase.as_bytes());
@@ -98,7 +98,7 @@ impl RequestHandler for StopForgingHandler {
         let account_id = crypto::account_id_from_public_key(pk_bytes);
 
         forging.stop_forging(&secret_phrase).await
-            .map_err(|e| ApiError::Validation(e))?;
+            .map_err(ApiError::Validation)?;
 
         let mut builder = RsRespBuilder::new();
         builder
@@ -177,7 +177,7 @@ impl RequestHandler for GetNextBlockGeneratorsHandler {
             .await
             .map_err(ApiError::Repository)?;
 
-        let (last_block_id, last_block_height, timestamp) = match latest_block {
+        let (last_block_id, last_block_height, _timestamp) = match latest_block {
             Some(b) => (b.id.to_string(), b.height, b.timestamp),
             None => ("0".to_string(), 0, 0),
         };

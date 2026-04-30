@@ -259,6 +259,8 @@ pub struct Transaction {
     pub referenced_transaction_full_hash: Option<Hash256>,
     #[serde(default)]
     pub attachment_bytes: Vec<u8>,
+    #[serde(skip)]
+    pub attachment_json: Option<serde_json::Map<String, serde_json::Value>>,
     #[serde(default)]
     pub phased: bool,
     #[serde(default)]
@@ -303,6 +305,7 @@ impl Default for Transaction {
             full_hash: Hash256([0u8; 32]),
             referenced_transaction_full_hash: None,
             attachment_bytes: vec![],
+            attachment_json: None,
             phased: false,
             has_message: false,
             has_encrypted_message: false,
@@ -347,6 +350,7 @@ impl Transaction {
             full_hash: Hash256([0u8; 32]),
             referenced_transaction_full_hash: None,
             attachment_bytes: vec![],
+            attachment_json: None,
             phased: false,
             has_message: false,
             has_encrypted_message: false,
@@ -510,8 +514,8 @@ impl Transaction {
         // 检测各 appendix 标志（与 Java getFlags() 位图一致）
         let (has_message, has_encrypted_message, has_public_key_announcement,
              has_encrypttoself_message, phased, has_prunable_message,
-             has_prunable_encrypted_message) =
-            crate::attachment_serde::detect_appendix_flags(att_obj.as_ref());
+             has_prunable_encrypted_message, has_tagged_data_prunable) =
+            crate::attachment_serde::detect_appendix_flags(att_obj.as_ref(), type_byte, subtype);
 
         let mut tx = Self {
             id: 0,
@@ -533,12 +537,13 @@ impl Transaction {
             full_hash,
             referenced_transaction_full_hash,
             attachment_bytes,
+            attachment_json: att_obj,
             phased,
             has_message,
             has_encrypted_message,
             has_public_key_announcement,
             has_prunable_message,
-            has_prunable_attachment: has_prunable_message || has_prunable_encrypted_message,
+            has_prunable_attachment: has_prunable_message || has_prunable_encrypted_message || has_tagged_data_prunable,
             ec_block_height,
             ec_block_id,
             has_encrypttoself_message,
@@ -561,21 +566,25 @@ impl Transaction {
     }
 
     pub fn calculate_id(&self) -> u64 {
+        if !self.full_hash.0.iter().all(|&b| b == 0) {
+            let mut id_bytes = [0u8; 8];
+            id_bytes.copy_from_slice(&self.full_hash.0[..8]);
+            return u64::from_le_bytes(id_bytes);
+        }
+
         match self.calculate_full_hash() {
             Ok(full_hash) => {
                 let mut id_bytes = [0u8; 8];
                 id_bytes.copy_from_slice(&full_hash.0[..8]);
-                
-                id_bytes.reverse();
-                
-                u64::from_be_bytes(id_bytes)
+
+                u64::from_le_bytes(id_bytes)
             }
             Err(_) => {
                 use sha2::{Digest, Sha256};
                 let mut hasher = Sha256::new();
                 hasher.update(&self.signature.0);
                 let hash = hasher.finalize();
-                
+
                 let mut id_bytes = [0u8; 8];
                 id_bytes.copy_from_slice(&hash[..8]);
                 u64::from_le_bytes(id_bytes)

@@ -179,6 +179,7 @@ impl BlockchainVerifier {
         }
     }
 
+    #[allow(dead_code)]
     async fn insert_block(&self, block: &Block) -> Result<()> {
         if let Ok(Some(_)) = self.block_repo.find_by_height(block.height as i32).await {
             debug!("Block at height {} already exists, skipping", block.height);
@@ -339,6 +340,7 @@ impl BlockchainVerifier {
     /// Note: The tx_processor and block_reward_applicator use their own connections,
     /// so this method delegates to the original accept_block.
     /// The database transaction protects the block/transaction inserts.
+    #[allow(dead_code)]
     async fn accept_block_tx<'a>(
         &self,
         block: &Block,

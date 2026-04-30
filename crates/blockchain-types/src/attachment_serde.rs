@@ -318,19 +318,11 @@ fn serialize_phasing_appendix(buf: &mut Vec<u8>, version: u8, att_map: &Map<Stri
         put_byte(buf, voting_model as u8);
 
         // quorum (8 bytes, i64 LE - Java long)
-        let quorum = att_map.get("phasingQuorum")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<i64>().ok())
-            .or_else(|| att_map.get("phasingQuorum").and_then(|v| v.as_i64()))
-            .unwrap_or(0);
+        let quorum = parse_u64_as_i64(att_map.get("phasingQuorum").unwrap_or(&serde_json::Value::Null));
         put_i64(buf, quorum);
 
         // minBalance (8 bytes, i64 LE - Java long)
-        let min_balance = att_map.get("phasingMinBalance")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<i64>().ok())
-            .or_else(|| att_map.get("phasingMinBalance").and_then(|v| v.as_i64()))
-            .unwrap_or(0);
+        let min_balance = parse_u64_as_i64(att_map.get("phasingMinBalance").unwrap_or(&serde_json::Value::Null));
         put_i64(buf, min_balance);
 
         // whitelist (1 byte count + 8 bytes each account ID)
@@ -348,11 +340,7 @@ fn serialize_phasing_appendix(buf: &mut Vec<u8>, version: u8, att_map: &Map<Stri
         }
 
         // holdingId (8 bytes, i64 LE)
-        let holding_id = att_map.get("phasingHolding")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.parse::<i64>().ok())
-            .or_else(|| att_map.get("phasingHolding").and_then(|v| v.as_i64()))
-            .unwrap_or(0);
+        let holding_id = parse_u64_as_i64(att_map.get("phasingHolding").unwrap_or(&serde_json::Value::Null));
         put_i64(buf, holding_id);
 
         // minBalanceModel (1 byte)
@@ -457,7 +445,11 @@ fn serialize_phasing_appendix(buf: &mut Vec<u8>, version: u8, att_map: &Map<Stri
 ///
 /// 返回值顺序：(has_message, has_encrypted_message, has_public_key_announcement,
 ///              has_encrypttoself_message, has_phasing, has_prunable_message, has_prunable_encrypted_message)
-pub fn detect_appendix_flags(att_obj: Option<&Map<String, serde_json::Value>>) -> (bool, bool, bool, bool, bool, bool, bool) {
+pub fn detect_appendix_flags(
+    att_obj: Option<&Map<String, serde_json::Value>>,
+    type_id: u8,
+    subtype: u8,
+) -> (bool, bool, bool, bool, bool, bool, bool, bool) {
     let mut has_message = false;
     let mut has_encrypted_message = false;
     let mut has_public_key_announcement = false;
@@ -465,10 +457,11 @@ pub fn detect_appendix_flags(att_obj: Option<&Map<String, serde_json::Value>>) -
     let mut has_phasing = false;
     let mut has_prunable_message = false;
     let mut has_prunable_encrypted_message = false;
+    let mut has_tagged_data_upload = false;
 
     let att_map = match att_obj {
         Some(m) => m,
-        None => return (false, false, false, false, false, false, false),
+        None => return (false, false, false, false, false, false, false, false),
     };
 
     has_message = att_map.get("message").is_some();
@@ -487,8 +480,41 @@ pub fn detect_appendix_flags(att_obj: Option<&Map<String, serde_json::Value>>) -
     has_prunable_encrypted_message = att_map.get("encryptedMessageHash").is_some()
         || att_map.get("version.PrunableEncryptedMessage").is_some();
 
-    (has_message, has_encrypted_message, has_public_key_announcement, has_encrypttoself_message,
-     has_phasing, has_prunable_message, has_prunable_encrypted_message)
+    // 对应 Java IPrunable 接口的其他实现：
+    // - TaggedDataUpload (type=6, subtype=0): 检测 "version.TaggedDataUpload"
+    // - TaggedDataExtendAttachment (type=6, subtype=1): 检测 "version.TaggedDataExtend"
+    // - ShufflingProcessing (type=7): 检测 "version.Shuffling"
+    //
+    // Java 源码参考:
+    // - AbstractAppendix.hasAppendix(): return attachmentData.get("version." + appendixName) != null
+    // - Transaction.newTransactionBuilder(JSONObject): 调用各附录的 parse() 方法
+    // - getPrunableAttachmentJSON(): 遍历 appendages，筛选 instanceof IPrunable 的附录
+    match (type_id, subtype) {
+        (TYPE_DATA, SUBTYPE_DATA_TAGGED_DATA_UPLOAD) => {
+            has_tagged_data_upload = att_map.get("version.TaggedDataUpload").is_some()
+                || att_map.get("hash").is_some()
+                || att_map.get("data").is_some();
+        }
+        (TYPE_DATA, SUBTYPE_DATA_TAGGED_DATA_EXTEND) => {
+            has_tagged_data_upload = att_map.get("version.TaggedDataExtend").is_some()
+                || att_map.get("taggedData").is_some();
+        }
+        (TYPE_SHUFFLING, _) => {
+            has_tagged_data_upload = att_map.get("version.Shuffling").is_some();
+        }
+        _ => {}
+    }
+
+    (
+        has_message,
+        has_encrypted_message,
+        has_public_key_announcement,
+        has_encrypttoself_message,
+        has_phasing,
+        has_prunable_message,
+        has_prunable_encrypted_message,
+        has_tagged_data_upload,
+    )
 }
 
 // ============================================================
@@ -574,26 +600,17 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
                 put_byte(&mut buf, 0);
             }
             if let Some(val) = att_map.get("initialSupply") {
-                put_i64(&mut buf, val.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| val.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(val));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(val) = att_map.get("reserveSupply") {
-                put_i64(&mut buf, val.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| val.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(val));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(val) = att_map.get("maxSupply") {
-                put_i64(&mut buf, val.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| val.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(val));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -606,10 +623,7 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
                 put_i32(&mut buf, 0);
             }
             if let Some(val) = att_map.get("minReservePerUnitNQT") {
-                put_i64(&mut buf, val.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| val.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(val));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -643,18 +657,12 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
             // 对应 Java: MonetarySystemReserveIncrease.putMyBytes()
             // Java: buffer.putLong(currencyId) + buffer.putLong(amountPerUnitNQT)
             if let Some(cur) = att_map.get("currency") {
-                put_i64(&mut buf, cur.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| cur.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(cur));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(amt) = att_map.get("amountPerUnitNQT") {
-                put_i64(&mut buf, amt.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| amt.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(amt));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -663,18 +671,12 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
             // 对应 Java: MonetarySystemReserveClaim.putMyBytes()
             // Java: buffer.putLong(currencyId) + buffer.putLong(units)
             if let Some(cur) = att_map.get("currency") {
-                put_i64(&mut buf, cur.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| cur.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(cur));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(units) = att_map.get("units") {
-                put_i64(&mut buf, units.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| units.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(units));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -683,18 +685,12 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
             // 对应 Java: MonetarySystemCurrencyTransfer.putMyBytes()
             // Java: buffer.putLong(currencyId) + buffer.putLong(units)
             if let Some(cur) = att_map.get("currency") {
-                put_i64(&mut buf, cur.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| cur.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(cur));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(units) = att_map.get("units") {
-                put_i64(&mut buf, units.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| units.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(units));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -705,20 +701,14 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
             //      totalBuyLimit(i64) + totalSellLimit(i64) + initialBuySupply(i64) +
             //      initialSellSupply(i64) + expirationHeight(i32)
             if let Some(cur) = att_map.get("currency") {
-                put_i64(&mut buf, cur.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| cur.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(cur));
             } else {
                 put_i64(&mut buf, 0);
             }
             for field in &["buyRateNQT", "sellRateNQT", "totalBuyLimit", "totalSellLimit",
                            "initialBuySupply", "initialSellSupply"] {
                 if let Some(val) = att_map.get(*field) {
-                    put_i64(&mut buf, val.as_str()
-                        .and_then(|s| s.parse::<i64>().ok())
-                        .or_else(|| val.as_i64())
-                        .unwrap_or(0));
+                    put_i64(&mut buf, parse_u64_as_i64(val));
                 } else {
                     put_i64(&mut buf, 0);
                 }
@@ -736,26 +726,17 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
             // 对应 Java: MonetarySystemExchange.putMyBytes()
             // Java: buffer.putLong(currencyId) + buffer.putLong(rateNQT) + buffer.putLong(units)
             if let Some(cur) = att_map.get("currency") {
-                put_i64(&mut buf, cur.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| cur.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(cur));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(rate) = att_map.get("rateNQT") {
-                put_i64(&mut buf, rate.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| rate.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(rate));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(units) = att_map.get("units") {
-                put_i64(&mut buf, units.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| units.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(units));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -764,34 +745,22 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
             // 对应 Java: MonetarySystemCurrencyMinting.putMyBytes()
             // Java: buffer.putLong(nonce) + buffer.putLong(currencyId) + buffer.putLong(units) + buffer.putLong(counter)
             if let Some(nonce) = att_map.get("nonce") {
-                put_i64(&mut buf, nonce.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| nonce.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(nonce));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(cur) = att_map.get("currency") {
-                put_i64(&mut buf, cur.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| cur.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(cur));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(units) = att_map.get("units") {
-                put_i64(&mut buf, units.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| units.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(units));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(counter) = att_map.get("counter") {
-                put_i64(&mut buf, counter.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| counter.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(counter));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -800,10 +769,7 @@ fn serialize_monetary_system_attachment(subtype: u8, att_map: &Map<String, serde
             // 对应 Java: MonetarySystemCurrencyDeletion.putMyBytes()
             // Java: buffer.putLong(currencyId)
             if let Some(cur) = att_map.get("currency") {
-                put_i64(&mut buf, cur.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| cur.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(cur));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -934,10 +900,7 @@ fn serialize_account_property_attachment(subtype: u8, att_map: &Map<String, serd
         }
         SUBTYPE_ACCOUNT_PROPERTY_DELETE => {
             if let Some(prop) = att_map.get("property") {
-                put_i64(&mut buf, prop.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| prop.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(prop));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -977,10 +940,7 @@ fn serialize_digital_goods_attachment(subtype: u8, att_map: &Map<String, serde_j
                 put_i32(&mut buf, 0);
             }
             if let Some(price) = att_map.get("priceNQT") {
-                put_i64(&mut buf, price.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| price.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(price));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -988,38 +948,26 @@ fn serialize_digital_goods_attachment(subtype: u8, att_map: &Map<String, serde_j
         SUBTYPE_DIGITAL_GOODS_DELISTING | SUBTYPE_DIGITAL_GOODS_FEEDBACK => {
             let key = if subtype == SUBTYPE_DIGITAL_GOODS_DELISTING { "goods" } else { "purchase" };
             if let Some(id) = att_map.get(key) {
-                put_i64(&mut buf, id.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| id.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(id));
             } else {
                 put_i64(&mut buf, 0);
             }
         }
         SUBTYPE_DIGITAL_GOODS_PRICE_CHANGE => {
             if let Some(goods) = att_map.get("goods") {
-                put_i64(&mut buf, goods.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| goods.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(goods));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(price) = att_map.get("priceNQT") {
-                put_i64(&mut buf, price.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| price.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(price));
             } else {
                 put_i64(&mut buf, 0);
             }
         }
         SUBTYPE_DIGITAL_GOODS_QUANTITY_CHANGE => {
             if let Some(goods) = att_map.get("goods") {
-                put_i64(&mut buf, goods.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| goods.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(goods));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1031,10 +979,7 @@ fn serialize_digital_goods_attachment(subtype: u8, att_map: &Map<String, serde_j
         }
         SUBTYPE_DIGITAL_GOODS_PURCHASE => {
             if let Some(goods) = att_map.get("goods") {
-                put_i64(&mut buf, goods.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| goods.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(goods));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1044,10 +989,7 @@ fn serialize_digital_goods_attachment(subtype: u8, att_map: &Map<String, serde_j
                 put_i32(&mut buf, 0);
             }
             if let Some(price) = att_map.get("priceNQT") {
-                put_i64(&mut buf, price.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| price.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(price));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1059,10 +1001,7 @@ fn serialize_digital_goods_attachment(subtype: u8, att_map: &Map<String, serde_j
         }
         SUBTYPE_DIGITAL_GOODS_DELIVERY => {
             if let Some(purchase) = att_map.get("purchase") {
-                put_i64(&mut buf, purchase.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| purchase.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(purchase));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1082,20 +1021,14 @@ fn serialize_digital_goods_attachment(subtype: u8, att_map: &Map<String, serde_j
                 }
             }
             if let Some(discount) = att_map.get("discountNQT") {
-                put_i64(&mut buf, discount.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| discount.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(discount));
             } else {
                 put_i64(&mut buf, 0);
             }
         }
         SUBTYPE_DIGITAL_GOODS_REFUND => {
             if let Some(purchase) = att_map.get("purchase") {
-                put_i64(&mut buf, purchase.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| purchase.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(purchase));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1115,10 +1048,7 @@ fn serialize_shuffling_attachment(_subtype: u8, att_map: &Map<String, serde_json
     let mut buf = Vec::new();
 
     if let Some(shuffling) = att_map.get("shuffling") {
-        put_i64(&mut buf, shuffling.as_str()
-            .and_then(|s| s.parse::<i64>().ok())
-            .or_else(|| shuffling.as_i64())
-            .unwrap_or(0));
+        put_i64(&mut buf, parse_u64_as_i64(shuffling));
     } else {
         put_i64(&mut buf, 0);
     }
@@ -1161,10 +1091,7 @@ fn serialize_aliases_attachment(subtype: u8, att_map: &Map<String, serde_json::V
                 put_byte(&mut buf, 0);
             }
             if let Some(price) = att_map.get("priceNQT") {
-                put_i64(&mut buf, price.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| price.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(price));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1219,10 +1146,7 @@ fn serialize_voting_attachment(subtype: u8, att_map: &Map<String, serde_json::Va
         }
         SUBTYPE_VOTING_VOTE_CASTING => {
             if let Some(poll) = att_map.get("poll") {
-                put_i64(&mut buf, poll.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| poll.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(poll));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1272,18 +1196,12 @@ fn serialize_coin_exchange_attachment(subtype: u8, att_map: &Map<String, serde_j
                 put_i32(&mut buf, 0);
             }
             if let Some(qty) = att_map.get("quantityQNT") {
-                put_i64(&mut buf, qty.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| qty.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(qty));
             } else {
                 put_i64(&mut buf, 0);
             }
             if let Some(price) = att_map.get("priceNQTPerCoin") {
-                put_i64(&mut buf, price.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| price.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(price));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1425,10 +1343,7 @@ fn serialize_messaging_attachment(subtype: u8, att_map: &Map<String, serde_json:
                 put_byte(&mut buf, 0);
             }
             if let Some(mb) = att_map.get("minBalance") {
-                put_i64(&mut buf, mb.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| mb.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(mb));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1438,10 +1353,7 @@ fn serialize_messaging_attachment(subtype: u8, att_map: &Map<String, serde_json:
                 put_byte(&mut buf, 0);
             }
             if let Some(holding) = att_map.get("holding") {
-                put_i64(&mut buf, holding.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| holding.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(holding));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1450,10 +1362,7 @@ fn serialize_messaging_attachment(subtype: u8, att_map: &Map<String, serde_json:
             // 对应 Java: MessagingVoteCasting.putMyBytes()
             // Java: buffer.putLong(pollId) + buffer.put(pollVote.length) + buffer.put(pollVote)
             if let Some(poll) = att_map.get("poll") {
-                put_i64(&mut buf, poll.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| poll.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(poll));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1470,10 +1379,7 @@ fn serialize_messaging_attachment(subtype: u8, att_map: &Map<String, serde_json:
             // 对应 Java: MessagingHubAnnouncement.putMyBytes()
             // Java: buffer.putLong(minFeePerByteNQT) + buffer.put(uris.length) + [uri(SHORT prefix)...]
             if let Some(fee) = att_map.get("minFeePerByte") {
-                put_i64(&mut buf, fee.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| fee.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(fee));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1529,10 +1435,7 @@ fn serialize_messaging_attachment(subtype: u8, att_map: &Map<String, serde_json:
                 put_byte(&mut buf, 0);
             }
             if let Some(price) = att_map.get("priceNQT") {
-                put_i64(&mut buf, price.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| price.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(price));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1590,10 +1493,7 @@ fn serialize_messaging_attachment(subtype: u8, att_map: &Map<String, serde_json:
             // 对应 Java: MessagingAccountPropertyDelete.putMyBytes()
             // Java: buffer.putLong(propertyId)
             if let Some(prop) = att_map.get("property") {
-                put_i64(&mut buf, prop.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| prop.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(prop));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1624,10 +1524,7 @@ fn serialize_colored_coins_attachment(subtype: u8, att_map: &Map<String, serde_j
                 put_u16(&mut buf, 0);
             }
             if let Some(qty) = att_map.get("quantityQNT") {
-                put_i64(&mut buf, qty.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| qty.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(qty));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1709,10 +1606,7 @@ fn serialize_colored_coins_attachment(subtype: u8, att_map: &Map<String, serde_j
                 put_i32(&mut buf, 0);
             }
             if let Some(amount) = att_map.get("amountNQTPerQNT") {
-                put_i64(&mut buf, amount.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| amount.as_i64())
-                    .unwrap_or(0));
+                put_i64(&mut buf, parse_u64_as_i64(amount));
             } else {
                 put_i64(&mut buf, 0);
             }
@@ -1826,10 +1720,7 @@ fn serialize_phasing_only_attachment(buf: &mut Vec<u8>, att_map: &Map<String, se
     
     // maxFees (8 bytes, i64)
     if let Some(max_fees) = att_map.get("controlMaxFees") {
-        put_i64(buf, max_fees.as_str()
-            .and_then(|s| s.parse::<i64>().ok())
-            .or_else(|| max_fees.as_i64())
-            .unwrap_or(0));
+        put_i64(buf, parse_u64_as_i64(max_fees));
     } else {
         put_i64(buf, 0);
     }
@@ -1861,19 +1752,13 @@ fn serialize_phasing_params(buf: &mut Vec<u8>, att_map: &Map<String, serde_json:
     put_byte(buf, voting_model as u8);
     
     if let Some(quorum) = att_map.get("phasingQuorum") {
-        put_i64(buf, quorum.as_str()
-            .and_then(|s| s.parse::<i64>().ok())
-            .or_else(|| quorum.as_i64())
-            .unwrap_or(0));
+        put_i64(buf, parse_u64_as_i64(quorum));
     } else {
         put_i64(buf, 0);
     }
     
     if let Some(min_balance) = att_map.get("phasingMinBalance") {
-        put_i64(buf, min_balance.as_str()
-            .and_then(|s| s.parse::<i64>().ok())
-            .or_else(|| min_balance.as_i64())
-            .unwrap_or(0));
+        put_i64(buf, parse_u64_as_i64(min_balance));
     } else {
         put_i64(buf, 0);
     }
@@ -1892,10 +1777,7 @@ fn serialize_phasing_params(buf: &mut Vec<u8>, att_map: &Map<String, serde_json:
     }
     
     if let Some(holding) = att_map.get("phasingHolding") {
-        put_i64(buf, holding.as_str()
-            .and_then(|s| s.parse::<i64>().ok())
-            .or_else(|| holding.as_i64())
-            .unwrap_or(0));
+        put_i64(buf, parse_u64_as_i64(holding));
     } else {
         put_i64(buf, 0);
     }
@@ -2026,8 +1908,8 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let (has_msg, has_enc, has_pk, has_ets, has_ph, has_pm, has_pem) =
-            detect_appendix_flags(Some(att_map));
+        let (has_msg, has_enc, has_pk, has_ets, has_ph, has_pm, has_pem, _has_tdp) =
+            detect_appendix_flags(Some(att_map), 0, 0);
 
         assert!(has_msg, "Should detect message");
         assert!(!has_enc, "Should not detect encrypted message");
@@ -2072,8 +1954,8 @@ mod tests {
         let att_map = val.as_object().unwrap();
 
         // === 1. 检测 flags ===
-        let (has_msg, has_enc, has_pk, has_ets, has_ph, has_pm, has_pem) =
-            detect_appendix_flags(Some(att_map));
+        let (has_msg, has_enc, has_pk, has_ets, has_ph, has_pm, has_pem, _has_tdp) =
+            detect_appendix_flags(Some(att_map), TYPE_COLORED_COINS, SUBTYPE_COLORED_COINS_ASSET_ISSUANCE);
 
         assert!(!has_msg, "No message in this transaction");
         assert!(!has_enc, "No encrypted message");
@@ -2219,8 +2101,8 @@ mod tests {
         let att_map = val.as_object().unwrap();
 
         // === 1. 检测 flags（phased=false, 无 Phasing appendix）===
-        let (has_msg, has_enc, has_pk, has_ets, has_ph, has_pm, has_pem) =
-            detect_appendix_flags(Some(att_map));
+        let (has_msg, has_enc, has_pk, has_ets, has_ph, has_pm, has_pem, _has_tdp) =
+            detect_appendix_flags(Some(att_map), TYPE_MESSAGING, SUBTYPE_MESSAGING_PHASING_VOTE_CASTING);
 
         assert!(!has_msg, "No message in this transaction");
         assert!(!has_enc, "No encrypted message");
@@ -2763,5 +2645,491 @@ mod tests {
         let expected_full_hash = "a546e8db59204007db3b0cb08312f001155a17140039b8aa51b8317d44248a82";
         assert_eq!(hex::encode(&tx.full_hash.0), expected_full_hash, 
                    "FullHash mismatch in P2P no-fullHash scenario!");
+    }
+
+    #[test]
+    fn test_tagged_data_upload_attachment_bytes() {
+        let json_str = r#"{
+            "version.TaggedDataUpload": 1,
+            "hash": "66d745082ab2b69563689c33cca9f2aea0867fcab96450f7343984cea3411ca8"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_DATA, SUBTYPE_DATA_TAGGED_DATA_UPLOAD, 1, Some(att_map)
+        );
+
+        let expected_hex = "0166d745082ab2b69563689c33cca9f2aea0867fcab96450f7343984cea3411ca8";
+        let expected = hex::decode(expected_hex).unwrap();
+
+        if bytes != expected {
+            println!("Generated (hex): {}", hex::encode(&bytes));
+            println!("Expected (hex):  {}", expected_hex);
+            println!("Generated length: {}, Expected length: {}", bytes.len(), expected.len());
+            for i in 0..std::cmp::max(bytes.len(), expected.len()) {
+                let b = bytes.get(i).copied();
+                let e = expected.get(i).copied();
+                if b != e {
+                    println!("  Byte[{}]: generated={:?}, expected={:?}", i, b, e);
+                }
+            }
+        }
+
+        assert_eq!(bytes, expected, "TaggedDataUpload attachment_bytes mismatch");
+    }
+
+    #[test]
+    fn test_full_transaction_tagged_data_upload() {
+        let json_str = r#"{
+            "amountNQT":"0",
+            "attachment":{
+                "version.TaggedDataUpload":1,
+                "hash":"66d745082ab2b69563689c33cca9f2aea0867fcab96450f7343984cea3411ca8"
+            },
+            "block":"9844141426725231932",
+            "blockTimestamp":29593,
+            "chainId":0,
+            "deadline":15,
+            "ecBlockHeight":0,
+            "ecBlockId":"3488276486778630462",
+            "feeNQT":"280000000",
+            "fullHash":"3094de8870cc7d6711b849a075b0851457258fd224e338f2a0e1e7feb937ea30",
+            "height":514,
+            "phased":false,
+            "sender":"996325769485053218",
+            "senderPublicKey":"2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c",
+            "signature":"c72f0ff5daeff1751e8fe6d00cf64b1148c63d134822c7d42945c97e2f3400030bcf7702826d53d93243f0901f6948275a9de1c7afa67dc04a3bc1fb605d53de",
+            "subtype":0,
+            "timestamp":29563,
+            "transaction":"7457341341700101168",
+            "transactionIndex":0,
+            "type":6,
+            "version":1
+        }"#;
+
+        let json: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let tx = crate::transaction::Transaction::from_json(&json).unwrap();
+
+        let expected_attachment_hex = "0166d745082ab2b69563689c33cca9f2aea0867fcab96450f7343984cea3411ca8";
+        let expected_attachment = hex::decode(expected_attachment_hex).unwrap();
+
+        if tx.attachment_bytes != expected_attachment {
+            println!("Generated attachment_bytes (hex): {}", hex::encode(&tx.attachment_bytes));
+            println!("Expected attachment_bytes (hex):  {}", expected_attachment_hex);
+            println!("Generated length: {}, Expected length: {}", tx.attachment_bytes.len(), expected_attachment.len());
+        }
+
+        assert_eq!(tx.attachment_bytes, expected_attachment, "Full transaction TaggedDataUpload attachment_bytes mismatch");
+        assert_eq!(tx.id, 7457341341700101168u64, "Transaction ID mismatch");
+        assert_eq!(tx.type_id, crate::transaction::TransactionType::Data, "Transaction type should be Data");
+        assert_eq!(tx.subtype, 0, "Subtype should be 0 (TaggedDataUpload)");
+
+        assert!(tx.attachment_json.is_some(), "attachment_json should be preserved");
+        let att_json = tx.attachment_json.as_ref().unwrap();
+        assert_eq!(att_json.get("hash").and_then(|v| v.as_str()), Some("66d745082ab2b69563689c33cca9f2aea0867fcab96450f7343984cea3411ca8"), "hash field in attachment_json mismatch");
+    }
+
+    #[test]
+    fn test_tagged_data_extend_attachment_bytes() {
+        let json_str = r#"{
+            "version.TaggedDataExtend": 1,
+            "taggedData": "13684997425969337109"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_DATA, SUBTYPE_DATA_TAGGED_DATA_EXTEND, 1, Some(att_map)
+        );
+
+        let expected_hex = "0115930917a7e0eabd";
+        let expected = hex::decode(expected_hex).unwrap();
+
+        if bytes != expected {
+            println!("Generated (hex): {}", hex::encode(&bytes));
+            println!("Expected (hex):  {}", expected_hex);
+        }
+
+        assert_eq!(hex::encode(&bytes), expected_hex, "TaggedDataExtend attachment_bytes mismatch");
+    }
+
+    #[test]
+    fn test_payment_with_prunable_encrypted_message() {
+        let json_str = r#"{
+            "version.OrdinaryPayment": 0,
+            "version.PrunableEncryptedMessage": 1,
+            "encryptedMessageHash": "8cdca43d00adad301c3cca02274cc38e95564871c33d35dc1c5be04240c4f43c"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_PAYMENT, SUBTYPE_PAYMENT_ORDINARY_PAYMENT, 1, Some(att_map)
+        );
+
+        let expected_hex = "018cdca43d00adad301c3cca02274cc38e95564871c33d35dc1c5be04240c4f43c";
+        let expected = hex::decode(expected_hex).unwrap();
+
+        if bytes != expected {
+            println!("Generated (hex): {}", hex::encode(&bytes));
+            println!("Expected (hex):  {}", expected_hex);
+        }
+
+        assert_eq!(hex::encode(&bytes), expected_hex, "Payment with PrunableEncryptedMessage attachment_bytes mismatch");
+    }
+
+    #[test]
+    fn test_messaging_with_prunable_plain_message() {
+        let json_str = r#"{
+            "version.ArbitraryMessage": 0,
+            "version.PrunablePlainMessage": 1,
+            "messageHash": "986433f798041860352547dd044a281bc66e1769875696ef91debcccd3781885"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_MESSAGING, SUBTYPE_MESSAGING_ARBITRARY_MESSAGE, 1, Some(att_map)
+        );
+
+        let expected_hex = "01986433f798041860352547dd044a281bc66e1769875696ef91debcccd3781885";
+        let expected = hex::decode(expected_hex).unwrap();
+
+        if bytes != expected {
+            println!("Generated (hex): {}", hex::encode(&bytes));
+            println!("Expected (hex):  {}", expected_hex);
+        }
+
+        assert_eq!(hex::encode(&bytes), expected_hex, "Messaging with PrunablePlainMessage attachment_bytes mismatch");
+    }
+
+    #[test]
+    fn test_contract_reference_delete_attachment_bytes() {
+        let json_str = r#"{
+            "contractReference": "16210848054059321061",
+            "version.ContractReferenceDelete": 1
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_LIGHT_CONTRACT, SUBTYPE_LIGHT_CONTRACT_REFERENCE_DELETE, 1, Some(att_map)
+        );
+
+        let expected_hex = "01e5c6099a6a80f8e0";
+        let expected = hex::decode(expected_hex).unwrap();
+
+        if bytes != expected {
+            println!("Generated (hex): {}", hex::encode(&bytes));
+            println!("Expected (hex):  {}", expected_hex);
+        }
+
+        assert_eq!(hex::encode(&bytes), expected_hex, "ContractReferenceDelete attachment_bytes mismatch");
+    }
+
+    #[test]
+    fn test_currency_issuance_attachment_bytes() {
+        let json_str = r#"{
+            "initialSupply": "1000000",
+            "code": "NUSD",
+            "minDifficulty": 1,
+            "ruleset": 0,
+            "description": "\u4e0eUSD\u4ef7\u683c\u951a\u5b9a\u7684\u79ef\u5206",
+            "minReservePerUnitNQT": "0",
+            "issuanceHeight": 0,
+            "type": 51,
+            "reserveSupply": "0",
+            "version.CurrencyIssuance": 1,
+            "maxDifficulty": 10,
+            "decimals": 2,
+            "name": "NUSD",
+            "maxSupply": "10000000000",
+            "algorithm": 2
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_MONETARY_SYSTEM, SUBTYPE_MONETARY_SYSTEM_CURRENCY_ISSUANCE, 1, Some(att_map)
+        );
+
+        let expected_hex = "01044e555344044e5553441b00e4b88e555344e4bbb7e6a0bce9949ae5ae9ae79a84e7a7afe588863340420f0000000000000000000000000000e40b5402000000000000000000000000000000010a000202";
+        let expected = hex::decode(expected_hex).unwrap();
+
+        if bytes != expected {
+            println!("Generated (hex): {}", hex::encode(&bytes));
+            println!("Expected (hex):  {}", expected_hex);
+            println!("Generated length: {}, Expected length: {}", bytes.len(), expected.len());
+        }
+
+        assert_eq!(hex::encode(&bytes), expected_hex, "CurrencyIssuance attachment_bytes mismatch");
+    }
+
+    #[test]
+    fn test_colored_coins_asset_property_with_public_key() {
+        let json_str = r#"{
+            "version.PublicKeyAnnouncement": 1,
+            "recipientPublicKey": "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c",
+            "property": "no",
+            "asset": "16132763665229324019",
+            "version.AssetProperty": 1,
+            "value": "123456"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_attachment_bytes_from_json(
+            TYPE_COLORED_COINS, SUBTYPE_COLORED_COINS_PROPERTY_SET, 1, Some(att_map)
+        );
+
+        let expected_hex = "01f39e52171417e3df026e6f06313233343536012d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c";
+        let expected = hex::decode(expected_hex).unwrap();
+
+        if bytes != expected {
+            println!("Generated (hex): {}", hex::encode(&bytes));
+            println!("Expected (hex):  {}", expected_hex);
+            println!("Generated length: {}, Expected length: {}", bytes.len(), expected.len());
+        }
+
+        assert_eq!(hex::encode(&bytes), expected_hex, "AssetProperty with PublicKeyAnnouncement attachment_bytes mismatch");
+    }
+
+    #[test]
+    fn test_e2e_transaction2_data_tagged_data_upload() {
+        let json_str = r#"{
+            "amountNQT": "0",
+            "attachment": {
+                "version.TaggedDataUpload": 1,
+                "hash": "66d745082ab2b69563689c33cca9f2aea0867fcab96450f7343984cea3411ca8"
+            },
+            "block": "-8602602646984319684",
+            "blockTimestamp": 29593,
+            "deadline": 15,
+            "ecBlockHeight": 0,
+            "ecBlockId": "3488276486778630462",
+            "feeNQT": "280000000",
+            "fullHash": "3094de8870cc7d6711b849a075b0851457258fd224e338f2a0e1e7feb937ea30",
+            "height": 514,
+            "phased": false,
+            "sender": "996325769485053218",
+            "senderPublicKey": "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c",
+            "signature": "c72f0ff5daeff1751e8fe6d00cf64b1148c63d134822c7d42945c97e2f3400030bcf7702826d53d93243f0901f6948275a9d",
+            "subtype": 0,
+            "timestamp": 29563,
+            "transaction": "7457341341700101168",
+            "transactionIndex": 0,
+            "type": 6,
+            "version": 1
+        }"#;
+
+        let json: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let tx = crate::transaction::Transaction::from_json(&json).unwrap();
+
+        println!("Parsed tx.id: {}", tx.id);
+        println!("Expected id:  {}", 7457341341700101168u64);
+        println!("Parsed full_hash: {}", hex::encode(&tx.full_hash.0));
+        println!("Expected full_hash: 3094de8870cc7d6711b849a075b0851457258fd224e338f2a0e1e7feb937ea30");
+
+        assert_eq!(tx.type_id, crate::transaction::TransactionType::Data);
+        assert_eq!(tx.subtype, 0);
+
+        let expected_att_hex = "0166d745082ab2b69563689c33cca9f2aea0867fcab96450f7343984cea3411ca8";
+        assert_eq!(hex::encode(&tx.attachment_bytes), expected_att_hex, "attachment_bytes mismatch");
+
+        assert!(tx.attachment_json.is_some(), "attachment_json should be preserved");
+        let att = tx.attachment_json.as_ref().unwrap();
+        assert_eq!(att.get("hash").and_then(|v| v.as_str()), Some("66d745082ab2b69563689c33cca9f2aea0867fcab96450f7343984cea3411ca8"));
+    }
+
+    #[test]
+    fn test_e2e_asset_property_set_with_pk_announcement() {
+        let json_str = r#"{
+            "amountNQT": "0",
+            "attachment": {
+                "version.PublicKeyAnnouncement": 1,
+                "recipientPublicKey": "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c",
+                "property": "no",
+                "asset": "16132763665229324019",
+                "version.AssetProperty": 1,
+                "value": "123456"
+            },
+            "block": "4807844805401117927",
+            "blockTimestamp": 133506,
+            "deadline": 15,
+            "ecBlockHeight": 1647,
+            "ecBlockId": "-3101292290248805829",
+            "feeNQT": "100000000",
+            "fullHash": "a82003fc9d935c59e9a62bacb8381f92398ec722a0f02550544d087c18080c89",
+            "height": 2369,
+            "phased": false,
+            "recipient": "996325769485053218",
+            "sender": "996325769485053218",
+            "senderPublicKey": "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c",
+            "signature": "81c12bdb6a45b05252dc068a34d6212897848055da72d899be6819b9635fdc0f76c37ff5f19093a9d52c7cf24fcc5682fb25",
+            "subtype": 10,
+            "timestamp": 133354,
+            "transaction": "6439183873980178600",
+            "transactionIndex": 0,
+            "type": 2,
+            "version": 1
+        }"#;
+
+        let json: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let tx = crate::transaction::Transaction::from_json(&json).unwrap();
+
+        println!("AssetProperty - Parsed tx.id: {}, expected: {}", tx.id, 6439183873980178600u64);
+        println!("full_hash (from JSON): {}", hex::encode(&tx.full_hash.0));
+        match tx.calculate_full_hash() {
+            Ok(calculated) => println!("full_hash (calculated): {}", hex::encode(&calculated.0)),
+            Err(e) => println!("calculate_full_hash error: {:?}", e),
+        }
+        println!("full_hash first 8 bytes: {}", hex::encode(&tx.full_hash.0[..8]));
+        println!("calculate_id() result: {}", tx.calculate_id());
+        println!("attachment_bytes: {}", hex::encode(&tx.attachment_bytes));
+        println!("recipient_id: {:?}", tx.recipient_id);
+
+        assert_eq!(tx.id, 6439183873980178600u64);
+        assert_eq!(tx.type_id, crate::transaction::TransactionType::ColoredCoins);
+        assert_eq!(tx.subtype, 10);
+        assert_eq!(tx.recipient_id, Some(996325769485053218));
+
+        let expected_att_hex = "01f39e52171417e3df026e6f06313233343536012d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c";
+        assert_eq!(hex::encode(&tx.attachment_bytes), expected_att_hex, "attachment_bytes mismatch");
+
+        assert!(tx.attachment_json.is_some());
+        let att = tx.attachment_json.as_ref().unwrap();
+        assert_eq!(att.get("property").and_then(|v| v.as_str()), Some("no"));
+        assert_eq!(att.get("value").and_then(|v| v.as_str()), Some("123456"));
+        assert_eq!(att.get("recipientPublicKey").and_then(|v| v.as_str()), Some("2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c"));
+    }
+
+    #[test]
+    fn test_e2e_contract_reference_delete() {
+        let json_str = r#"{
+            "amountNQT": "0",
+            "attachment": {
+                "contractReference": "16210848054059321061",
+                "version.ContractReferenceDelete": 1
+            },
+            "block": "-4050848184299982100",
+            "blockTimestamp": 171769,
+            "deadline": 15,
+            "ecBlockHeight": 2338,
+            "ecBlockId": "7386031426484071329",
+            "feeNQT": "300000000",
+            "fullHash": "0b9f62178466df745e2b673016991327e5cc961ebd803491e22477c505669c50",
+            "height": 3057,
+            "phased": false,
+            "sender": "996325769485053218",
+            "senderPublicKey": "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c",
+            "signature": "24ab6c187d676d8539cdfc1f1ae87ca050f0949b682add0680c18e275efc46069f937d40f486687c7a2282ea3e227e84e149",
+            "subtype": 1,
+            "timestamp": 171767,
+            "transaction": "8421562545720172299",
+            "transactionIndex": 0,
+            "type": 12,
+            "version": 1
+        }"#;
+
+        let json: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let tx = crate::transaction::Transaction::from_json(&json).unwrap();
+
+        assert_eq!(tx.id, 8421562545720172299u64);
+        assert_eq!(tx.type_id, crate::transaction::TransactionType::LightContract);
+        assert_eq!(tx.subtype, 1);
+
+        let expected_att_hex = "01e5c6099a6a80f8e0";
+        assert_eq!(hex::encode(&tx.attachment_bytes), expected_att_hex, "attachment_bytes mismatch");
+
+        assert!(tx.attachment_json.is_some());
+        let att = tx.attachment_json.as_ref().unwrap();
+        assert_eq!(att.get("contractReference").and_then(|v| v.as_str()), Some("16210848054059321061"));
+    }
+
+    /// 测试 TaggedDataUpload 的 has_prunable_attachment 检测
+    ///
+    /// 对应 transaction.data 中的记录：
+    /// - DB_ID=53: type=6(Data), subtype=0(TaggedDataUpload), HAS_PRUNABLE_ATTACHMENT=TRUE
+    /// - attachment_bytes = 01a1474a67570fbabbf... (33 bytes = version + hash)
+    #[test]
+    fn test_tagged_data_upload_prunable_detection() {
+        // 模拟 TaggedDataUpload 的 JSON（有 hash 字段）
+        let json_str = r#"{
+            "version.TaggedDataUpload": 1,
+            "hash": "a1474a67570fbabbf6794cb86400c119e0b23f4e69f464daea9e0fa93c5ef80c",
+            "data": "test data"
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        // type=6 (Data), subtype=0 (TaggedDataUpload)
+        let (_has_msg, _has_enc, _has_pk, _has_ets, _has_ph,
+             _has_pm, _has_pem, has_tdp) =
+            detect_appendix_flags(Some(att_map), TYPE_DATA, SUBTYPE_DATA_TAGGED_DATA_UPLOAD);
+
+        assert!(has_tdp, "Should detect TaggedDataUpload as prunable attachment");
+
+        // 测试没有 version.TaggedDataUpload 的情况
+        let json_str2 = r#"{"message": "hello"}"#;
+        let val2: serde_json::Value = serde_json::from_str(json_str2).unwrap();
+        let att_map2 = val2.as_object().unwrap();
+
+        let (_, _, _, _, _, _, _, has_tdp2) =
+            detect_appendix_flags(Some(att_map2), TYPE_DATA, SUBTYPE_DATA_TAGGED_DATA_UPLOAD);
+
+        assert!(!has_tdp2, "Should not detect prunable when no TaggedDataUpload fields");
+    }
+
+    /// 测试完整的 transaction.data DB_ID=53 记录
+    ///
+    /// 验证 type=6, subtype=0 的 TaggedDataUpload 交易能正确解析
+    #[test]
+    fn test_e2e_tagged_data_upload_transaction() {
+        let json_str = r#"{
+            "amountNQT": "0",
+            "attachment": {
+                "version.TaggedDataUpload": 1,
+                "hash": "a1474a67570fbabbf6794cb86400c119e0b23f4e69f464daea9e0fa93c5ef80c"
+            },
+            "block": "-6444971140270725924",
+            "blockTimestamp": 125757,
+            "deadline": 15,
+            "ecBlockHeight": 1506,
+            "ecBlockId": "-7988487755785480949",
+            "feeNQT": "260000000",
+            "fullHash": "9193ff27cfae35775252126725132334af1397d58d784ee5064d636f244b425d",
+            "height": 2227,
+            "phased": false,
+            "sender": "996325769485053218",
+            "senderPublicKey": "2d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c",
+            "signature": "2f3c84e074623ee706a0999a03e44c8729987e0d0fcf2f5daad86d3d0495e206d516227a2fb12aa88650e19a4ac642f17017",
+            "subtype": 0,
+            "timestamp": 125712,
+            "transaction": "8589964069031613329",
+            "transactionIndex": 0,
+            "type": 6,
+            "version": 1
+        }"#;
+
+        let json: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let tx = crate::transaction::Transaction::from_json(&json).unwrap();
+
+        assert_eq!(tx.id, 8589964069031613329u64);
+        assert_eq!(tx.type_id, crate::transaction::TransactionType::Data);
+        assert_eq!(tx.subtype, 0);
+
+        // 验证 HAS_PRUNABLE_ATTACHMENT = TRUE
+        assert!(tx.has_prunable_attachment,
+            "TaggedDataUpload should have has_prunable_attachment=true");
+
+        // 验证 HAS_PRUNABLE_MESSAGE = FALSE（这是正确的，因为不是 PrunablePlainMessage）
+        assert!(!tx.has_prunable_message,
+            "TaggedDataUpload should not have has_prunable_message=true");
+
+        // 验证 attachment_bytes 结构：version(1B) + hash(32B) = 33 bytes
+        let expected_att_hex = "01a1474a67570fbabbf6794cb86400c119e0b23f4e69f464daea9e0fa93c5ef80c";
+        assert_eq!(hex::encode(&tx.attachment_bytes), expected_att_hex,
+            "attachment_bytes mismatch for TaggedDataUpload");
     }
 }

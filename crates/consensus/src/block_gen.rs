@@ -96,7 +96,7 @@ impl BlockGenerator {
     
     fn filter_transactions(&self, mut transactions: Vec<Transaction>) -> Vec<Transaction> {
         // 对应 Java: 按 fee 降序排列，优先打包高 fee 交易
-        transactions.sort_by(|a, b| b.fee.cmp(&a.fee));
+        transactions.sort_by_key(|b| std::cmp::Reverse(b.fee));
 
         let mut result = Vec::new();
         let mut total_size = 0usize;

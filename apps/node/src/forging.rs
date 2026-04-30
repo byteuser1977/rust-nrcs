@@ -95,11 +95,12 @@ impl ForgingService {
     }
 
     /// 获取所有注册的锻造者信息
+    #[allow(dead_code)]
     pub fn get_forgers(&self) -> Vec<GeneratorInfo> {
         self.registry.get_all_generators()
     }
-
-    /// 获取锻造者数量
+    ///获取锻造者数量
+    #[allow(dead_code)]
     pub fn get_forger_count(&self) -> usize {
         self.registry.get_generator_count()
     }
@@ -135,7 +136,7 @@ impl ForgingService {
         let epoch_seconds = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs() as u64;
+            .as_secs();
         let forging_delay = FORGING_DELAY as u64;
         let generation_limit = epoch_seconds.saturating_sub(forging_delay);
 
@@ -159,9 +160,9 @@ impl ForgingService {
                 }
             };
 
-            let timestamp = self.get_timestamp(&forger, generation_limit);
+            let timestamp = self.get_timestamp(forger, generation_limit);
 
-            if !self.verify_hit(&forger, &last_block, timestamp) {
+            if !self.verify_hit(forger, &last_block, timestamp) {
                 warn!("[Forging] Hit verification failed for account {}", forger.account_id);
                 continue;
             }

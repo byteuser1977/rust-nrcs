@@ -408,9 +408,10 @@ async fn start_node(
 
     // 初始化 P2P 管理器（使用完整仓库支持）
     let peers = Arc::new(Peers::new(my_peer.clone()));
-    let mut p2p_config = GlobalP2PConfig::default();
-    p2p_config.listen_addr = listen_addr;
-    let p2p_config = Arc::new(p2p_config);
+    let p2p_config = Arc::new(GlobalP2PConfig {
+        listen_addr,
+        ..Default::default()
+    });
     let handler = Arc::new(Handler::with_repositories(
         Arc::clone(&peers),
         Arc::clone(&block_verifier),

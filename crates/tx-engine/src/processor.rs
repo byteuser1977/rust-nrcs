@@ -1603,7 +1603,7 @@ impl DatabaseTransactionProcessor {
         }
 
         // Java: decimals must be 0-8
-        if decimals < 0 || decimals > 8 {
+        if !(0..=8).contains(&decimals) {
             return Err(ProcessorError::Validation(
                 format!("Currency decimals must be 0-8, got {}", decimals)
             ));
@@ -1760,8 +1760,8 @@ impl DatabaseTransactionProcessor {
             let sell_rate = self.parse_long_field(tx, "sellRate").unwrap_or(0);
             let total_buy_limit = self.parse_long_field(tx, "totalBuyLimit").unwrap_or(0);
             let total_sell_limit = self.parse_long_field(tx, "totalSellLimit").unwrap_or(0);
-            let initial_buy_supply = self.parse_long_field(tx, "initialBuySupply").unwrap_or(0);
-            let initial_sell_supply = self.parse_long_field(tx, "initialSellSupply").unwrap_or(0);
+            let _initial_buy_supply = self.parse_long_field(tx, "initialBuySupply").unwrap_or(0);
+            let _initial_sell_supply = self.parse_long_field(tx, "initialSellSupply").unwrap_or(0);
             let expiration_height = self.parse_long_field(tx, "expirationHeight").unwrap_or(0);
 
             // Java: CurrencyExchangeOffer.publishOffer(transaction, attachment);
@@ -2621,7 +2621,7 @@ impl DatabaseTransactionProcessor {
                         let model = orm::models::AccountPropertyModel {
                             db_id: 0,
                             id: tx.id as i64,
-                            recipient_id: recipient_id as i64,
+                            recipient_id,
                             setter_id: Some(sender_id),
                             property: property_name.clone(),
                             value: Some(property_value),
@@ -2670,7 +2670,7 @@ impl DatabaseTransactionProcessor {
                         let model = orm::models::AccountPropertyModel {
                             db_id: 0,
                             id: tx.id as i64,
-                            recipient_id: recipient_id as i64,
+                            recipient_id,
                             setter_id: Some(sender_id),
                             property: property_name.clone(),
                             value: Some(long_value.to_string()),
@@ -3112,7 +3112,7 @@ impl DatabaseTransactionProcessor {
                         db_id: 0,
                         id: tx.id as i64,
                         buyer_id: sender_id,
-                        goods_id: goods_id,
+                        goods_id,
                         seller_id: 0, // Will be filled from goods
                         quantity: quantity as i32,
                         price: price_nqt,
@@ -3187,7 +3187,7 @@ impl DatabaseTransactionProcessor {
                             db_id: 0,
                             id: tx.id as i64,
                             feedback_data: feedback_note.clone().into_bytes(),
-                            feedback_nonce: feedback_nonce,
+                            feedback_nonce,
                             height: self.get_current_height(),
                             latest: true,
                         };
@@ -3252,10 +3252,10 @@ impl DatabaseTransactionProcessor {
                         db_id: 0,
                         id: tx.id as i64,
                         holding_id: Some(holding_id),
-                        holding_type: holding_type,
+                        holding_type,
                         issuer_id: sender_id,
                         amount: shuffling_amount_nqt,
-                        participant_count: participant_count,
+                        participant_count,
                         blocks_remaining: Some(registration_period),
                         stage: 0, // REGISTRATION
                         assignee_account_id: None,
@@ -3324,7 +3324,7 @@ impl DatabaseTransactionProcessor {
 
                 if shuffling_id > 0 {
                     // Parse recipient public keys from attachment
-                    let recipient_public_keys = self.parse_string_field(tx, "recipientPublicKeys").unwrap_or_default();
+                    let _recipient_public_keys = self.parse_string_field(tx, "recipientPublicKeys").unwrap_or_default();
 
                     debug!("SHUFFLING_RECIPIENTS: adding participants to {}", shuffling_id);
                 }
@@ -3369,139 +3369,90 @@ impl DatabaseTransactionProcessor {
     /// Reference: Transaction.from_json() 将 attachment JSON 对象序列化为 bytes
     /// 这里需要反序列化并提取指定字段的值
     fn parse_string_field(&self, tx: &Transaction, field_name: &str) -> Option<String> {
-        if tx.attachment_bytes.is_empty() {
-            debug!("Empty attachment bytes for transaction {}", tx.id);
-            return None;
-        }
+        let att_map = tx.attachment_json.as_ref()?;
 
-        // 反序列化 attachment JSON
-        match serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes) {
-            Ok(json) => {
-                match json.get(field_name) {
-                    Some(serde_json::Value::String(s)) => {
-                        debug!("Parsed string field '{}='{}' from transaction {}",
-                            field_name, s, tx.id);
-                        Some(s.clone())
-                    }
-                    Some(serde_json::Value::Number(n)) => {
-                        // 某些字段可能是数字类型，转换为字符串
-                        let s = n.to_string();
-                        debug!("Parsed numeric field '{}='{}' as string from transaction {}",
-                            field_name, s, tx.id);
-                        Some(s)
-                    }
-                    Some(other) => {
-                        warn!("Field '{}' in transaction {} has unexpected type: {:?}",
-                            field_name, tx.id, other);
-                        None
-                    }
-                    None => {
-                        debug!("Field '{}' not found in attachment for transaction {}",
-                            field_name, tx.id);
-                        None
-                    }
-                }
+        match att_map.get(field_name) {
+            Some(serde_json::Value::String(s)) => {
+                debug!("Parsed string field '{}={}' from transaction {}",
+                    field_name, s, tx.id);
+                Some(s.clone())
             }
-            Err(e) => {
-                warn!("Failed to parse attachment JSON for transaction {}: {}", tx.id, e);
+            Some(serde_json::Value::Number(n)) => {
+                let s = n.to_string();
+                debug!("Parsed numeric field '{}={}' as string from transaction {}",
+                    field_name, s, tx.id);
+                Some(s)
+            }
+            Some(other) => {
+                warn!("Field '{}' in transaction {} has unexpected type: {:?}",
+                    field_name, tx.id, other);
+                None
+            }
+            None => {
+                debug!("Field '{}' not found in attachment for transaction {}",
+                    field_name, tx.id);
                 None
             }
         }
     }
 
-    /// 从Transaction的attachment JSON bytes中解析Long (i64) 字段
     fn parse_long_field(&self, tx: &Transaction, field_name: &str) -> Option<i64> {
-        if tx.attachment_bytes.is_empty() {
-            debug!("Empty attachment bytes for transaction {}", tx.id);
-            return None;
-        }
+        let att_map = tx.attachment_json.as_ref()?;
 
-        match serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes) {
-            Ok(json) => {
-                match json.get(field_name) {
-                    Some(serde_json::Value::Number(n)) => {
-                        n.as_i64().or_else(|| {
-                            // 如果不是i64，尝试从u64转换（处理大数字）
-                            n.as_u64().map(|v| v as i64)
-                        })
-                    }
-                    Some(serde_json::Value::String(s)) => {
-                        // Java NRCS有时将long作为字符串传输
-                        s.parse::<i64>().ok()
-                            .or_else(|| {
-                                // 尝试解析为u64再转换（处理大正数）
-                                s.parse::<u64>().ok().map(|v| v as i64)
-                            })
-                    }
-                    _ => None,
-                }
+        match att_map.get(field_name) {
+            Some(serde_json::Value::Number(n)) => {
+                n.as_i64().or_else(|| {
+                    n.as_u64().map(|v| v as i64)
+                })
             }
-            Err(_) => None,
+            Some(serde_json::Value::String(s)) => {
+                s.parse::<i64>().ok()
+                    .or_else(|| {
+                        s.parse::<u64>().ok().map(|v| v as i64)
+                    })
+            }
+            _ => None,
         }
     }
 
-    /// 从Transaction的attachment JSON bytes中解析Bool字段
     fn parse_bool_field(&self, tx: &Transaction, field_name: &str) -> Option<bool> {
-        if tx.attachment_bytes.is_empty() {
-            return None;
-        }
+        let att_map = tx.attachment_json.as_ref()?;
 
-        match serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes) {
-            Ok(json) => {
-                match json.get(field_name) {
-                    Some(serde_json::Value::Bool(b)) => Some(*b),
-                    Some(serde_json::Value::Number(n)) => {
-                        n.as_i64().map(|v| v != 0)
-                    }
-                    Some(serde_json::Value::String(s)) => {
-                        match s.as_str() {
-                            "true" | "1" | "yes" => Some(true),
-                            "false" | "0" | "no" => Some(false),
-                            _ => None,
-                        }
-                    }
+        match att_map.get(field_name) {
+            Some(serde_json::Value::Bool(b)) => Some(*b),
+            Some(serde_json::Value::Number(n)) => {
+                n.as_i64().map(|v| v != 0)
+            }
+            Some(serde_json::Value::String(s)) => {
+                match s.as_str() {
+                    "true" | "1" | "yes" => Some(true),
+                    "false" | "0" | "no" => Some(false),
                     _ => None,
                 }
             }
-            Err(_) => None,
+            _ => None,
         }
     }
 
-    /// 从Transaction的attachment JSON bytes中解析Bytes字段
     fn parse_bytes_field(&self, tx: &Transaction, field_name: &str) -> Option<Vec<u8>> {
-        if tx.attachment_bytes.is_empty() {
-            return None;
-        }
+        let att_map = tx.attachment_json.as_ref()?;
 
-        match serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes) {
-            Ok(json) => {
-                match json.get(field_name) {
-                    Some(serde_json::Value::String(s)) => {
-                        // Try hex decode
-                        hex::decode(s).ok()
-                    }
-                    Some(serde_json::Value::Array(arr)) => {
-                        // Array of bytes
-                        let bytes: Option<Vec<u8>> = arr.iter()
-                            .map(|v| v.as_u64().map(|n| n as u8))
-                            .collect();
-                        bytes
-                    }
-                    _ => None,
-                }
+        match att_map.get(field_name) {
+            Some(serde_json::Value::String(s)) => {
+                hex::decode(s).ok()
             }
-            Err(_) => None,
+            Some(serde_json::Value::Array(arr)) => {
+                let bytes: Option<Vec<u8>> = arr.iter()
+                    .map(|v| v.as_u64().map(|n| n as u8))
+                    .collect();
+                bytes
+            }
+            _ => None,
         }
     }
 
-    /// 获取完整的attachment JSON对象（用于复杂解析）
-    #[allow(dead_code)]
     fn get_attachment_json(&self, tx: &Transaction) -> Option<serde_json::Value> {
-        if tx.attachment_bytes.is_empty() {
-            return None;
-        }
-
-        serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes).ok()
+        tx.attachment_json.as_ref().map(|m| serde_json::Value::Object(m.clone()))
     }
 
     /// Apply unconfirmed attachment deduction (mempool pre-deduction for assets/currencies)

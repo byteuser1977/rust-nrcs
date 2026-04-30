@@ -82,6 +82,7 @@ pub fn create_genesis_block() -> Result<Block, Box<dyn std::error::Error>> {
             full_hash: Hash256([0u8; 32]),
             referenced_transaction_full_hash: None,
             attachment_bytes: vec![],
+            attachment_json: None,
             phased: false,
             has_message: false,
             has_encrypted_message: false,
