@@ -185,7 +185,12 @@ async fn main() -> Result<()> {
         DatabaseType::SQLite => {
             use sqlx::sqlite::SqliteConnectOptions;
 
-            let db_path = database_url.strip_prefix("sqlite://")
+            // 剥离 sqlite:// 前缀和查询参数（如 ?mode=rwc）
+            let db_path = database_url
+                .strip_prefix("sqlite://")
+                .unwrap_or(&database_url)
+                .split('?')
+                .next()
                 .unwrap_or(&database_url);
 
             let pool = SqlitePool::connect_with(
