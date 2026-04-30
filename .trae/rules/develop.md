@@ -23,6 +23,7 @@
 - NRCS 源码地址：NRCS 的参考源码在/Volumes/DATA/data/develop/git/nrcs/,在开发及测试过程中遇到的代码问题，需要参考 NRCS 项目的代码，不要自己实现
 - orm 的实现要完全基于 NRCS 项目的数据库 schema 实现（migrations 目录中的 schema 是 nrcs 全量脚本），不能有任何差异
 - 全量覆盖实现 orm 的数据库访问的方法
+- 不要随便删除已经通过NRCS(java)移植到rust-nrcs的模块和函数，最多只能把对应模块和函数做备注屏蔽
 - 系统代码实现要有效的模块化，避免单一源码文件内容过多
 
 ### 1.3 开发命令
