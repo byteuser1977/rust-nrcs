@@ -149,7 +149,7 @@ pub use keypair::KeyPair;
 pub use config::CryptoConfig;
 
 // 重新导出具体算法（供选择和测试）
-pub use algorithms::{Ed25519, Curve25519, Sm2, Sha256, Sm3, Sm4Gcm};
+pub use algorithms::{Ed25519, Curve25519, Sm2, Sha256, Sm3, Sm4Gcm, AesGcm};
 
 // 错误类型与结果
 use thiserror::Error;

@@ -254,9 +254,9 @@ fn test_p2p_config_default() {
     assert_eq!(config.max_connections, 20);
     assert_eq!(config.max_inbound_connections, 100);
     assert_eq!(config.max_outbound_connections, 20);
-    assert_eq!(config.connect_timeout_ms, 4000);
+    assert_eq!(config.connect_timeout_ms, 2000);
     assert_eq!(config.read_timeout_ms, 4000);
-    assert_eq!(config.blacklisting_period_secs, 3600);
+    assert_eq!(config.blacklisting_period_secs, 600);
     assert!(config.use_websockets);
     assert!(config.blacklisting_enabled);
 }

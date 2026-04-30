@@ -94,25 +94,28 @@ impl BlockGenerator {
         template
     }
     
-    fn filter_transactions(&self, transactions: Vec<Transaction>) -> Vec<Transaction> {
+    fn filter_transactions(&self, mut transactions: Vec<Transaction>) -> Vec<Transaction> {
+        // 对应 Java: 按 fee 降序排列，优先打包高 fee 交易
+        transactions.sort_by(|a, b| b.fee.cmp(&a.fee));
+
         let mut result = Vec::new();
         let mut total_size = 0usize;
-        
+
         for tx in transactions {
             let tx_size = self.estimate_transaction_size(&tx);
-            
+
             if total_size + tx_size > self.max_payload_length {
                 break;
             }
-            
+
             if result.len() >= self.max_transactions {
                 break;
             }
-            
+
             total_size += tx_size;
             result.push(tx);
         }
-        
+
         result
     }
     

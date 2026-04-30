@@ -13,7 +13,7 @@ pub struct CryptoConfig {
     /// 签名算法: "curve25519" (默认, NRCS 兼容), "ed25519", 或 "sm2"
     pub signature: String,
 
-    /// 加密算法: "sm4-gcm" (默认)，未来支持 "aes-gcm"
+    /// 加密算法: "sm4-gcm" (默认) 或 "aes-gcm" (Java NRCS 兼容)
     pub cipher: String,
 }
 

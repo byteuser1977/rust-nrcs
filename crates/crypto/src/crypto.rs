@@ -6,7 +6,7 @@
 use crate::{
     algorithms::{HashAlgorithm, SignatureAlgorithm, GcmAlgorithm},
     config::CryptoConfig,
-    algorithms::{Ed25519, Curve25519, Sha256, Sm3, Sm4Gcm},
+    algorithms::{Ed25519, Curve25519, Sha256, Sm3, Sm4Gcm, AesGcm},
     CryptoError, CryptoResult, Hash256, PublicKey, SecretKey, Signature, keypair::KeyPair,
 };
 use once_cell::sync::OnceCell;
@@ -40,6 +40,7 @@ impl Crypto {
 
         let cipher: Arc<dyn GcmAlgorithm> = match config.cipher.as_str() {
             "sm4-gcm" => Arc::new(Sm4Gcm),
+            "aes-gcm" => Arc::new(AesGcm),
             _ => return Err(CryptoError::ConfigurationError(format!("unknown cipher algorithm: {}", config.cipher))),
         };
 

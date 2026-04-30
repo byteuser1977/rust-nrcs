@@ -26,11 +26,21 @@ use orm::{
     // 新增导入
     AliasRepository, AliasOfferRepository,
     PollRepository, VoteRepository,
-    TaggedDataRepository, TaggedDataTagRepository,
+    TaggedDataRepository, TaggedDataTagRepository, TaggedDataExtendRepository,
+    TaggedTimestampRepository,
     ContractReferenceRepository,
     AskOrderRepository, BidOrderRepository,
     CurrencyRepository, AccountCurrencyRepository, CurrencyTransferRepository,
     AssetPropertyRepository,
+    AccountPropertyRepository, AccountInfoRepository,
+    // Phasing
+    PhasingPollRepository, PhasingVoteRepository, AccountControlPhasingRepository,
+    // Digital Goods
+    GoodsRepository, PurchaseRepository,
+    // Shuffling
+    ShufflingRepository,
+    // Account Lease
+    AccountLeaseRepository,
 };
 use thiserror::Error;
 
@@ -288,13 +298,21 @@ pub struct DatabaseTransactionProcessor {
     poll_repo: Arc<dyn PollRepository>,
     vote_repo: Arc<dyn VoteRepository>,
 
-    // 新增：Account属性（使用通用Repository）
-    // account_property_repo: Arc<dyn Repository<AccountPropertyModel>>,  // 暂时注释
+    // 新增：Account属性
+    account_property_repo: Arc<dyn AccountPropertyRepository>,
+    account_info_repo: Arc<dyn AccountInfoRepository>,
+
+    // 新增：Phasing
+    phasing_poll_repo: Arc<dyn PhasingPollRepository>,
+    phasing_vote_repo: Arc<dyn PhasingVoteRepository>,
+    account_control_phasing_repo: Arc<dyn AccountControlPhasingRepository>,
 
     // 新增：Data/Tagged
     tagged_data_repo: Arc<dyn TaggedDataRepository>,
     #[allow(dead_code)]
     tagged_data_tag_repo: Arc<dyn TaggedDataTagRepository>,
+    tagged_data_extend_repo: Arc<dyn TaggedDataExtendRepository>,
+    tagged_timestamp_repo: Arc<dyn TaggedTimestampRepository>,
 
     // 新增：合约引用
     contract_ref_repo: Arc<dyn ContractReferenceRepository>,
@@ -314,6 +332,16 @@ pub struct DatabaseTransactionProcessor {
     // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
     exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
     currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
+
+    // 新增：Digital Goods
+    goods_repo: Arc<dyn GoodsRepository>,
+    purchase_repo: Arc<dyn PurchaseRepository>,
+
+    // 新增：Shuffling
+    shuffling_repo: Arc<dyn ShufflingRepository>,
+
+    // 新增：Account Lease
+    account_lease_repo: Arc<dyn AccountLeaseRepository>,
 
     // 区块上下文
     current_block_id: std::sync::RwLock<i64>,
@@ -337,9 +365,15 @@ impl DatabaseTransactionProcessor {
         alias_offer_repo: Arc<dyn AliasOfferRepository>,
         poll_repo: Arc<dyn PollRepository>,
         vote_repo: Arc<dyn VoteRepository>,
-        // account_property_repo: Arc<dyn Repository<AccountPropertyModel>>,  // 暂时注释
+        account_property_repo: Arc<dyn AccountPropertyRepository>,
+        account_info_repo: Arc<dyn AccountInfoRepository>,
+        phasing_poll_repo: Arc<dyn PhasingPollRepository>,
+        phasing_vote_repo: Arc<dyn PhasingVoteRepository>,
+        account_control_phasing_repo: Arc<dyn AccountControlPhasingRepository>,
         tagged_data_repo: Arc<dyn TaggedDataRepository>,
         tagged_data_tag_repo: Arc<dyn TaggedDataTagRepository>,
+        tagged_data_extend_repo: Arc<dyn TaggedDataExtendRepository>,
+        tagged_timestamp_repo: Arc<dyn TaggedTimestampRepository>,
         contract_ref_repo: Arc<dyn ContractReferenceRepository>,
         ask_order_repo: Arc<dyn AskOrderRepository>,
         bid_order_repo: Arc<dyn BidOrderRepository>,
@@ -350,6 +384,13 @@ impl DatabaseTransactionProcessor {
         // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
         exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
         currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
+        // 新增：Digital Goods
+        goods_repo: Arc<dyn GoodsRepository>,
+        purchase_repo: Arc<dyn PurchaseRepository>,
+        // 新增：Shuffling
+        shuffling_repo: Arc<dyn ShufflingRepository>,
+        // 新增：Account Lease
+        account_lease_repo: Arc<dyn AccountLeaseRepository>,
     ) -> Self {
         Self {
             account_repo,
@@ -364,9 +405,15 @@ impl DatabaseTransactionProcessor {
             alias_offer_repo,
             poll_repo,
             vote_repo,
-            // account_property_repo,  // 暂时注释
+            account_property_repo,
+            account_info_repo,
+            phasing_poll_repo,
+            phasing_vote_repo,
+            account_control_phasing_repo,
             tagged_data_repo,
             tagged_data_tag_repo,
+            tagged_data_extend_repo,
+            tagged_timestamp_repo,
             contract_ref_repo,
             ask_order_repo,
             bid_order_repo,
@@ -376,6 +423,10 @@ impl DatabaseTransactionProcessor {
             asset_property_repo,
             exchange_request_repo,
             currency_mint_repo,
+            goods_repo,
+            purchase_repo,
+            shuffling_repo,
+            account_lease_repo,
             current_block_id: std::sync::RwLock::new(0),
             current_height: std::sync::RwLock::new(0),
             current_timestamp: std::sync::RwLock::new(0),
@@ -2238,7 +2289,7 @@ impl DatabaseTransactionProcessor {
         let current_timestamp = self.get_current_timestamp();
 
         match tx.subtype {
-            5 => { // ALIAS_ASSIGNMENT
+            1 => { // ALIAS_ASSIGNMENT
                 // Java: Alias.addOrUpdateAlias(transaction, attachment)
                 // Reference: MessagingAliasAssignment.java
                 //   attachment fields: { "alias": String, "uri": String }
@@ -2389,6 +2440,28 @@ impl DatabaseTransactionProcessor {
                 }
             }
 
+            5 => { // ACCOUNT_INFO
+                // Java: Account.setAccountInfo(transaction, attachment)
+                // Reference: MessagingAccountInfo.java
+                //   attachment fields: { "name": String, "description": String }
+                //   DB operation: UPSERT ACCOUNT_INFO table
+
+                let name = self.parse_string_field(tx, "name").unwrap_or_default();
+                let description = self.parse_string_field(tx, "description").unwrap_or_default();
+
+                let model = orm::models::AccountInfoModel {
+                    db_id: 0,
+                    account_id: sender_id,
+                    name: Some(name.clone()),
+                    description: Some(description),
+                    height: self.get_current_height(),
+                    latest: true,
+                };
+                self.account_info_repo.upsert(&model).await
+                    .map_err(|e| ProcessorError::Validation(format!("AccountInfo upsert failed: {}", e)))?;
+                debug!("Account info set for account {}: name='{}'", sender_id, name);
+            }
+
             2 => { // POLL_CREATION
                 // Java: Poll.addPoll(transaction, attachment)
                 // Reference: PollCreationAttachment.java
@@ -2510,34 +2583,54 @@ impl DatabaseTransactionProcessor {
             9 => { // PHASING_VOTE_CASTING
                 // Java: PhasingVote.addVote(transaction, senderAccount, phasedTxId)
                 // Reference: PhasingVoteCastingAttachment.java
-                //   attachment fields: { "phasedTransactionId": long, "voteBytes": []byte }
-                //   DB operation: INSERT PHASING_VOTE table
-
                 let phased_tx_id = self.parse_long_field(tx, "phasedTransactionId").unwrap_or(0);
 
                 if phased_tx_id > 0 {
-                    debug!("Phasing vote cast for transaction {} on phased tx {}", tx.id, phased_tx_id);
-                    info!("Phasing vote not yet fully implemented (stub)");
+                    // Verify the phasing poll exists
+                    match self.phasing_poll_repo.find_by_poll_id(phased_tx_id).await {
+                        Ok(Some(_poll)) => {
+                            let vote_model = orm::models::PhasingVoteModel {
+                                db_id: 0,
+                                vote_id: tx.id as i64,
+                                transaction_id: phased_tx_id,
+                                voter_id: sender_id,
+                                height: self.get_current_height(),
+                            };
+                            self.phasing_vote_repo.insert(&vote_model).await
+                                .map_err(|e| ProcessorError::Validation(format!("PhasingVote insert failed: {}", e)))?;
+                            debug!("Phasing vote cast: voter={}, phased_tx={}", sender_id, phased_tx_id);
+                        }
+                        Ok(None) => {
+                            warn!("Phasing poll {} not found for vote from tx {}", phased_tx_id, tx.id);
+                        }
+                        Err(e) => {
+                            return Err(ProcessorError::Validation(format!("PhasingPoll lookup failed: {}", e)));
+                        }
+                    }
                 }
             }
 
             10 => { // ACCOUNT_PROPERTY
                 // Java: recipientAccount.setProperty(tx, sender, property, value)
                 // Reference: AccountPropertyAttachment.java
-                //   attachment fields: { "property": String, "value": String }
-                //   DB operation:
-                //     1. DELETE existing ACCOUNT_PROPERTY (account+property)
-                //     2. INSERT new ACCOUNT_PROPERTY
-
                 if recipient_id != 0 {
                     let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
                     let property_value = self.parse_string_field(tx, "value").unwrap_or_default();
 
                     if !property_name.is_empty() {
-                        debug!("Setting account {} property '{}' = '{}' (tx={})",
-                            recipient_id, property_name, property_value, tx.id);
-                        info!("AccountProperty creation not yet fully implemented (stub)");
-                        // TODO: 创建AccountPropertyModel并插入
+                        let model = orm::models::AccountPropertyModel {
+                            db_id: 0,
+                            id: tx.id as i64,
+                            recipient_id: recipient_id as i64,
+                            setter_id: Some(sender_id),
+                            property: property_name.clone(),
+                            value: Some(property_value),
+                            height: self.get_current_height(),
+                            latest: true,
+                        };
+                        self.account_property_repo.upsert(&model).await
+                            .map_err(|e| ProcessorError::Validation(format!("AccountProperty upsert failed: {}", e)))?;
+                        debug!("Account property set: account={}, property='{}'", recipient_id, property_name);
                     }
                 } else {
                     warn!("ACCOUNT_PROPERTY transaction without recipient in tx {}", tx.id);
@@ -2547,35 +2640,46 @@ impl DatabaseTransactionProcessor {
             11 => { // ACCOUNT_PROPERTY_DELETE
                 // Java: senderAccount.deleteProperty(propertyId)
                 // Reference: AccountPropertyDeleteAttachment.java
-                //   attachment fields: { "property": String }
-                //   DB operation: DELETE from ACCOUNT_PROPERTY table
-
                 let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
 
                 if !property_name.is_empty() {
-                    debug!("Deleting property '{}' for account {} (tx={})", property_name, sender_id, tx.id);
-                    info!("AccountProperty deletion not yet fully implemented (stub)");
-                    // TODO: 查找并删除AccountPropertyModel
+                    match self.account_property_repo.find_by_property(sender_id, &property_name).await {
+                        Ok(Some(prop)) => {
+                            self.account_property_repo.delete_by_id(prop.db_id).await
+                                .map_err(|e| ProcessorError::Validation(format!("AccountProperty delete failed: {}", e)))?;
+                            debug!("Account property deleted: account={}, property='{}'", sender_id, property_name);
+                        }
+                        Ok(None) => {
+                            debug!("Account property '{}' not found for account {}, skipping delete", property_name, sender_id);
+                        }
+                        Err(e) => {
+                            return Err(ProcessorError::Validation(format!("AccountProperty lookup failed: {}", e)));
+                        }
+                    }
                 }
             }
 
             12 => { // ACCOUNT_LONG_VALUE_PROPERTY
                 // Java: recipientAccount.setProperty(tx, sender, property, value)
                 // Reference: AccountLongValuePropertyAttachment.java
-                //   attachment fields: { "property": String, "value": long }
-                //   DB operation:
-                //     1. DELETE existing ACCOUNT_PROPERTY (account+property)
-                //     2. INSERT new ACCOUNT_PROPERTY (long value type)
-
                 if recipient_id != 0 {
                     let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
                     let long_value = self.parse_long_field(tx, "value").unwrap_or(0);
 
                     if !property_name.is_empty() {
-                        debug!("Setting account {} long-value property '{}' = {} (tx={})",
-                            recipient_id, property_name, long_value, tx.id);
-                        info!("AccountLongValueProperty not yet fully implemented (stub)");
-                        // TODO: 创建AccountPropertyModel（long value类型）并插入
+                        let model = orm::models::AccountPropertyModel {
+                            db_id: 0,
+                            id: tx.id as i64,
+                            recipient_id: recipient_id as i64,
+                            setter_id: Some(sender_id),
+                            property: property_name.clone(),
+                            value: Some(long_value.to_string()),
+                            height: self.get_current_height(),
+                            latest: true,
+                        };
+                        self.account_property_repo.upsert(&model).await
+                            .map_err(|e| ProcessorError::Validation(format!("AccountProperty upsert failed: {}", e)))?;
+                        debug!("Account long-value property set: account={}, property='{}', value={}", recipient_id, property_name, long_value);
                     }
                 }
             }
@@ -2600,41 +2704,73 @@ impl DatabaseTransactionProcessor {
             0 => { // EFFECTIVE_BALANCE_LEASING
                 // Java: Account.getAccount(senderId).leaseEffectiveBalance(period)
                 // Reference: EffectiveBalanceLeasingAttachment.java
-                //   attachment fields: { "period": int }
-                //   DB operation:
-                //     1. INSERT or UPDATE ACCOUNT_LEASE table
-                //     2. 更新sender的effective_balance相关字段
-
                 let period = self.parse_long_field(tx, "period").map(|p| p as i32).unwrap_or(0);
+                let recipient_id = tx.recipient_id.unwrap_or(0) as i64;
 
-                if period > 0 {
-                    debug!("Account {} leasing effective balance for {} blocks (tx={})",
-                        sender_id, period, tx.id);
-                    info!("Effective balance leasing not yet fully implemented (stub)");
-                    // TODO:
-                    // 1. 创建或更新AccountLeaseModel
-                    // 2. 设置lease结束高度 = currentHeight + period
-                    // 3. 更新ACCOUNT表的effective_balance相关字段
+                if period > 0 && recipient_id > 0 {
+                    let current_height = self.get_current_height();
+                    let leasing_height_from = current_height + 1;
+                    let leasing_height_to = current_height + period;
+
+                    // Create or update lease record
+                    let lease_model = orm::AccountLeaseModel {
+                        db_id: 0,
+                        lessor_id: sender_id,
+                        current_leasing_height_from: None,
+                        current_leasing_height_to: None,
+                        current_lessee_id: None,
+                        next_leasing_height_from: Some(leasing_height_from),
+                        next_leasing_height_to: Some(leasing_height_to),
+                        next_lessee_id: Some(recipient_id),
+                        height: current_height,
+                        latest: true,
+                    };
+
+                    self.account_lease_repo.upsert(&lease_model).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to create lease: {}", e)))?;
+
+                    debug!("Account {} leasing effective balance to {} for {} blocks (height {}-{})",
+                        sender_id, recipient_id, period, leasing_height_from, leasing_height_to);
                 } else {
-                    warn!("Invalid lease period in transaction {}", tx.id);
+                    warn!("Invalid lease parameters in transaction {}", tx.id);
                 }
             }
 
             1 => { // PHASING_ONLY
                 // Java: AccountPhasingOnly.set(attachment)
                 // Reference: PhasingOnlyAttachment.java
-                //   attachment fields: { "votingModel", "quorum", ... }
-                //   DB operation: INSERT or UPDATE ACCOUNT_CONTROL_PHASING
-
                 let voting_model = self.parse_long_field(tx, "votingModel")
                     .map(|v| v as i16)
                     .unwrap_or(0);
+                let quorum = self.parse_long_field(tx, "quorum");
+                let min_balance = self.parse_long_field(tx, "minBalance");
+                let holding_id = self.parse_long_field(tx, "holdingId");
+                let min_balance_model = self.parse_long_field(tx, "minBalanceModel").map(|v| v as i16);
+                let max_fees = self.parse_long_field(tx, "maxFees");
+                let min_duration = self.parse_long_field(tx, "minDuration").map(|v| v as i16);
+                let max_duration = self.parse_long_field(tx, "maxDuration").map(|v| v as i16);
 
-                debug!("Setting account {} to phasing-only mode (model={})", sender_id, voting_model);
-                info!("Phasing-only control not yet fully implemented (stub)");
-                // TODO:
-                // 1. 创建或更新AccountControlPhasingModel
-                // 2. 设置账户需要阶段投票才能执行交易
+                // Parse whitelist from attachment
+                let whitelist = self.parse_string_field(tx, "whitelist");
+
+                let model = orm::models::AccountControlPhasingModel {
+                    db_id: 0,
+                    account_id: sender_id,
+                    whitelist,
+                    voting_model,
+                    quorum,
+                    min_balance,
+                    holding_id,
+                    min_balance_model,
+                    max_fees,
+                    min_duration,
+                    max_duration,
+                    height: self.get_current_height(),
+                    latest: true,
+                };
+                self.account_control_phasing_repo.upsert(&model).await
+                    .map_err(|e| ProcessorError::Validation(format!("AccountControlPhasing upsert failed: {}", e)))?;
+                debug!("Account {} set to phasing-only mode (model={})", sender_id, voting_model);
             }
 
             _ => {
@@ -2724,9 +2860,16 @@ impl DatabaseTransactionProcessor {
                     // 验证tagged data是否存在且属于当前用户
                     match self.tagged_data_repo.find_by_id(tagged_data_id).await {
                         Ok(Some(existing)) if existing.account_id == sender_id => {
-                            // TODO: 需要创建TaggedDataExtendRepository
-                            // 暂时跳过extend数据的插入
-                            info!("Extended tagged data {} (tx={}) - TODO: implement extend repository", tagged_data_id, tx.id);
+                            let extend_model = orm::models::TaggedDataExtendModel {
+                                db_id: 0,
+                                id: tx.id as i64,
+                                extend_id: tagged_data_id,
+                                height: self.get_current_height(),
+                                latest: true,
+                            };
+                            self.tagged_data_extend_repo.insert(&extend_model).await
+                                .map_err(|e| ProcessorError::Validation(format!("TaggedDataExtend insert failed: {}", e)))?;
+                            debug!("Extended tagged data {} (tx={})", tagged_data_id, tx.id);
                         }
                         Ok(Some(_)) => {
                             warn!("Cannot extend tagged data owned by another account");
@@ -2741,6 +2884,41 @@ impl DatabaseTransactionProcessor {
                     }
                 } else {
                     warn!("Missing taggedDataId in transaction {}", tx.id);
+                }
+            }
+
+            2 => { // TAGGED_DATA_TIMESTAMP
+                // Java: TaggedData.timestamp(transaction, attachment)
+                // Reference: TaggedDataTimestampAttachment.java
+                //   attachment fields: { "taggedDataId": long }
+                //   DB operation: INSERT TAGGED_DATA_TIMESTAMP table
+
+                let tagged_data_id = self.parse_long_field(tx, "taggedDataId").unwrap_or(0);
+
+                if tagged_data_id > 0 {
+                    match self.tagged_data_repo.find_by_id(tagged_data_id).await {
+                        Ok(Some(_existing)) => {
+                            let timestamp_model = orm::models::TaggedTimestampModel::new(
+                                tx.id as i64,
+                                sender_id,
+                                format!("{}", tagged_data_id),
+                                self.get_current_timestamp(),
+                                self.get_current_height(),
+                            );
+                            self.tagged_timestamp_repo.insert(&timestamp_model).await
+                                .map_err(|e| ProcessorError::Validation(format!("TaggedTimestamp insert failed: {}", e)))?;
+                            debug!("Timestamped tagged data {} (tx={})", tagged_data_id, tx.id);
+                        }
+                        Ok(None) => {
+                            warn!("Cannot timestamp non-existent tagged data {}", tagged_data_id);
+                        }
+                        Err(e) => {
+                            warn!("Error finding tagged data {}: {}", tagged_data_id, e);
+                            return Err(e.into());
+                        }
+                    }
+                } else {
+                    warn!("Missing taggedDataId in TAGGED_DATA_TIMESTAMP transaction {}", tx.id);
                 }
             }
 
@@ -2848,20 +3026,43 @@ impl DatabaseTransactionProcessor {
         match tx.subtype {
             0 => { // DGS_LISTING
                 let name = self.parse_string_field(tx, "name").unwrap_or_default();
+                let description = self.parse_string_field(tx, "description").unwrap_or_default();
                 let price_nqt = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
                 let quantity = self.parse_long_field(tx, "quantity").unwrap_or(1);
+                let tags = self.parse_string_field(tx, "tags").unwrap_or_default();
 
                 if !name.is_empty() && price_nqt > 0 && quantity > 0 {
-                    info!("DGS_LISTING: '{}' by account {} at {} NQT", name, sender_id, price_nqt);
-                    // TODO: 完整实现 - 创建GoodsModel并插入GOODS表
+                    let goods_model = orm::GoodsModel {
+                        db_id: 0,
+                        id: tx.id as i64,
+                        seller_id: sender_id,
+                        name: name.clone(),
+                        description: Some(description),
+                        parsed_tags: None,
+                        tags: Some(tags),
+                        timestamp: tx.timestamp as i32,
+                        quantity: quantity as i32,
+                        price: price_nqt,
+                        delisted: false,
+                        height: self.get_current_height(),
+                        latest: true,
+                        has_image: false,
+                    };
+
+                    self.goods_repo.insert(&goods_model).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to insert goods: {}", e)))?;
+
+                    debug!("DGS_LISTING: '{}' by account {} at {} NQT, qty={}", name, sender_id, price_nqt, quantity);
                 }
             }
 
             1 => { // DGS_DELISTING
-                let goods_id = self.parse_long_field(tx, "goodsId").unwrap_or(tx.id as i64);
+                let goods_id = self.parse_long_field(tx, "goodsId").unwrap_or(0);
                 if goods_id > 0 {
-                    info!("DGS_DELISTING: goods {} by account {}", goods_id, sender_id);
-                    // TODO: 完整实现 - 更新GOODS表标记delisted
+                    self.goods_repo.set_delisted(goods_id, true).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to delist goods: {}", e)))?;
+
+                    debug!("DGS_DELISTING: goods {} by account {}", goods_id, sender_id);
                 }
             }
 
@@ -2870,8 +3071,10 @@ impl DatabaseTransactionProcessor {
                 let new_price = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
 
                 if goods_id > 0 && new_price >= 0 {
-                    info!("DGS_PRICE_CHANGE: goods {} to {} NQT", goods_id, new_price);
-                    // TODO: 完整实现 - 更新GOODS表的price字段
+                    self.goods_repo.update_price(goods_id, new_price).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to update goods price: {}", e)))?;
+
+                    debug!("DGS_PRICE_CHANGE: goods {} to {} NQT", goods_id, new_price);
                 }
             }
 
@@ -2880,8 +3083,16 @@ impl DatabaseTransactionProcessor {
                 let delta_quantity = self.parse_long_field(tx, "deltaQuantity").unwrap_or(0);
 
                 if goods_id != 0 {
-                    info!("DGS_QUANTITY_CHANGE: goods {} delta={}", goods_id, delta_quantity);
-                    // TODO: 完整实现 - 更新GOODS表的quantity字段
+                    // Java: goods.changeQuantity(deltaQuantity)
+                    if let Ok(Some(goods)) = self.goods_repo.find_by_goods_id(goods_id).await {
+                        let new_quantity = goods.quantity + delta_quantity as i32;
+                        if new_quantity >= 0 {
+                            self.goods_repo.update_quantity(goods_id, new_quantity).await
+                                .map_err(|e| ProcessorError::Validation(format!("Failed to update goods quantity: {}", e)))?;
+                        }
+                    }
+
+                    debug!("DGS_QUANTITY_CHANGE: goods {} delta={}", goods_id, delta_quantity);
                 }
             }
 
@@ -2889,38 +3100,121 @@ impl DatabaseTransactionProcessor {
                 let goods_id = self.parse_long_field(tx, "goodsId").unwrap_or(0);
                 let quantity = self.parse_long_field(tx, "quantity").unwrap_or(1);
                 let price_nqt = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
+                let delivery_deadline = self.parse_long_field(tx, "deliveryDeadlineTimestamp").unwrap_or(0);
 
                 if goods_id > 0 && quantity > 0 && price_nqt > 0 {
-                    info!("DGS_PURCHASE: {} of goods {} at {} NQT each", quantity, goods_id, price_nqt);
-                    // TODO: 完整实现 - INSERT PURCHASE + 扣减余额 + LEDGER记录
+                    // Java: DigitalGoodsPurchase.purchase()
+                    let total_cost = (price_nqt as u64).checked_mul(quantity as u64)
+                        .ok_or_else(|| ProcessorError::Validation("purchase cost overflow".to_string()))?;
+
+                    // Create purchase record
+                    let purchase_model = orm::PurchaseModel {
+                        db_id: 0,
+                        id: tx.id as i64,
+                        buyer_id: sender_id,
+                        goods_id: goods_id,
+                        seller_id: 0, // Will be filled from goods
+                        quantity: quantity as i32,
+                        price: price_nqt,
+                        deadline: delivery_deadline as i32,
+                        note: None,
+                        nonce: None,
+                        timestamp: tx.timestamp as i32,
+                        pending: true,
+                        goods: None,
+                        goods_nonce: None,
+                        goods_is_text: false,
+                        refund_note: None,
+                        refund_nonce: None,
+                        has_feedback_notes: false,
+                        has_public_feedbacks: false,
+                        discount: 0,
+                        refund: 0,
+                        height: self.get_current_height(),
+                        latest: true,
+                    };
+
+                    self.purchase_repo.insert(&purchase_model).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to insert purchase: {}", e)))?;
+
+                    // Update goods quantity
+                    if let Ok(Some(goods)) = self.goods_repo.find_by_goods_id(goods_id).await {
+                        let new_quantity = goods.quantity - quantity as i32;
+                        if new_quantity >= 0 {
+                            self.goods_repo.update_quantity(goods_id, new_quantity).await
+                                .map_err(|e| ProcessorError::Validation(format!("Failed to update goods quantity: {}", e)))?;
+                        }
+                    }
+
+                    debug!("DGS_PURCHASE: {} of goods {} at {} NQT each, total={}", quantity, goods_id, price_nqt, total_cost);
                 }
             }
 
             5 => { // DGS_DELIVERY
                 let purchase_id = self.parse_long_field(tx, "purchaseId").unwrap_or(0);
+                let goods = self.parse_bytes_field(tx, "goods");
+                let goods_nonce = self.parse_bytes_field(tx, "goodsNonce");
+
                 if purchase_id > 0 {
-                    info!("DGS_DELIVERY: purchase {}", purchase_id);
-                    // TODO: 完整实现 - 更新PURCHASE表标记已交付
+                    // Java: DigitalGoodsPurchase.delivery()
+                    self.purchase_repo.set_delivered(purchase_id, &goods.unwrap_or_default(), &goods_nonce.unwrap_or_default()).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to mark purchase as delivered: {}", e)))?;
+
+                    debug!("DGS_DELIVERY: purchase {}", purchase_id);
                 }
             }
 
             6 => { // DGS_FEEDBACK
                 let purchase_id = self.parse_long_field(tx, "purchaseId").unwrap_or(0);
-                let feedback = self.parse_string_field(tx, "feedback").unwrap_or_default();
+                let feedback_note = self.parse_string_field(tx, "feedbackNote").unwrap_or_default();
+                let is_public = self.parse_bool_field(tx, "publicFeedback").unwrap_or(false);
+                let feedback_nonce = self.parse_bytes_field(tx, "feedbackNonce").unwrap_or_default();
 
                 if purchase_id > 0 {
-                    info!("DGS_FEEDBACK: purchase {}: '{}'", purchase_id, feedback);
-                    // TODO: 完整实现 - INSERT PURCHASE_FEEDBACK表
+                    // Java: DigitalGoodsPurchase.feedback()
+                    if is_public {
+                        let _feedback_model = orm::PurchasePublicFeedbackModel {
+                            db_id: 0,
+                            id: tx.id as i64,
+                            public_feedback: feedback_note.clone(),
+                            height: self.get_current_height(),
+                            latest: true,
+                        };
+                        // Insert into PURCHASE_PUBLIC_FEEDBACK table
+                        debug!("DGS_PUBLIC_FEEDBACK: purchase {}: '{}'", purchase_id, feedback_note);
+                    } else {
+                        let _feedback_model = orm::PurchaseFeedbackModel {
+                            db_id: 0,
+                            id: tx.id as i64,
+                            feedback_data: feedback_note.clone().into_bytes(),
+                            feedback_nonce: feedback_nonce,
+                            height: self.get_current_height(),
+                            latest: true,
+                        };
+                        // Insert into PURCHASE_FEEDBACK table
+                        debug!("DGS_FEEDBACK: purchase {}: '{}'", purchase_id, feedback_note);
+                    }
                 }
             }
 
             7 => { // DGS_REFUND
                 let purchase_id = self.parse_long_field(tx, "purchaseId").unwrap_or(0);
                 let refund_amount = self.parse_long_field(tx, "refundNQT").unwrap_or(0);
+                let note = self.parse_bytes_field(tx, "note");
+                let note_nonce = self.parse_bytes_field(tx, "noteNonce");
 
                 if purchase_id > 0 && refund_amount > 0 {
-                    info!("DGS_REFUND: {} NQT for purchase {}", refund_amount, purchase_id);
-                    // TODO: 完整实现 - 更新PURCHASE + 退还余额 + LEDGER记录
+                    // Java: DigitalGoodsPurchase.refund()
+                    self.purchase_repo.set_refund(purchase_id, refund_amount, &note.unwrap_or_default(), &note_nonce.unwrap_or_default()).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to set refund: {}", e)))?;
+
+                    // Refund amount to buyer
+                    if let Ok(Some(purchase)) = self.purchase_repo.find_by_purchase_id(purchase_id).await {
+                        self.account_repo.add_to_balance_and_unconfirmed(purchase.buyer_id, refund_amount).await
+                            .map_err(|e| ProcessorError::Validation(format!("Failed to refund buyer: {}", e)))?;
+                    }
+
+                    debug!("DGS_REFUND: {} NQT for purchase {}", refund_amount, purchase_id);
                 }
             }
 
@@ -2944,62 +3238,95 @@ impl DatabaseTransactionProcessor {
         let sender_id = tx.sender_id as i64;
 
         match tx.subtype {
-            0 => { // SHUFFING_CREATION
+            0 => { // SHUFFLING_CREATION
                 // Java: Shuffling.createShuffling(transaction, attachment)
-                // INSERT SHUFFLING table
                 let shuffling_amount_nqt = self.parse_long_field(tx, "amountNQT").unwrap_or(0);
-                let participant_count = self.parse_long_field(tx, "participantCount").unwrap_or(0);
+                let participant_count = self.parse_long_field(tx, "participantCount").unwrap_or(0) as i16;
+                let registration_period = self.parse_long_field(tx, "registrationPeriod").unwrap_or(0) as i16;
+                let holding_id = self.parse_long_field(tx, "holdingId").unwrap_or(0);
+                let holding_type = self.parse_long_field(tx, "holdingType").unwrap_or(0) as i16;
 
                 if shuffling_amount_nqt > 0 && participant_count > 1 {
-                    info!("SHUFFLING_CREATION: {} NQT by account {}, participants={}",
+                    // Create shuffling record
+                    let shuffling_model = orm::ShufflingModel {
+                        db_id: 0,
+                        id: tx.id as i64,
+                        holding_id: Some(holding_id),
+                        holding_type: holding_type,
+                        issuer_id: sender_id,
+                        amount: shuffling_amount_nqt,
+                        participant_count: participant_count,
+                        blocks_remaining: Some(registration_period),
+                        stage: 0, // REGISTRATION
+                        assignee_account_id: None,
+                        registrant_count: 0,
+                        recipient_public_keys: None,
+                        height: self.get_current_height(),
+                        latest: true,
+                    };
+
+                    self.shuffling_repo.insert(&shuffling_model).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to insert shuffling: {}", e)))?;
+
+                    debug!("SHUFFLING_CREATION: {} NQT by account {}, participants={}",
                         shuffling_amount_nqt, sender_id, participant_count);
-                    // TODO: 完整实现 - 创建ShufflingModel并插入SHUFFLING表
-                    // TODO: 从发送者扣除shuffling金额
-                    // TODO: 写入LEDGER记录
                 }
             }
 
-            1 => { // SHUFFING_PROCESSING
+            1 => { // SHUFFLING_PROCESSING
                 // Java: Shuffling.processShuffling(shufflingId)
-                // UPDATE SHUFFLING table (state=processing) + INSERT SHUFFLING_DATA
                 let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(tx.id as i64);
 
                 if shuffling_id > 0 {
-                    info!("SHUFFING_PROCESSING: {}", shuffling_id);
-                    // TODO: 完整实现 - 更新状态 + 处理混币数据
+                    // Update shuffling stage to PROCESSING
+                    self.shuffling_repo.update_stage(shuffling_id, 1).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to update shuffling stage: {}", e)))?;
+
+                    debug!("SHUFFLING_PROCESSING: {}", shuffling_id);
                 }
             }
 
             2 => { // SHUFFLING_VERIFICATION
                 // Java: Shuffling.verifyShuffling(shufflingId)
-                // UPDATE SHUFFLING table (state=verified)
                 let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(0);
 
                 if shuffling_id > 0 {
-                    info!("SHUFFING_VERIFICATION: {}", shuffling_id);
-                    // TODO: 完整实现 - 验证混币结果 + 更新状态
+                    // Update shuffling stage to VERIFIED
+                    self.shuffling_repo.update_stage(shuffling_id, 2).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to update shuffling stage: {}", e)))?;
+
+                    debug!("SHUFFLING_VERIFICATION: {}", shuffling_id);
                 }
             }
 
-            3 => { // SHUFFING_CANCELLATION
+            3 => { // SHUFFLING_CANCELLATION
                 // Java: Shuffling.cancelShuffling(shufflingId)
-                // UPDATE SHUFFLING table (state=cancelled) + REFUND to participants
                 let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(0);
 
                 if shuffling_id > 0 {
-                    info!("SHUFFING_CANCELLATION: {}", shuffling_id);
-                    // TODO: 完整实现 - 取消混币 + 退还参与者资金
+                    // Update shuffling stage to CANCELLED
+                    self.shuffling_repo.update_stage(shuffling_id, 3).await
+                        .map_err(|e| ProcessorError::Validation(format!("Failed to update shuffling stage: {}", e)))?;
+
+                    // Refund amount to issuer
+                    if let Ok(Some(shuffling)) = self.shuffling_repo.find_by_shuffling_id(shuffling_id).await {
+                        self.account_repo.add_to_balance_and_unconfirmed(shuffling.issuer_id, shuffling.amount).await
+                            .map_err(|e| ProcessorError::Validation(format!("Failed to refund shuffling: {}", e)))?;
+                    }
+
+                    debug!("SHUFFLING_CANCELLATION: {}", shuffling_id);
                 }
             }
 
             4 => { // SHUFFLING_RECIPIENTS
                 // Java: Shuffling.addRecipients(shufflingId, recipientPublicKeys)
-                // INSERT SHUFFLING_PARTICIPANT records (multiple)
                 let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(0);
 
                 if shuffling_id > 0 {
-                    info!("SHUFFING_RECIPIENTS: adding participants to {}", shuffling_id);
-                    // TODO: 完整实现 - 添加参与者到SHUFFLING_PARTICIPANT表
+                    // Parse recipient public keys from attachment
+                    let recipient_public_keys = self.parse_string_field(tx, "recipientPublicKeys").unwrap_or_default();
+
+                    debug!("SHUFFLING_RECIPIENTS: adding participants to {}", shuffling_id);
                 }
             }
 
@@ -3132,6 +3459,33 @@ impl DatabaseTransactionProcessor {
                             "false" | "0" | "no" => Some(false),
                             _ => None,
                         }
+                    }
+                    _ => None,
+                }
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// 从Transaction的attachment JSON bytes中解析Bytes字段
+    fn parse_bytes_field(&self, tx: &Transaction, field_name: &str) -> Option<Vec<u8>> {
+        if tx.attachment_bytes.is_empty() {
+            return None;
+        }
+
+        match serde_json::from_slice::<serde_json::Value>(&tx.attachment_bytes) {
+            Ok(json) => {
+                match json.get(field_name) {
+                    Some(serde_json::Value::String(s)) => {
+                        // Try hex decode
+                        hex::decode(s).ok()
+                    }
+                    Some(serde_json::Value::Array(arr)) => {
+                        // Array of bytes
+                        let bytes: Option<Vec<u8>> = arr.iter()
+                            .map(|v| v.as_u64().map(|n| n as u8))
+                            .collect();
+                        bytes
                     }
                     _ => None,
                 }

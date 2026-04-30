@@ -4,7 +4,7 @@
 //!
 //! 处理接收到的区块，验证并添加到区块链
 
-use crate::{peer::Peers, protocol::PeerRequest};
+use crate::{peer::Peers, protocol::PeerRequest, config::P2PConfig, broadcast::BroadcastManager};
 use serde_json;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
@@ -19,11 +19,12 @@ pub struct ProcessBlockHandler {
     #[allow(dead_code)]
     peers: Arc<Peers>,
     verifier: Arc<dyn BlockVerifier>,
+    p2p_config: Arc<P2PConfig>,
 }
 
 impl ProcessBlockHandler {
-    pub fn new(peers: Arc<Peers>, verifier: Arc<dyn BlockVerifier>) -> Self {
-        Self { peers, verifier }
+    pub fn new(peers: Arc<Peers>, verifier: Arc<dyn BlockVerifier>, p2p_config: Arc<P2PConfig>) -> Self {
+        Self { peers, verifier, p2p_config }
     }
 
     pub async fn handle(&self, request: PeerRequest, _peers: Arc<Peers>) -> serde_json::Value {
@@ -71,14 +72,21 @@ impl ProcessBlockHandler {
             Ok(_) => {
                 info!("Block verified and processed successfully");
 
-                // Java: if (block.getTimestamp() >= curTime - 600) { Peers.sendToSomePeers(block); }
-                // TODO: Implement block broadcast to peers when P2P infrastructure is ready
+                // 对应 Java: if (block.getTimestamp() >= curTime - 600) { Peers.sendToSomePeers(block); }
                 let current_time = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs() as i64;
                 if block.timestamp as i64 >= current_time - 600 {
-                    debug!("Block height={} should be broadcast to peers (not yet implemented)", block.height);
+                    let broadcast_mgr = BroadcastManager::new(Arc::clone(&self.p2p_config));
+                    let previous_block_id = block.previous_block_id.unwrap_or(0);
+                    let block_json = block_json.clone();
+                    let timestamp = block.timestamp as i64;
+                    let peers_clone = Arc::clone(&self.peers);
+
+                    tokio::spawn(async move {
+                        broadcast_mgr.broadcast_block(&block_json, previous_block_id, timestamp, &peers_clone).await;
+                    });
                 }
 
                 serde_json::json!({})

@@ -47,7 +47,7 @@ impl HallmarkParser {
     ///
     /// # Example
     /// ```rust
-    /// use crate::hallmark::{HallmarkParser, HallmarkInfo};
+    /// use p2p::hallmark::{HallmarkParser, HallmarkInfo};
     ///
     /// let info = HallmarkParser::parse("base64_encoded_data");
     /// if info.is_valid {

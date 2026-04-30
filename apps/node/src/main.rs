@@ -32,6 +32,9 @@ use account::{AccountManager, AccountConfig, DatabaseAccountManager, AccountStor
 use tx_engine::{TransactionProcessor, DatabaseTransactionProcessor};
 use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransferRepository, AccountAssetRepository, AccountRepository, PublicKeyRepository,
          AccountGuaranteedBalanceRepository, AccountLedgerRepository,
+         TaggedDataExtendRepository, TaggedTimestampRepository,
+         PhasingPollRepository, PhasingVoteRepository, AccountControlPhasingRepository,
+         AccountInfoRepository,
          // 新增导入
          AliasRepository, AliasOfferRepository,
          PollRepository, VoteRepository,
@@ -39,7 +42,13 @@ use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransfer
          ContractReferenceRepository,
          AskOrderRepository, BidOrderRepository,
          CurrencyRepository, AccountCurrencyRepository, CurrencyTransferRepository,
-         AssetPropertyRepository};
+         AssetPropertyRepository, AccountPropertyRepository,
+         // Digital Goods
+         GoodsRepository, PurchaseRepository,
+         // Shuffling
+         ShufflingRepository,
+         // Account Lease
+         AccountLeaseRepository};
 use orm::repository::sqlite::SqliteAccountGuaranteedBalanceRepository;
 
 use p2p::BlockchainVerifier;
@@ -212,6 +221,8 @@ async fn main() -> Result<()> {
             // let account_property_repo: Arc<dyn AccountPropertyRepository> = ...  // 暂时注释
             let tagged_data_repo: Arc<dyn TaggedDataRepository> = Arc::new(orm::SqliteTaggedDataRepository::new(pool.clone()));
             let tagged_data_tag_repo: Arc<dyn TaggedDataTagRepository> = Arc::new(orm::SqliteTaggedDataTagRepository::new(pool.clone()));
+            let tagged_data_extend_repo: Arc<dyn TaggedDataExtendRepository> = Arc::new(orm::SqliteTaggedDataExtendRepository::new(pool.clone()));
+            let tagged_timestamp_repo: Arc<dyn TaggedTimestampRepository> = Arc::new(orm::SqliteTaggedTimestampRepository::new(pool.clone()));
             let contract_ref_repo: Arc<dyn ContractReferenceRepository> = Arc::new(orm::SqliteContractReferenceRepository::new(pool.clone()));
             let ask_order_repo: Arc<dyn AskOrderRepository> = Arc::new(orm::SqliteAskOrderRepository::new(pool.clone()));
             let bid_order_repo: Arc<dyn BidOrderRepository> = Arc::new(orm::SqliteBidOrderRepository::new(pool.clone()));
@@ -219,11 +230,23 @@ async fn main() -> Result<()> {
             let account_currency_repo: Arc<dyn AccountCurrencyRepository> = Arc::new(orm::SqliteAccountCurrencyRepository::new(pool.clone()));
             let currency_transfer_repo: Arc<dyn CurrencyTransferRepository> = Arc::new(orm::SqliteCurrencyTransferRepository::new(pool.clone()));
             let asset_property_repo: Arc<dyn AssetPropertyRepository> = Arc::new(orm::SqliteAssetPropertyRepository::new(pool.clone()));
+            let account_property_repo: Arc<dyn AccountPropertyRepository> = Arc::new(orm::SqliteAccountPropertyRepository::new(pool.clone()));
+            let phasing_poll_repo: Arc<dyn PhasingPollRepository> = Arc::new(orm::SqlitePhasingPollRepository::new(pool.clone()));
+            let phasing_vote_repo: Arc<dyn PhasingVoteRepository> = Arc::new(orm::SqlitePhasingVoteRepository::new(pool.clone()));
+            let account_control_phasing_repo: Arc<dyn AccountControlPhasingRepository> = Arc::new(orm::SqliteAccountControlPhasingRepository::new(pool.clone()));
+            let account_info_repo: Arc<dyn AccountInfoRepository> = Arc::new(orm::SqliteAccountInfoRepository::new(pool.clone()));
             // Exchange和Mint使用专用Repository（P1优化完成）
             let exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>> =
                 Arc::new(orm::SqliteExchangeRequestRepository::new(pool.clone()));
             let currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>> =
                 Arc::new(orm::SqliteCurrencyMintRepository::new(pool.clone()));
+            // Digital Goods
+            let goods_repo: Arc<dyn GoodsRepository> = Arc::new(orm::SqliteGoodsRepository::new(pool.clone()));
+            let purchase_repo: Arc<dyn PurchaseRepository> = Arc::new(orm::SqlitePurchaseRepository::new(pool.clone()));
+            // Shuffling
+            let shuffling_repo: Arc<dyn ShufflingRepository> = Arc::new(orm::SqliteShufflingRepository::new(pool.clone()));
+            // Account Lease
+            let account_lease_repo: Arc<dyn AccountLeaseRepository> = Arc::new(orm::SqliteAccountLeaseRepository::new(pool.clone()));
 
             // 确保创世区块存在
             orm::genesis::ensure_genesis(
@@ -236,8 +259,11 @@ async fn main() -> Result<()> {
             info!("Genesis block ensured");
 
             start_node(cfg, pool, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
-                alias_repo, alias_offer_repo, poll_repo, vote_repo, /* account_property_repo, */ tagged_data_repo, tagged_data_tag_repo, contract_ref_repo, ask_order_repo, bid_order_repo, currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo,
-                exchange_request_repo, currency_mint_repo
+                alias_repo, alias_offer_repo, poll_repo, vote_repo, account_property_repo, account_info_repo, phasing_poll_repo, phasing_vote_repo, account_control_phasing_repo, tagged_data_repo, tagged_data_tag_repo, tagged_data_extend_repo, tagged_timestamp_repo, contract_ref_repo, ask_order_repo, bid_order_repo, currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo,
+                exchange_request_repo, currency_mint_repo,
+                goods_repo, purchase_repo,
+                shuffling_repo,
+                account_lease_repo
             ).await
         }
     }
@@ -261,9 +287,15 @@ async fn start_node(
     alias_offer_repo: Arc<dyn AliasOfferRepository>,
     poll_repo: Arc<dyn PollRepository>,
     vote_repo: Arc<dyn VoteRepository>,
-    // account_property_repo: Arc<dyn AccountPropertyRepository>,  // 暂时注释
+    account_property_repo: Arc<dyn AccountPropertyRepository>,
+    account_info_repo: Arc<dyn AccountInfoRepository>,
+    phasing_poll_repo: Arc<dyn PhasingPollRepository>,
+    phasing_vote_repo: Arc<dyn PhasingVoteRepository>,
+    account_control_phasing_repo: Arc<dyn AccountControlPhasingRepository>,
     tagged_data_repo: Arc<dyn TaggedDataRepository>,
     tagged_data_tag_repo: Arc<dyn TaggedDataTagRepository>,
+    tagged_data_extend_repo: Arc<dyn TaggedDataExtendRepository>,
+    tagged_timestamp_repo: Arc<dyn TaggedTimestampRepository>,
     contract_ref_repo: Arc<dyn ContractReferenceRepository>,
     ask_order_repo: Arc<dyn AskOrderRepository>,
     bid_order_repo: Arc<dyn BidOrderRepository>,
@@ -274,6 +306,13 @@ async fn start_node(
     // 新增：Exchange和Mint（P1优化完成）
     exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
     currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
+    // Digital Goods
+    goods_repo: Arc<dyn GoodsRepository>,
+    purchase_repo: Arc<dyn PurchaseRepository>,
+    // Shuffling
+    shuffling_repo: Arc<dyn ShufflingRepository>,
+    // Account Lease
+    account_lease_repo: Arc<dyn AccountLeaseRepository>,
 ) -> Result<()> {
     // 创建交易处理器（完整版本 - 支持所有交易类型）
     let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
@@ -289,9 +328,15 @@ async fn start_node(
         Arc::clone(&alias_offer_repo),
         Arc::clone(&poll_repo),
         Arc::clone(&vote_repo),
-        // Arc::clone(&account_property_repo),  // 暂时注释
+        Arc::clone(&account_property_repo),
+        Arc::clone(&account_info_repo),
+        Arc::clone(&phasing_poll_repo),
+        Arc::clone(&phasing_vote_repo),
+        Arc::clone(&account_control_phasing_repo),
         Arc::clone(&tagged_data_repo),
         Arc::clone(&tagged_data_tag_repo),
+        Arc::clone(&tagged_data_extend_repo),
+        Arc::clone(&tagged_timestamp_repo),
         Arc::clone(&contract_ref_repo),
         Arc::clone(&ask_order_repo),
         Arc::clone(&bid_order_repo),
@@ -302,6 +347,13 @@ async fn start_node(
         // 新增：Exchange和Mint
         exchange_request_repo,
         currency_mint_repo,
+        // Digital Goods
+        goods_repo,
+        purchase_repo,
+        // Shuffling
+        shuffling_repo,
+        // Account Lease
+        account_lease_repo,
     ));
 
     // 创建区块奖励应用器
@@ -338,12 +390,16 @@ async fn start_node(
 
     // 初始化 P2P 管理器（使用完整仓库支持）
     let peers = Arc::new(Peers::new(my_peer.clone()));
+    let mut p2p_config = GlobalP2PConfig::default();
+    p2p_config.listen_addr = listen_addr;
+    let p2p_config = Arc::new(p2p_config);
     let handler = Arc::new(Handler::with_repositories(
         Arc::clone(&peers),
         Arc::clone(&block_verifier),
         Arc::clone(&block_repo),
         Arc::clone(&tx_repo),
         Arc::clone(&tx_processor),
+        Arc::clone(&p2p_config),
     ));
 
     // 启动出站连接任务（连接 bootstrap 节点）

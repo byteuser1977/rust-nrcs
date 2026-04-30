@@ -60,4 +60,8 @@ impl BlockVerifier for NoOpBlockVerifier {
     async fn get_cumulative_difficulty(&self) -> Result<String> {
         Ok("0".to_string())
     }
+
+    async fn pop_off_to(&self, _height: u32) -> Result<Vec<Block>> {
+        Ok(vec![])
+    }
 }

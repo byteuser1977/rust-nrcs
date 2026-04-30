@@ -680,57 +680,76 @@ impl BlockVerifier for BlockchainVerifier {
             Err(e) => Err(anyhow::anyhow!("Database error: {}", e)),
         }
     }
-}
 
-pub struct NoOpBlockVerifier;
+    /// 回滚区块链到指定高度
+    ///
+    /// 对应 Java: BlockchainProcessor.popOffTo(int height)
+    ///
+    /// 1. 获取所有高于目标高度的区块
+    /// 2. 删除这些区块中的所有交易
+    /// 3. 删除这些区块
+    /// 4. 返回被删除的区块列表
+    async fn pop_off_to(&self, height: u32) -> anyhow::Result<Vec<Block>> {
+        let _guard = self.state.lock().await;
 
-impl NoOpBlockVerifier {
-    pub fn new() -> Self {
-        Self
-    }
-}
+        info!("Popping off blocks after height {}", height);
 
-impl Default for NoOpBlockVerifier {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+        // Step 1: Find blocks to be removed
+        let blocks_to_remove = self.block_repo.find_blocks_after_height(height as i32).await
+            .map_err(|e| anyhow::anyhow!("Failed to find blocks after height {}: {}", height, e))?;
 
-#[async_trait]
-impl BlockVerifier for NoOpBlockVerifier {
-    async fn verify_and_process(&self, _block: Block) -> anyhow::Result<()> {
-        Ok(())
-    }
+        if blocks_to_remove.is_empty() {
+            info!("No blocks to pop off after height {}", height);
+            return Ok(vec![]);
+        }
 
-    async fn has_block(&self, _block_id: u64) -> anyhow::Result<bool> {
-        Ok(false)
-    }
+        info!("Found {} blocks to pop off (heights {} to {})",
+            blocks_to_remove.len(),
+            blocks_to_remove.first().map(|b| b.height).unwrap_or(0),
+            blocks_to_remove.last().map(|b| b.height).unwrap_or(0)
+        );
 
-    async fn get_last_block_id(&self) -> anyhow::Result<Option<u64>> {
-        Ok(None)
-    }
+        // Step 2: Wrap in database transaction for atomicity
+        let mut db_tx = self.pool.begin().await
+            .map_err(|e| anyhow::anyhow!("Failed to begin database transaction: {}", e))?;
 
-    async fn get_last_block_cumulative_difficulty(&self) -> anyhow::Result<Vec<u8>> {
-        Ok(vec![])
-    }
+        // Step 3: Delete transactions in each block
+        for block_model in &blocks_to_remove {
+            let block_id = block_model.id;
+            let txs = self.tx_repo.find_by_block(block_id).await
+                .map_err(|e| anyhow::anyhow!("Failed to find transactions for block {}: {}", block_id, e))?;
 
-    async fn can_connect_block(&self, _previous_block_id: u64) -> anyhow::Result<bool> {
-        Ok(true)
-    }
+            for tx in &txs {
+                sqlx::query("DELETE FROM transaction WHERE db_id = ?")
+                    .bind(tx.db_id)
+                    .execute(&mut *db_tx)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to delete transaction {}: {}", tx.db_id, e))?;
+            }
 
-    async fn process_fork_block(&self, _block: Block) -> anyhow::Result<()> {
-        Ok(())
-    }
+            debug!("Deleted {} transactions from block {}", txs.len(), block_id);
+        }
 
-    async fn get_block_height(&self, _block_id: u64) -> anyhow::Result<Option<u32>> {
-        Ok(None)
-    }
+        // Step 4: Delete the blocks
+        for block_model in &blocks_to_remove {
+            sqlx::query("DELETE FROM block WHERE db_id = ?")
+                .bind(block_model.db_id)
+                .execute(&mut *db_tx)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to delete block {}: {}", block_model.db_id, e))?;
+        }
 
-    async fn get_height(&self) -> anyhow::Result<u32> {
-        Ok(0)
-    }
+        // Step 5: Commit
+        db_tx.commit().await
+            .map_err(|e| anyhow::anyhow!("Failed to commit pop_off_to transaction: {}", e))?;
 
-    async fn get_cumulative_difficulty(&self) -> anyhow::Result<String> {
-        Ok("0".to_string())
+        info!("Popped off {} blocks successfully", blocks_to_remove.len());
+
+        // Convert BlockModel to Block for return
+        let blocks: Vec<Block> = blocks_to_remove.iter()
+            .filter_map(|m| m.to_domain().ok())
+            .collect();
+
+        Ok(blocks)
     }
 }

@@ -270,6 +270,11 @@ pub trait TaggedDataTagRepository: Repository<TaggedDataTagModel> {
 }
 
 #[async_trait]
+pub trait TaggedDataExtendRepository: Repository<TaggedDataExtendModel> {
+    async fn find_by_extend_id(&self, extend_id: i64) -> RepositoryResult<Vec<TaggedDataExtendModel>>;
+}
+
+#[async_trait]
 pub trait TaggedTimestampRepository: Repository<TaggedTimestampModel> {
     async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<TaggedTimestampModel>>;
     async fn find_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedTimestampModel>>;

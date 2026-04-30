@@ -111,3 +111,4 @@ pub use signature::{Ed25519, Curve25519, Sm2};
 
 // 重新导出加密算法
 pub use cipher::Sm4Gcm;
+pub use cipher::AesGcm;

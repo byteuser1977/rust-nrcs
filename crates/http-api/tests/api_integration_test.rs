@@ -126,6 +126,12 @@ impl TransactionProcessor for MockTxProcessor {
     async fn execute_batch(&self, _txs: &[Transaction]) -> tx_engine::ProcessorResult<Vec<tx_engine::TxReceiptInfo>> {
         Ok(vec![])
     }
+
+    async fn apply_phased_fee(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
+        Ok(())
+    }
+
+    fn set_current_block(&self, _block_id: i64, _height: i32, _timestamp: i32) {}
 }
 
 /// 模拟区块仓库
@@ -261,6 +267,14 @@ impl AssetRepository for MockAssetRepository {
     async fn find_by_height(&self, _height: i32) -> RepositoryResult<Vec<AssetModel>> {
         Ok(vec![])
     }
+
+    async fn increase_quantity(&self, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn decrease_quantity(&self, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
 }
 
 /// 模拟账户资产仓库
@@ -290,6 +304,10 @@ impl AccountAssetRepository for MockAccountAssetRepository {
     }
     
     async fn decrease_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn add_to_unconfirmed_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
         Ok(())
     }
 }

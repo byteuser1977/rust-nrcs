@@ -24,7 +24,7 @@ pub use get_next_block_ids::GetNextBlockIdsHandler;
 pub use bundler_rate::BundlerRateHandler;
 pub use unknown::UnknownHandler;
 
-use crate::{peer::Peers, protocol::PeerRequest};
+use crate::{peer::Peers, protocol::PeerRequest, config::P2PConfig};
 use std::sync::Arc;
 use tracing::warn;
 use anyhow::Result;
@@ -49,8 +49,10 @@ pub trait BlockVerifier: Send + Sync {
     async fn get_block_height(&self, block_id: u64) -> Result<Option<u32>>;
     
     async fn get_height(&self) -> Result<u32>;
-    
+
     async fn get_cumulative_difficulty(&self) -> Result<String>;
+
+    async fn pop_off_to(&self, height: u32) -> Result<Vec<Block>>;
 }
 
 pub struct Handler {
@@ -69,7 +71,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(peers: Arc<Peers>, block_verifier: Arc<dyn BlockVerifier>) -> Self {
+    pub fn new(peers: Arc<Peers>, block_verifier: Arc<dyn BlockVerifier>, p2p_config: Arc<P2PConfig>) -> Self {
         Self {
             get_info: Arc::new(GetInfoHandler::new(Arc::clone(&peers))),
             get_peers: Arc::new(GetPeersHandler::new(Arc::clone(&peers))),
@@ -80,7 +82,7 @@ impl Handler {
             get_next_blocks: Arc::new(GetNextBlocksHandler::new(Arc::clone(&peers))),
             get_transactions: Arc::new(GetTransactionsHandler::new()),
             get_unconfirmed_transactions: Arc::new(GetTransactionsHandler::new()),
-            process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier)),
+            process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier, p2p_config)),
             process_transactions: Arc::new(ProcessTransactionsHandler::new(Arc::clone(&peers))),
             bundler_rate: Arc::new(BundlerRateHandler::new()),
         }
@@ -92,6 +94,7 @@ impl Handler {
         block_repo: Arc<dyn BlockRepository>,
         tx_repo: Arc<dyn TransactionRepository>,
         tx_processor: Arc<dyn TransactionProcessor>,
+        p2p_config: Arc<P2PConfig>,
     ) -> Self {
         Self {
             get_info: Arc::new(GetInfoHandler::new(Arc::clone(&peers))),
@@ -103,7 +106,7 @@ impl Handler {
             get_next_blocks: Arc::new(GetNextBlocksHandler::with_block_repo(Arc::clone(&peers), block_repo)),
             get_transactions: Arc::new(GetTransactionsHandler::with_tx_repo(tx_repo)),
             get_unconfirmed_transactions: Arc::new(GetTransactionsHandler::new()),
-            process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier)),
+            process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier, Arc::clone(&p2p_config))),
             process_transactions: Arc::new(ProcessTransactionsHandler::with_tx_processor(Arc::clone(&peers), tx_processor)),
             bundler_rate: Arc::new(BundlerRateHandler::new()),
         }

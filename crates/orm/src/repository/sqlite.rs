@@ -3955,6 +3955,93 @@ impl Repository<TaggedTimestampModel> for SqliteTaggedTimestampRepository {
     }
 }
 
+// ============================================================================
+// TaggedDataExtendRepository
+// ============================================================================
+
+pub struct SqliteTaggedDataExtendRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteTaggedDataExtendRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl Repository<TaggedDataExtendModel> for SqliteTaggedDataExtendRepository {
+    async fn insert(&self, model: &TaggedDataExtendModel) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO tagged_data_extend (id, extend_id, height, latest)
+            VALUES (?, ?, ?, ?)
+            "#,
+        )
+        .bind(model.id)
+        .bind(model.extend_id)
+        .bind(model.height)
+        .bind(model.latest)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TaggedDataExtendModel>> {
+        let record = sqlx::query_as::<_, TaggedDataExtendModel>("SELECT * FROM tagged_data_extend WHERE db_id = ?")
+            .bind(db_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
+    async fn update(&self, _item: &TaggedDataExtendModel) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("update not implemented for tagged_data_extend".to_string()))
+    }
+
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Err(RepositoryError::Validation("delete not implemented for tagged_data_extend".to_string()))
+    }
+
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<TaggedDataExtendModel>> {
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+        let records = sqlx::query_as::<_, TaggedDataExtendModel>(
+            "SELECT * FROM tagged_data_extend WHERE latest = 1 ORDER BY height DESC LIMIT ? OFFSET ?"
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tagged_data_extend WHERE latest = 1")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(count)
+    }
+}
+
+#[async_trait]
+impl TaggedDataExtendRepository for SqliteTaggedDataExtendRepository {
+    async fn find_by_extend_id(&self, extend_id: i64) -> RepositoryResult<Vec<TaggedDataExtendModel>> {
+        let records = sqlx::query_as::<_, TaggedDataExtendModel>(
+            "SELECT * FROM tagged_data_extend WHERE extend_id = ? AND latest = 1 ORDER BY height DESC"
+        )
+        .bind(extend_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+}
+
 pub struct SqliteAccountGuaranteedBalanceRepository {
     pool: SqlitePool,
 }
