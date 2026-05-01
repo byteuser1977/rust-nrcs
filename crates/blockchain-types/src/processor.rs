@@ -1,4 +1,8 @@
 //! Blockchain state processor for blocks and transactions.
+//!
+//! ⚠️ **注意**: 此模块包含硬编码 SQL，建议迁移到 ORM 层
+//! 由于架构限制（blockchain-types 是底层模块），暂时保留此实现
+//! 未来版本应将此功能移至 p2p 或 tx-engine 模块
 
 #[cfg(feature = "database")]
 use crate::prelude::*;
@@ -91,7 +95,7 @@ impl BlockchainProcessor {
         let generation_signature = block.generation_signature.clone();
         let block_signature = block.block_signature.0.to_vec();
         let payload_hash = block.payload_hash.0.to_vec();
-        
+
         sqlx::query(
             r#"
             INSERT INTO block (

@@ -5,7 +5,7 @@ use crate::models::*;
 use super::traits::*;
 use super::public_key::PublicKeyRepository;
 use blockchain_types::account_ext::AccountPublicKey;
-use blockchain_types::AccountId;
+use blockchain_types::{AccountId, Height};
 
 pub struct PgBlockRepository {
     pool: PgPool,
@@ -188,6 +188,21 @@ impl BlockRepository for PgBlockRepository {
         .map_err(RepositoryError::DbError)?;
         Ok(records)
     }
+
+    async fn delete_blocks_by_ids(&self, db_ids: &[i64]) -> RepositoryResult<()> {
+        if db_ids.is_empty() {
+            return Ok(());
+        }
+
+        for &db_id in db_ids {
+            sqlx::query("DELETE FROM block WHERE db_id = $1")
+                .bind(db_id)
+                .execute(&self.pool)
+                .await
+                .map_err(RepositoryError::DbError)?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -320,19 +335,19 @@ impl PgPublicKeyRepository {
 #[async_trait]
 impl PublicKeyRepository for PgPublicKeyRepository {
     async fn find_latest_by_account_id(&self, account_id: i64) -> RepositoryResult<Option<AccountPublicKey>> {
-        let row: Option<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT public_key FROM public_key WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC LIMIT 1"
+        let row: Option<(Vec<u8>, i32)> = sqlx::query_as(
+            "SELECT public_key, height FROM public_key WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC LIMIT 1"
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
         .await?;
 
-        if let Some((pk_vec,)) = row {
+        if let Some((pk_vec, height)) = row {
             if let Ok(bytes) = pk_vec.try_into() {
                 let pk = AccountPublicKey {
                     account_id: account_id as AccountId,
                     public_key: bytes,
-                    height: 0,
+                    height: height as Height,
                 };
                 return Ok(Some(pk));
             }
@@ -1441,6 +1456,21 @@ impl TransactionRepository for PgTransactionRepository {
     async fn find_unconfirmed(&self, _limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
         Err(RepositoryError::Validation("use UnconfirmedTransactionModel with UnconfirmedTransactionRepository".to_string()))
     }
+
+    async fn delete_transactions_by_ids(&self, db_ids: &[i64]) -> RepositoryResult<()> {
+        if db_ids.is_empty() {
+            return Ok(());
+        }
+
+        for &db_id in db_ids {
+            sqlx::query(r#"DELETE FROM "transaction" WHERE db_id = $1"#)
+                .bind(db_id)
+                .execute(&self.pool)
+                .await
+                .map_err(RepositoryError::DbError)?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -1579,16 +1609,17 @@ impl AccountRepository for PgAccountRepository {
         Ok(record)
     }
 
-    async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()> {
+    async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64, height: i32) -> RepositoryResult<()> {
         sqlx::query(
             r#"
             UPDATE account
-            SET balance = $1, unconfirmed_balance = $2
-            WHERE id = $3 AND latest = TRUE
+            SET balance = $1, unconfirmed_balance = $2, height = $3
+            WHERE id = $4 AND latest = TRUE
             "#,
         )
         .bind(balance)
         .bind(unconfirmed_balance)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -1617,7 +1648,7 @@ impl AccountRepository for PgAccountRepository {
         Ok(account)
     }
 
-    async fn add_to_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+    async fn add_to_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
         if amount < 0 {
             let account = self.find_by_account_id(account_id).await?;
             if let Some(acc) = account {
@@ -1637,11 +1668,12 @@ impl AccountRepository for PgAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET balance = balance + $1
-            WHERE id = $2 AND latest = TRUE
+            SET balance = balance + $1, height = $2
+            WHERE id = $3 AND latest = TRUE
             "#,
         )
         .bind(amount)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -1652,11 +1684,12 @@ impl AccountRepository for PgAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET balance = balance + $1
-                WHERE id = $2 AND latest = TRUE
+                SET balance = balance + $1, height = $2
+                WHERE id = $3 AND latest = TRUE
                 "#,
             )
             .bind(amount)
+            .bind(height)
             .bind(account_id)
             .execute(&self.pool)
             .await
@@ -1665,7 +1698,7 @@ impl AccountRepository for PgAccountRepository {
         Ok(())
     }
 
-    async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+    async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
         if amount < 0 {
             let account = self.find_by_account_id(account_id).await?;
             if let Some(acc) = account {
@@ -1685,11 +1718,12 @@ impl AccountRepository for PgAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET unconfirmed_balance = unconfirmed_balance + $1
-            WHERE id = $2 AND latest = TRUE
+            SET unconfirmed_balance = unconfirmed_balance + $1, height = $2
+            WHERE id = $3 AND latest = TRUE
             "#,
         )
         .bind(amount)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -1700,11 +1734,12 @@ impl AccountRepository for PgAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET unconfirmed_balance = unconfirmed_balance + $1
-                WHERE id = $2 AND latest = TRUE
+                SET unconfirmed_balance = unconfirmed_balance + $1, height = $2
+                WHERE id = $3 AND latest = TRUE
                 "#,
             )
             .bind(amount)
+            .bind(height)
             .bind(account_id)
             .execute(&self.pool)
             .await
@@ -1713,15 +1748,16 @@ impl AccountRepository for PgAccountRepository {
         Ok(())
     }
 
-    async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+    async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET balance = balance + $1, unconfirmed_balance = unconfirmed_balance + $1
-            WHERE id = $2 AND latest = TRUE
+            SET balance = balance + $1, unconfirmed_balance = unconfirmed_balance + $1, height = $2
+            WHERE id = $3 AND latest = TRUE
             "#,
         )
         .bind(amount)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -1732,11 +1768,12 @@ impl AccountRepository for PgAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET balance = balance + $1, unconfirmed_balance = unconfirmed_balance + $1
-                WHERE id = $2 AND latest = TRUE
+                SET balance = balance + $1, unconfirmed_balance = unconfirmed_balance + $1, height = $2
+                WHERE id = $3 AND latest = TRUE
                 "#,
             )
             .bind(amount)
+            .bind(height)
             .bind(account_id)
             .execute(&self.pool)
             .await
@@ -1753,15 +1790,16 @@ impl AccountRepository for PgAccountRepository {
         Ok(count)
     }
 
-    async fn add_to_forged_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+    async fn add_to_forged_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET forged_balance = forged_balance + $1
-            WHERE id = $2 AND latest = TRUE
+            SET forged_balance = forged_balance + $1, height = $2
+            WHERE id = $3 AND latest = TRUE
             "#,
         )
         .bind(amount)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -1772,11 +1810,12 @@ impl AccountRepository for PgAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET forged_balance = forged_balance + $1
-                WHERE id = $2 AND latest = TRUE
+                SET forged_balance = forged_balance + $1, height = $2
+                WHERE id = $3 AND latest = TRUE
                 "#,
             )
             .bind(amount)
+            .bind(height)
             .bind(account_id)
             .execute(&self.pool)
             .await

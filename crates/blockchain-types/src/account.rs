@@ -23,6 +23,8 @@ pub struct Account {
     pub balance: Amount,
     /// 未确认余额（Pending，正在处理中的交易）
     pub unconfirmed_balance: Amount,
+    /// 锻造余额（通过出块获得的累积奖励，NQT）
+    pub forged_balance: Amount,
     /// 保留余额（Reserved，用于租赁等锁定用途）
     pub reserved_balance: Amount,
     /// 担保余额（Guaranteed，用于特定担保场景）
@@ -33,6 +35,8 @@ pub struct Account {
     pub properties: HashMap<String, String>,
     /// 账户租赁信息（出块权租赁）
     pub lease: Option<AccountLease>,
+    /// 是否有控制阶段设置（Control Phasing）
+    pub has_control_phasing: bool,
     /// 创建时间（Unix 时间戳）
     pub created_at: Timestamp,
     /// 最后更新时间
@@ -50,11 +54,13 @@ impl Account {
             address: None,
             balance: initial_balance,
             unconfirmed_balance: initial_balance,
+            forged_balance: 0,
             reserved_balance: 0,
             guaranteed_balance: 0,
             assets: HashMap::new(),
             properties: HashMap::new(),
             lease: None,
+            has_control_phasing: false,
             created_at: now,
             last_updated: now,
             current_height: 0,

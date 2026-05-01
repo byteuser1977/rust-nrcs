@@ -139,21 +139,9 @@ impl DatabaseAccountManager {
         let model = self.store.get_by_id(account_id).await?
             .ok_or_else(|| AccountError::NotFound(account_id))?;
 
-        // 转换为领域对象
-        let mut account = Account {
-            id: model.id as AccountId,
-            address: None,
-            balance: model.balance as Amount,
-            unconfirmed_balance: model.unconfirmed_balance as Amount,
-            reserved_balance: 0,
-            guaranteed_balance: 0,
-            assets: Default::default(),
-            properties: Default::default(),
-            lease: None,
-            created_at: 0,
-            last_updated: 0,
-            current_height: 0,
-        };
+        // 转换为领域对象（使用 model.to_domain() 以保留所有字段）
+        let mut account = model.to_domain()
+            .map_err(|e| AccountError::Repository(RepositoryError::Blockchain(e)))?;
 
         // 加载资产持仓
         let asset_models = self.account_asset_repo.find_by_account(account_id as i64).await?;
@@ -181,7 +169,7 @@ impl AccountManager for DatabaseAccountManager {
 
         // 存储到数据库
         let public_key_bytes = kp.verifying_key().as_bytes().to_vec();
-        self.store.get_or_create_account(account_id, public_key_bytes).await?;
+        self.store.get_or_create_account(account_id, public_key_bytes, 0).await?;
 
         // 如果配置了初始余额，进行 credit
         if let Some(balance) = initial_balance {
@@ -192,7 +180,7 @@ impl AccountManager for DatabaseAccountManager {
     }
 
     async fn register_account(&self, account_id: AccountId, public_key: Vec<u8>) -> AccountResult<()> {
-        self.store.get_or_create_account(account_id, public_key).await?;
+        self.store.get_or_create_account(account_id, public_key, 0).await?;
         Ok(())
     }
 
@@ -232,8 +220,11 @@ impl AccountManager for DatabaseAccountManager {
         let new_to_balance = to_account.balance.saturating_add(amount);
         let new_to_unconfirmed = to_account.unconfirmed_balance.saturating_add(amount);
 
-        self.store.update_balance(from, new_from_balance, new_from_unconfirmed).await?;
-        self.store.update_balance(to, new_to_balance, new_to_unconfirmed).await?;
+        // 使用当前区块高度更新账户状态
+        let height = from_account.current_height.max(to_account.current_height);
+
+        self.store.update_balance(from, new_from_balance, new_from_unconfirmed, height).await?;
+        self.store.update_balance(to, new_to_balance, new_to_unconfirmed, height).await?;
 
         Ok(())
     }
@@ -246,7 +237,7 @@ impl AccountManager for DatabaseAccountManager {
         let account = self.get_account_domain(account_id).await?;
         let new_balance = account.balance.saturating_add(amount);
         let new_unconfirmed = account.unconfirmed_balance.saturating_add(amount);
-        self.store.update_balance(account_id, new_balance, new_unconfirmed).await?;
+        self.store.update_balance(account_id, new_balance, new_unconfirmed, account.current_height).await?;
         Ok(())
     }
 
@@ -265,7 +256,7 @@ impl AccountManager for DatabaseAccountManager {
 
         let new_balance = account.balance.saturating_sub(amount);
         let new_unconfirmed = account.unconfirmed_balance.saturating_sub(amount);
-        self.store.update_balance(account_id, new_balance, new_unconfirmed).await?;
+        self.store.update_balance(account_id, new_balance, new_unconfirmed, account.current_height).await?;
         Ok(())
     }
 

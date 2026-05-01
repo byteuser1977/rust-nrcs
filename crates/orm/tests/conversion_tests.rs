@@ -106,11 +106,32 @@ fn test_account_model_conversion() {
     let model = AccountModel::from_domain(&account).expect("failed to convert from domain");
     assert_eq!(model.id, 1234567890);
     assert_eq!(model.balance, 10_000_000_000);
+    assert_eq!(model.unconfirmed_balance, 10_000_000_000);
+    assert_eq!(model.forged_balance, 0); // 新账户初始锻造余额为0
+    assert_eq!(model.has_control_phasing, false); // 新账户默认无控制阶段
+    assert_eq!(model.height, 0);
 
     let converted = model.to_domain().expect("failed to convert to domain");
     assert_eq!(converted.id, account.id);
     assert_eq!(converted.balance, account.balance);
     assert_eq!(converted.unconfirmed_balance, account.unconfirmed_balance);
+    assert_eq!(converted.forged_balance, account.forged_balance);
+    assert_eq!(converted.has_control_phasing, account.has_control_phasing);
+}
+
+#[test]
+fn test_account_model_with_forged_balance() {
+    let mut account = Account::new(1234567890, 10_000_000_000);
+    account.forged_balance = 5_000_000_000; // 设置锻造余额
+    account.has_control_phasing = true; // 设置控制阶段
+
+    let model = AccountModel::from_domain(&account).expect("failed to convert from domain");
+    assert_eq!(model.forged_balance, 5_000_000_000);
+    assert_eq!(model.has_control_phasing, true);
+
+    let converted = model.to_domain().expect("failed to convert to domain");
+    assert_eq!(converted.forged_balance, 5_000_000_000);
+    assert_eq!(converted.has_control_phasing, true);
 }
 
 #[test]

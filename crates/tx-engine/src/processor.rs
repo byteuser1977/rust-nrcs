@@ -454,20 +454,8 @@ impl DatabaseTransactionProcessor {
             .find_by_account_id(account_id as i64)
             .await?
             .ok_or_else(|| ProcessorError::AccountNotFound(account_id))?;
-        Ok(Account {
-            id: model.id as AccountId,
-            address: None,
-            balance: model.balance as Amount,
-            unconfirmed_balance: model.unconfirmed_balance as Amount,
-            reserved_balance: 0,
-            guaranteed_balance: 0,
-            assets: Default::default(),
-            properties: Default::default(),
-            lease: None,
-            created_at: 0,
-            last_updated: 0,
-            current_height: 0,
-        })
+        model.to_domain()
+            .map_err(ProcessorError::Blockchain)
     }
 
     #[allow(dead_code)]
@@ -475,20 +463,7 @@ impl DatabaseTransactionProcessor {
         match self.get_account(account_id).await {
             Ok(account) => Ok(account),
             Err(ProcessorError::AccountNotFound(_)) => {
-                Ok(Account {
-                    id: account_id,
-                    address: None,
-                    balance: 0,
-                    unconfirmed_balance: 0,
-                    reserved_balance: 0,
-                    guaranteed_balance: 0,
-                    assets: Default::default(),
-                    properties: Default::default(),
-                    lease: None,
-                    created_at: 0,
-                    last_updated: 0,
-                    current_height: 0,
-                })
+                Ok(Account::new(account_id, 0))
             }
             Err(e) => Err(e),
         }
@@ -496,10 +471,15 @@ impl DatabaseTransactionProcessor {
 
     #[allow(dead_code)]
     async fn update_account_balance(&self, account_id: AccountId, balance: Amount, unconfirmed: Amount) -> ProcessorResult<()> {
+        let height = *self.current_height.read().unwrap();
         self.account_repo
-            .update_balance(account_id as i64, balance as i64, unconfirmed as i64)
+            .update_balance(account_id as i64, balance as i64, unconfirmed as i64, height)
             .await?;
         Ok(())
+    }
+
+    fn current_height(&self) -> i32 {
+        *self.current_height.read().unwrap()
     }
 
     async fn get_account_balance(&self, account_id: i64) -> Option<i64> {
@@ -645,14 +625,14 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
             return Ok(false);
         }
 
-        self.account_repo.add_to_unconfirmed_balance(sender_id as i64, -deduct_amount).await?;
+        self.account_repo.add_to_unconfirmed_balance(sender_id as i64, -deduct_amount, self.current_height()).await?;
 
         // Java: Also apply attachment unconfirmed (pre-deduct assets/currencies)
         if !tx.phased {
             let attachment_ok = self.apply_attachment_unconfirmed(tx).await?;
             if !attachment_ok {
                 // Rollback the NRCS deduction if attachment deduction failed
-                self.account_repo.add_to_unconfirmed_balance(sender_id as i64, deduct_amount).await?;
+                self.account_repo.add_to_unconfirmed_balance(sender_id as i64, deduct_amount, self.current_height()).await?;
                 return Ok(false);
             }
         }
@@ -684,7 +664,7 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
                 .ok_or_else(|| ProcessorError::Validation("amount+fee overflow".to_string()))?
         };
 
-        self.account_repo.add_to_unconfirmed_balance(sender_id as i64, restore_amount).await?;
+        self.account_repo.add_to_unconfirmed_balance(sender_id as i64, restore_amount, self.current_height()).await?;
 
         // Java: Also rollback attachment unconfirmed (restore assets/currencies)
         if !tx.phased {
@@ -745,13 +725,13 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
             // Phased: only deduct amount (fee was already deducted in apply_unconfirmed from unconfirmed,
             // and will be deducted from confirmed in Transaction.apply())
             if amount_nqt != 0 {
-                self.account_repo.add_to_balance(sender_id, -amount_nqt).await?;
+                self.account_repo.add_to_balance(sender_id, -amount_nqt, self.current_height()).await?;
             }
         } else {
             // Non-phased: deduct both amount and fee
             let total = amount_nqt + fee_nqt;
             if total != 0 {
-                self.account_repo.add_to_balance(sender_id, -total).await?;
+                self.account_repo.add_to_balance(sender_id, -total, self.current_height()).await?;
             }
         }
 
@@ -769,7 +749,7 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         };
         if amount_nqt > 0 {
             self.account_repo.get_or_create(credit_recipient_id).await?;
-            self.account_repo.add_to_balance_and_unconfirmed(credit_recipient_id, amount_nqt).await?;
+            self.account_repo.add_to_balance_and_unconfirmed(credit_recipient_id, amount_nqt, self.current_height()).await?;
         }
 
         // === Step 3: applyAttachment() - type-specific logic ===
@@ -802,7 +782,7 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         let fee_nqt = tx.fee as i64;
 
         if fee_nqt != 0 {
-            self.account_repo.add_to_balance(sender_id, -fee_nqt).await?;
+            self.account_repo.add_to_balance(sender_id, -fee_nqt, self.current_height()).await?;
             debug!("Deducted phased fee={} from sender={}", fee_nqt, sender_id);
         }
 
@@ -1196,7 +1176,7 @@ impl DatabaseTransactionProcessor {
 
                 // 减少unconfirmed NRCS余额（预扣购买金额）
                 let total_cost = price_nqt * quantity;
-                self.account_repo.add_to_unconfirmed_balance(sender_id, -total_cost).await?;
+                self.account_repo.add_to_unconfirmed_balance(sender_id, -total_cost, self.current_height()).await?;
             }
             Err(e) => {
                 warn!("Failed to place BID order {}: {}", tx.id, e);
@@ -1270,7 +1250,7 @@ impl DatabaseTransactionProcessor {
                 info!("Cancelled BID order {} for account {}", order_id, sender_id);
 
                 // 恢复unconfirmed NRCS余额
-                self.account_repo.add_to_unconfirmed_balance(sender_id, total_cost).await?;
+                self.account_repo.add_to_unconfirmed_balance(sender_id, total_cost, self.current_height()).await?;
             }
             Ok(Some(_)) => {
                 warn!("Cannot cancel BID order owned by another account");
@@ -1321,7 +1301,7 @@ impl DatabaseTransactionProcessor {
 
         // Java: senderAccount.addToBalance(event, txId, -(quantityQNT * amountNQTPerQNT));
         let total_dividend_amount = total_dividend_shares * dividend_per_share;
-        self.account_repo.add_to_balance(sender_id, -total_dividend_amount).await?;
+        self.account_repo.add_to_balance(sender_id, -total_dividend_amount, self.current_height()).await?;
 
         // 获取所有资产持有者并分配红利
         match self.account_asset_repo.find_by_asset(asset_id).await {
@@ -1336,7 +1316,7 @@ impl DatabaseTransactionProcessor {
 
                     if dividend_amount > 0 && holder_id != sender_id {
                         // Java: recipientAccount.addToBalanceAndUnconfirmedBalance(event, txId, dividend);
-                        self.account_repo.add_to_balance(holder_id, dividend_amount).await?;
+                        self.account_repo.add_to_balance(holder_id, dividend_amount, self.current_height()).await?;
 
                         // 写入LEDGER记录
                         use orm::models::AccountLedgerModel;
@@ -1735,7 +1715,7 @@ impl DatabaseTransactionProcessor {
             self.account_currency_repo.update_units(sender_id, currency_id, -units_to_claim).await?;
 
             // 增加NRCS余额
-            self.account_repo.add_to_balance(sender_id, nrcs_received).await?;
+            self.account_repo.add_to_balance(sender_id, nrcs_received, self.current_height()).await?;
 
             info!("Claimed {} units from currency {}, received {} NQT (reserve ratio: {}/{})",
                   units_to_claim, currency_id, nrcs_received, reserve_supply, current_supply);
@@ -3210,7 +3190,7 @@ impl DatabaseTransactionProcessor {
 
                     // Refund amount to buyer
                     if let Ok(Some(purchase)) = self.purchase_repo.find_by_purchase_id(purchase_id).await {
-                        self.account_repo.add_to_balance_and_unconfirmed(purchase.buyer_id, refund_amount).await
+                        self.account_repo.add_to_balance_and_unconfirmed(purchase.buyer_id, refund_amount, self.current_height()).await
                             .map_err(|e| ProcessorError::Validation(format!("Failed to refund buyer: {}", e)))?;
                     }
 
@@ -3310,7 +3290,7 @@ impl DatabaseTransactionProcessor {
 
                     // Refund amount to issuer
                     if let Ok(Some(shuffling)) = self.shuffling_repo.find_by_shuffling_id(shuffling_id).await {
-                        self.account_repo.add_to_balance_and_unconfirmed(shuffling.issuer_id, shuffling.amount).await
+                        self.account_repo.add_to_balance_and_unconfirmed(shuffling.issuer_id, shuffling.amount, self.current_height()).await
                             .map_err(|e| ProcessorError::Validation(format!("Failed to refund shuffling: {}", e)))?;
                     }
 

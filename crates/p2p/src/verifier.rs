@@ -806,33 +806,37 @@ impl BlockVerifier for BlockchainVerifier {
         let mut db_tx = self.pool.begin().await
             .map_err(|e| anyhow::anyhow!("Failed to begin database transaction: {}", e))?;
 
-        // Step 3: Delete transactions in each block
+        // Step 3: Collect all transaction IDs to delete
+        let mut all_tx_ids: Vec<i64> = Vec::new();
         for block_model in &blocks_to_remove {
             let block_id = block_model.id;
             let txs = self.tx_repo.find_by_block(block_id).await
                 .map_err(|e| anyhow::anyhow!("Failed to find transactions for block {}: {}", block_id, e))?;
 
             for tx in &txs {
-                sqlx::query("DELETE FROM \"transaction\" WHERE db_id = ?")
-                    .bind(tx.db_id)
-                    .execute(&mut *db_tx)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to delete transaction {}: {}", tx.db_id, e))?;
+                all_tx_ids.push(tx.db_id);
             }
 
-            debug!("Deleted {} transactions from block {}", txs.len(), block_id);
+            debug!("Found {} transactions in block {} to delete", txs.len(), block_id);
         }
 
-        // Step 4: Delete the blocks
-        for block_model in &blocks_to_remove {
-            sqlx::query("DELETE FROM block WHERE db_id = ?")
-                .bind(block_model.db_id)
-                .execute(&mut *db_tx)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to delete block {}: {}", block_model.db_id, e))?;
+        // Step 4: Delete all transactions using repository method
+        if !all_tx_ids.is_empty() {
+            self.tx_repo.delete_transactions_by_ids(&all_tx_ids).await
+                .map_err(|e| anyhow::anyhow!("Failed to delete transactions: {}", e))?;
+            debug!("Deleted {} transactions total", all_tx_ids.len());
         }
 
-        // Step 5: Commit
+        // Step 5: Collect all block IDs to delete
+        let block_db_ids: Vec<i64> = blocks_to_remove.iter().map(|b| b.db_id).collect();
+
+        // Step 6: Delete blocks using repository method
+        if !block_db_ids.is_empty() {
+            self.block_repo.delete_blocks_by_ids(&block_db_ids).await
+                .map_err(|e| anyhow::anyhow!("Failed to delete blocks: {}", e))?;
+        }
+
+        // Step 7: Commit
         db_tx.commit().await
             .map_err(|e| anyhow::anyhow!("Failed to commit pop_off_to transaction: {}", e))?;
 

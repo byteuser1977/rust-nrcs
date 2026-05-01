@@ -49,9 +49,12 @@ pub trait BlockRepository: Repository<BlockModel> {
     async fn has_block(&self, id: i64) -> RepositoryResult<bool>;
     async fn get_ids_after(&self, block_id: i64, limit: i32) -> RepositoryResult<Vec<i64>>;
     async fn update_next_block_id(&self, previous_block_id: i64, next_block_id: i64) -> RepositoryResult<()>;
-    
+
     async fn delete_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>>;
     async fn find_blocks_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>>;
+
+    /// Delete blocks by IDs (for rollback operations)
+    async fn delete_blocks_by_ids(&self, db_ids: &[i64]) -> RepositoryResult<()>;
 }
 
 #[async_trait]
@@ -63,6 +66,9 @@ pub trait TransactionRepository: Repository<TransactionModel> {
     async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<TransactionModel>>;
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<TransactionModel>>;
     async fn find_unconfirmed(&self, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
+
+    /// Delete transactions by IDs (for rollback operations)
+    async fn delete_transactions_by_ids(&self, db_ids: &[i64]) -> RepositoryResult<()>;
 }
 
 #[async_trait]
@@ -71,13 +77,13 @@ pub trait AccountRepository: Repository<AccountModel> {
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AccountModel>>;
     async fn find_latest_by_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>>;
     async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<AccountModel>>;
-    async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()>;
+    async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64, height: i32) -> RepositoryResult<()>;
 
     async fn get_or_create(&self, account_id: i64) -> RepositoryResult<AccountModel>;
-    async fn add_to_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
-    async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
-    async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
-    async fn add_to_forged_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()>;
+    async fn add_to_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()>;
+    async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()>;
+    async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()>;
+    async fn add_to_forged_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()>;
     async fn get_account_count(&self) -> RepositoryResult<i64>;
 }
 

@@ -45,7 +45,7 @@ impl BlockRewardApplicator {
 
         // Step 2: Bind public key (first-time accounts)
         if let Some(ref pk) = block.generator_public_key {
-            self.bind_public_key(generator_id, pk).await?;
+            self.bind_public_key(generator_id, pk, block.height as i32).await?;
         }
 
         // Step 3: Calculate and distribute Back Fees
@@ -58,13 +58,15 @@ impl BlockRewardApplicator {
 
         self.account_repo.add_to_balance_and_unconfirmed(
             generator_id as i64,
-            net_fee
+            net_fee,
+            block.height as i32
         ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
 
         // Step 5: Update forged_balance
         self.account_repo.add_to_forged_balance(
             generator_id as i64,
-            net_fee
+            net_fee,
+            block.height as i32
         ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
 
         debug!("Block reward: height={}, generator={}, net_fee={}", block.height, generator_id, net_fee);
@@ -87,7 +89,7 @@ impl BlockRewardApplicator {
     }
 
     /// Bind public key to account (for first-time appearing accounts)
-    async fn bind_public_key(&self, account_id: AccountId, public_key: &[u8; 32]) -> anyhow::Result<()> {
+    async fn bind_public_key(&self, account_id: AccountId, public_key: &[u8; 32], height: i32) -> anyhow::Result<()> {
         use blockchain_types::account_ext::AccountPublicKey;
 
         // Check if public key already exists
@@ -104,7 +106,7 @@ impl BlockRewardApplicator {
                 let pk_model = AccountPublicKey {
                     account_id: account_id as AccountId,
                     public_key: *public_key,
-                    height: 0,
+                    height: height as blockchain_types::Height,
                 };
                 self.public_key_repo.insert(&pk_model).await
                     .map_err(|e| anyhow::anyhow!("failed to bind public key: {}", e))
@@ -164,12 +166,14 @@ impl BlockRewardApplicator {
 
                 self.account_repo.add_to_balance_and_unconfirmed(
                     prev_generator_id as i64,
-                    fee
+                    fee,
+                    target_height
                 ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
 
                 self.account_repo.add_to_forged_balance(
                     prev_generator_id as i64,
-                    fee
+                    fee,
+                    target_height
                 ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
             } else {
                 debug!("Previous block not found at height {}", target_height);

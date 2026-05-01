@@ -5,7 +5,7 @@ use crate::models::*;
 use super::traits::*;
 use super::public_key::PublicKeyRepository;
 use blockchain_types::account_ext::AccountPublicKey;
-use blockchain_types::AccountId;
+use blockchain_types::{AccountId, Height};
 
 pub struct SqliteBlockRepository {
     pool: SqlitePool,
@@ -178,6 +178,21 @@ impl BlockRepository for SqliteBlockRepository {
         .await
         .map_err(RepositoryError::DbError)?;
         Ok(records)
+    }
+
+    async fn delete_blocks_by_ids(&self, db_ids: &[i64]) -> RepositoryResult<()> {
+        if db_ids.is_empty() {
+            return Ok(());
+        }
+
+        for &db_id in db_ids {
+            sqlx::query("DELETE FROM block WHERE db_id = ?")
+                .bind(db_id)
+                .execute(&self.pool)
+                .await
+                .map_err(RepositoryError::DbError)?;
+        }
+        Ok(())
     }
 }
 
@@ -379,6 +394,21 @@ impl TransactionRepository for SqliteTransactionRepository {
     async fn find_unconfirmed(&self, _limit: i64) -> RepositoryResult<Vec<TransactionModel>> {
         Err(RepositoryError::Validation("use UnconfirmedTransactionModel with UnconfirmedTransactionRepository".to_string()))
     }
+
+    async fn delete_transactions_by_ids(&self, db_ids: &[i64]) -> RepositoryResult<()> {
+        if db_ids.is_empty() {
+            return Ok(());
+        }
+
+        for &db_id in db_ids {
+            sqlx::query(r#"DELETE FROM "transaction" WHERE db_id = ?"#)
+                .bind(db_id)
+                .execute(&self.pool)
+                .await
+                .map_err(RepositoryError::DbError)?;
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -514,16 +544,17 @@ impl AccountRepository for SqliteAccountRepository {
         Ok(record)
     }
 
-    async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64) -> RepositoryResult<()> {
+    async fn update_balance(&self, account_id: i64, balance: i64, unconfirmed_balance: i64, height: i32) -> RepositoryResult<()> {
         sqlx::query(
             r#"
             UPDATE account
-            SET balance = ?, unconfirmed_balance = ?
+            SET balance = ?, unconfirmed_balance = ?, height = ?
             WHERE id = ? AND latest = 1
             "#,
         )
         .bind(balance)
         .bind(unconfirmed_balance)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -552,7 +583,7 @@ impl AccountRepository for SqliteAccountRepository {
         Ok(account)
     }
 
-    async fn add_to_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+    async fn add_to_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
         // 对应 Java: Math.addExact() 溢出检查 + checkBalance() 负数检查
         // First check if the result would be negative
         if amount < 0 {
@@ -574,11 +605,12 @@ impl AccountRepository for SqliteAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET balance = balance + ?
+            SET balance = balance + ?, height = ?
             WHERE id = ? AND latest = 1
             "#,
         )
         .bind(amount)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -589,11 +621,12 @@ impl AccountRepository for SqliteAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET balance = balance + ?
+                SET balance = balance + ?, height = ?
                 WHERE id = ? AND latest = 1
                 "#,
             )
             .bind(amount)
+            .bind(height)
             .bind(account_id)
             .execute(&self.pool)
             .await
@@ -602,7 +635,7 @@ impl AccountRepository for SqliteAccountRepository {
         Ok(())
     }
 
-    async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+    async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
         // 对应 Java: Math.addExact() 溢出检查
         if amount < 0 {
             let account = self.find_by_account_id(account_id).await?;
@@ -623,11 +656,12 @@ impl AccountRepository for SqliteAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET unconfirmed_balance = unconfirmed_balance + ?
+            SET unconfirmed_balance = unconfirmed_balance + ?, height = ?
             WHERE id = ? AND latest = 1
             "#,
         )
         .bind(amount)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -638,11 +672,12 @@ impl AccountRepository for SqliteAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET unconfirmed_balance = unconfirmed_balance + ?
+                SET unconfirmed_balance = unconfirmed_balance + ?, height = ?
                 WHERE id = ? AND latest = 1
                 "#,
             )
             .bind(amount)
+            .bind(height)
             .bind(account_id)
             .execute(&self.pool)
             .await
@@ -651,32 +686,34 @@ impl AccountRepository for SqliteAccountRepository {
         Ok(())
     }
 
-    async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+    async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET balance = balance + ?, unconfirmed_balance = unconfirmed_balance + ?
+            SET balance = balance + ?, unconfirmed_balance = unconfirmed_balance + ?, height = ?
             WHERE id = ? AND latest = 1
             "#,
         )
         .bind(amount)
         .bind(amount)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
-        
+
         if result.rows_affected() == 0 {
             let _account = self.get_or_create(account_id).await?;
             sqlx::query(
                 r#"
                 UPDATE account
-                SET balance = balance + ?, unconfirmed_balance = unconfirmed_balance + ?
+                SET balance = balance + ?, unconfirmed_balance = unconfirmed_balance + ?, height = ?
                 WHERE id = ? AND latest = 1
                 "#,
             )
             .bind(amount)
             .bind(amount)
+            .bind(height)
             .bind(account_id)
             .execute(&self.pool)
             .await
@@ -693,15 +730,16 @@ impl AccountRepository for SqliteAccountRepository {
         Ok(count)
     }
 
-    async fn add_to_forged_balance(&self, account_id: i64, amount: i64) -> RepositoryResult<()> {
+    async fn add_to_forged_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET forged_balance = forged_balance + ?
+            SET forged_balance = forged_balance + ?, height = ?
             WHERE id = ? AND latest = 1
             "#,
         )
         .bind(amount)
+        .bind(height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -712,11 +750,12 @@ impl AccountRepository for SqliteAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET forged_balance = forged_balance + ?
+                SET forged_balance = forged_balance + ?, height = ?
                 WHERE id = ? AND latest = 1
                 "#,
             )
             .bind(amount)
+            .bind(height)
             .bind(account_id)
             .execute(&self.pool)
             .await
@@ -1184,19 +1223,19 @@ impl SqlitePublicKeyRepository {
 #[async_trait]
 impl PublicKeyRepository for SqlitePublicKeyRepository {
     async fn find_latest_by_account_id(&self, account_id: i64) -> RepositoryResult<Option<AccountPublicKey>> {
-        let row: Option<(Vec<u8>,)> = sqlx::query_as(
-            "SELECT public_key FROM public_key WHERE account_id = ? AND latest = 1 ORDER BY height DESC LIMIT 1"
+        let row: Option<(Vec<u8>, i32)> = sqlx::query_as(
+            "SELECT public_key, height FROM public_key WHERE account_id = ? AND latest = 1 ORDER BY height DESC LIMIT 1"
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
         .await?;
 
-        if let Some((pk_vec,)) = row {
+        if let Some((pk_vec, height)) = row {
             if let Ok(bytes) = pk_vec.try_into() {
                 let pk = AccountPublicKey {
                     account_id: account_id as AccountId,
                     public_key: bytes,
-                    height: 0,
+                    height: height as Height,
                 };
                 return Ok(Some(pk));
             }

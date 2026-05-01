@@ -12,10 +12,10 @@ use blockchain_types::account_ext::AccountPublicKey;
 /// 账户存储 trait（用于 AccountManager 依赖注入）
 #[async_trait]
 pub trait AccountStore: Send + Sync {
-    async fn get_or_create_account(&self, account_id: AccountId, public_key: Vec<u8>) -> RepositoryResult<AccountModel>;
+    async fn get_or_create_account(&self, account_id: AccountId, public_key: Vec<u8>, height: Height) -> RepositoryResult<AccountModel>;
     async fn get_by_id(&self, account_id: AccountId) -> RepositoryResult<Option<AccountModel>>;
     async fn get_by_address(&self, address: &str) -> RepositoryResult<Option<AccountModel>>;
-    async fn update_balance(&self, account_id: AccountId, balance: Amount, unconfirmed_balance: Amount) -> RepositoryResult<()>;
+    async fn update_balance(&self, account_id: AccountId, balance: Amount, unconfirmed_balance: Amount, height: Height) -> RepositoryResult<()>;
     async fn increment_nonce(&self, account_id: AccountId) -> RepositoryResult<u64>;
 }
 
@@ -33,7 +33,7 @@ impl PgAccountStore {
 
 #[async_trait]
 impl AccountStore for PgAccountStore {
-    async fn get_or_create_account(&self, account_id: AccountId, public_key: Vec<u8>) -> RepositoryResult<AccountModel> {
+    async fn get_or_create_account(&self, account_id: AccountId, public_key: Vec<u8>, height: Height) -> RepositoryResult<AccountModel> {
         if let Some(account) = self.account_repo.find_by_account_id(account_id as i64).await? {
             if !public_key.is_empty() {
                 if let Ok(None) = self.public_key_repo.find_latest_by_account_id(account_id as i64).await {
@@ -42,7 +42,7 @@ impl AccountStore for PgAccountStore {
                     let pk_model = AccountPublicKey {
                         account_id: account_id as AccountId,
                         public_key: pk_bytes,
-                        height: 0,
+                        height,
                     };
                     let _ = self.public_key_repo.insert(&pk_model).await;
                 }
@@ -58,7 +58,7 @@ impl AccountStore for PgAccountStore {
             forged_balance: 0,
             active_lessee_id: None,
             has_control_phasing: false,
-            height: 0,
+            height: height as i32,
             latest: true,
         };
 
@@ -70,14 +70,14 @@ impl AccountStore for PgAccountStore {
             let pk_model = AccountPublicKey {
                 account_id: account_id as AccountId,
                 public_key: pk_bytes,
-                height: 0,
+                height,
             };
             let _ = self.public_key_repo.insert(&pk_model).await;
         } else {
             let pk_model = AccountPublicKey {
                 account_id: account_id as AccountId,
                 public_key: [0u8; 32],
-                height: 0,
+                height,
             };
             let _ = self.public_key_repo.insert(&pk_model).await;
         }
@@ -93,8 +93,8 @@ impl AccountStore for PgAccountStore {
         self.account_repo.find_by_address(address).await
     }
 
-    async fn update_balance(&self, account_id: AccountId, balance: Amount, unconfirmed_balance: Amount) -> RepositoryResult<()> {
-        self.account_repo.update_balance(account_id as i64, balance as i64, unconfirmed_balance as i64).await
+    async fn update_balance(&self, account_id: AccountId, balance: Amount, unconfirmed_balance: Amount, height: Height) -> RepositoryResult<()> {
+        self.account_repo.update_balance(account_id as i64, balance as i64, unconfirmed_balance as i64, height as i32).await
     }
 
     async fn increment_nonce(&self, _account_id: AccountId) -> RepositoryResult<u64> {
