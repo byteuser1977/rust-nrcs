@@ -41,6 +41,8 @@ use orm::{
     ShufflingRepository,
     // Account Lease
     AccountLeaseRepository,
+    // Asset Dividend
+    AssetDividendRepository,
 };
 use thiserror::Error;
 
@@ -329,6 +331,9 @@ pub struct DatabaseTransactionProcessor {
     // 新增：资产属性
     asset_property_repo: Arc<dyn AssetPropertyRepository>,
 
+    // 新增：资产分红
+    dividend_repo: Arc<dyn AssetDividendRepository>,
+
     // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
     exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
     currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
@@ -381,6 +386,8 @@ impl DatabaseTransactionProcessor {
         account_currency_repo: Arc<dyn AccountCurrencyRepository>,
         currency_transfer_repo: Arc<dyn CurrencyTransferRepository>,
         asset_property_repo: Arc<dyn AssetPropertyRepository>,
+        // 新增：资产分红
+        dividend_repo: Arc<dyn AssetDividendRepository>,
         // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
         exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
         currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
@@ -421,6 +428,8 @@ impl DatabaseTransactionProcessor {
             account_currency_repo,
             currency_transfer_repo,
             asset_property_repo,
+            // 新增：资产分红
+            dividend_repo,
             exchange_request_repo,
             currency_mint_repo,
             goods_repo,
@@ -947,6 +956,10 @@ impl DatabaseTransactionProcessor {
     /// Reference: Java TransactionTypeAsset.ASSET_ISSUANCE.applyAttachment()
     ///   Asset.addAsset(transaction, attachment);
     ///   senderAccount.addToAssetAndUnconfirmedAssetBalanceQNT(event, assetId, assetId, quantityQNT);
+    ///
+    /// ✅ 修复：正确解析资产数量
+    /// NRCS Java 使用 attachment.getQuantityQNT() 获取数量
+    /// 数量字段名为 "quantity" (字符串格式) 或从 tx.amount 推断
     async fn apply_asset_issuance(&self, tx: &Transaction) -> ProcessorResult<()> {
         let sender_id = tx.sender_id;
         let asset_id = tx.id as i64;
@@ -963,18 +976,59 @@ impl DatabaseTransactionProcessor {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+
+            // ✅ 修复：优先从 "quantity" 字符串字段解析
+            // NRCS Java: attachment.getQuantityQNT() 返回 long
+            // 注意：JSON中可能是字符串或数字格式
             let quantity = att_json.get("quantity")
-                .and_then(|v| v.as_str())
-                .and_then(|s| s.parse::<i64>().ok())
-                .unwrap_or(tx.amount as i64);
+                .and_then(|v| {
+                    // 尝试作为字符串解析
+                    v.as_str().and_then(|s| s.parse::<i64>().ok())
+                    .or_else(|| {
+                        // 尝试作为数字解析
+                        v.as_i64()
+                    })
+                })
+                // ✅ 备选方案：检查 "quantityQNT" 字段（NRCS 标准字段名）
+                .or_else(|| {
+                    att_json.get("quantityQNT")
+                        .and_then(|v| {
+                            v.as_str().and_then(|s| s.parse::<i64>().ok())
+                            .or_else(|| v.as_i64())
+                        })
+                })
+                // 最后备选：对于 singleton 资产，默认为 1
+                .unwrap_or({
+                    let is_singleton = att_json.get("isSingleton")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+
+                    if is_singleton {
+                        1i64  // Singleton 资产数量为 1
+                    } else {
+                        // ⚠️ 如果仍然无法确定，记录警告并尝试从其他字段推断
+                        warn!("Asset issuance: unable to parse quantity for asset={}, using fallback", asset_id);
+                        tx.amount.max(1) as i64  // 至少为 1
+                    }
+                });
+
             let decimals = att_json.get("decimals")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0) as u8;
+
             (name, Some(description), quantity, decimals)
         } else {
-            // Fallback: use transaction amount as quantity
-            (format!("Asset_{}", asset_id), None, tx.amount as i64, 0u8)
+            // Fallback: use transaction data
+            // 对于没有 attachment 的情况，使用合理默认值
+            warn!("Asset issuance: no attachment found for asset={}, using defaults", asset_id);
+            (format!("Asset_{}", asset_id), None, tx.amount.max(1) as i64, 0u8)
         };
+
+        // ✅ 验证：确保 quantity > 0
+        let quantity = quantity.max(1);  // 资产数量至少为 1
+
+        debug!("Asset issuance details: id={} name={} quantity={} decimals={}",
+               asset_id, name, quantity, decimals);
 
         let asset = AssetModel {
             db_id: 0,
@@ -1341,6 +1395,34 @@ impl DatabaseTransactionProcessor {
                 }
 
                 info!("Dividend payment completed for asset {}", asset_id);
+
+                // ✅ 修复：添加资产分红记录到 asset_dividend 表
+                // NRCS Java: Dividend.save(dividend) 会插入一条记录
+                //
+                // 字段说明（对齐NRCS Java实现）：
+                // - AMOUNT: 每股分红金额（交易附件中的amountNQT），不是总分红金额
+                // - TOTAL_DIVIDEND: 初始为0（可能是运行时统计字段）
+                // - NUM_ACCOUNTS: 初始为0（可能是运行时统计字段）
+                //
+                // 参考数据：
+                //   AMOUNT=100000000, TOTAL_DIVIDEND=0, NUM_ACCOUNTS=0
+                let dividend_record = orm::models::AssetDividendModel {
+                    db_id: 0,
+                    id: tx.id as i64,
+                    asset_id: asset_id,
+                    amount: dividend_per_share,        // 每股分红金额（不是总金额）
+                    dividend_height: current_height,
+                    total_dividend: 0,                  // 初始为0
+                    num_accounts: 0,                    // 初始为0
+                    timestamp: current_timestamp,
+                    height: current_height,
+                };
+
+                self.dividend_repo.insert(&dividend_record).await
+                    .map_err(|e| ProcessorError::Validation(format!("failed to insert asset_dividend record: {}", e)))?;
+
+                debug!("Asset dividend record inserted: tx={}, asset={}, amount_per_share={}, height={}",
+                      tx.id, asset_id, dividend_per_share, current_height);
             }
             Err(e) => {
                 warn!("Failed to query asset holders for dividend: {}", e);
@@ -2003,16 +2085,23 @@ impl DatabaseTransactionProcessor {
     ///
     /// Called by addToBalance() and addToBalanceAndUnconfirmedBalance()
     /// with totalAmountNQT = amountNQT + feeNQT.
-    /// Only records when totalAmountNQT > 0 (i.e., balance increases).
+    ///
+    /// **重要**: 必须记录所有正数金额的转账，包括：
+    /// - 普通账户间转账
+    /// - 发送到 Genesis 账户（recipient_id == 0）
+    /// - 所有增加余额的场景（用于 PoS 有效余额计算，1440 区块成熟期）
     ///
     /// In practice:
     /// - Sender: totalAmountNQT = -(amount + fee) → negative → skip
-    /// - Recipient: totalAmountNQT = +amount → positive → record
+    /// - Recipient: totalAmountNQT = +amount → positive → record (包括 recipient_id==0)
     async fn update_guaranteed_balance_for_recipient(&self, tx: &Transaction) -> ProcessorResult<()> {
         let recipient_id = tx.recipient_id.unwrap_or(0);
         let amount_nqt = tx.amount as i64;
 
-        if recipient_id != 0 && amount_nqt > 0 {
+        // ✅ 修复：移除 recipient_id != 0 的限制条件
+        // NRCS Java 版本会记录所有收到金额的交易，包括发送到 Genesis 的交易
+        // 这对于 PoS 共识算法的有效余额计算至关重要
+        if amount_nqt > 0 {
             let current_height = self.get_current_height();
             self.guaranteed_balance_repo.upsert_additions(
                 recipient_id as i64,
@@ -2111,8 +2200,14 @@ impl DatabaseTransactionProcessor {
         // === RECIPIENT entries (from addToBalanceAndUnconfirmedBalance) ===
         // Reference: Java line 1118-1123:
         //   if (amountNQT != 0) logEntry(event, ..., amountNQT, balance)
+        //
+        // ✅ 修复：移除 recipient_id != 0 的限制
+        // NRCS 会记录所有收到金额的交易，包括：
+        // - 发送到 Genesis 账户（recipient_id == 0）
+        // - 所有正数金额的接收方
+        // 这对于账本完整性至关重要
 
-        if recipient_id != 0 && amount_nqt > 0 {
+        if amount_nqt > 0 {
             let recipient_balance_after = self.get_account_balance(recipient_id as i64).await.unwrap_or(0);
 
             let entry = AccountLedgerModel {
@@ -2120,7 +2215,7 @@ impl DatabaseTransactionProcessor {
                 account_id: recipient_id as i64,
                 event_type: event,
                 event_id: tx.id as i64,
-                holding_type: ledger_holding::NRCS_BALANCE,
+                holding_type: ledger_holding::NRCS_BALANCE,  // ✅ 修复：使用正确的常量 1
                 holding_id: None,
                 change: amount_nqt,
                 balance: recipient_balance_after,

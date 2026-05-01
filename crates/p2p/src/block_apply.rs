@@ -4,11 +4,13 @@
 //! - Distribute block rewards to generator
 //! - Handle back fees distribution
 //! - Update forged_balance
+//! - Record BLOCK_GENERATED entries in account_ledger
 
 use std::sync::Arc;
 
 use blockchain_types::prelude::{Block, AccountId, Transaction, TransactionType};
-use orm::{AccountRepository, BlockRepository, PublicKeyRepository};
+use orm::{AccountRepository, BlockRepository, PublicKeyRepository, AccountLedgerRepository};
+use orm::models::AccountLedgerModel;
 use tracing::debug;
 
 /// Block reward applicator (corresponds to Java's Block.apply())
@@ -16,6 +18,7 @@ pub struct BlockRewardApplicator {
     account_repo: Arc<dyn AccountRepository>,
     block_repo: Arc<dyn BlockRepository>,
     public_key_repo: Arc<dyn PublicKeyRepository>,
+    ledger_repo: Option<Arc<dyn AccountLedgerRepository>>,
 }
 
 impl BlockRewardApplicator {
@@ -24,7 +27,16 @@ impl BlockRewardApplicator {
         block_repo: Arc<dyn BlockRepository>,
         public_key_repo: Arc<dyn PublicKeyRepository>,
     ) -> Self {
-        Self { account_repo, block_repo, public_key_repo }
+        Self { account_repo, block_repo, public_key_repo, ledger_repo: None }
+    }
+
+    pub fn with_ledger(
+        account_repo: Arc<dyn AccountRepository>,
+        block_repo: Arc<dyn BlockRepository>,
+        public_key_repo: Arc<dyn PublicKeyRepository>,
+        ledger_repo: Arc<dyn AccountLedgerRepository>,
+    ) -> Self {
+        Self { account_repo, block_repo, public_key_repo, ledger_repo: Some(ledger_repo) }
     }
 
     /// Apply block rewards (Java: Block.apply())
@@ -68,6 +80,38 @@ impl BlockRewardApplicator {
             net_fee,
             block.height as i32
         ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+        // Step 6: Record BLOCK_GENERATED ledger entry (if ledger_repo available)
+        // ✅ 修复：添加出块奖励的账本记录
+        // NRCS Java: Block.apply() 会调用 Account.addToBalance()，后者会记录 EVENT_TYPE=1
+        if let Some(ref ledger) = self.ledger_repo {
+            if net_fee > 0 {
+                let balance_after = self.account_repo.find_by_account_id(generator_id as i64).await
+                    .map_err(|e| anyhow::anyhow!("failed to get account: {}", e))?
+                    .map(|acc| acc.balance)
+                    .unwrap_or(0);
+
+                let entry = AccountLedgerModel {
+                    db_id: 0,
+                    account_id: generator_id as i64,
+                    event_type: 1, // BLOCK_GENERATED
+                    event_id: block.id.unwrap_or(0) as i64,
+                    holding_type: 1, // NRCS_BALANCE
+                    holding_id: None,
+                    change: net_fee,
+                    balance: balance_after,
+                    block_id: block.id.unwrap_or(0) as i64,
+                    height: block.height as i32,
+                    timestamp: block.timestamp as i32,
+                };
+
+                ledger.insert(&entry).await
+                    .map_err(|e| anyhow::anyhow!("failed to insert BLOCK_GENERATED ledger: {}", e))?;
+
+                debug!("Recorded BLOCK_GENERATED ledger: generator={}, amount={}, balance={}",
+                      generator_id, net_fee, balance_after);
+            }
+        }
 
         debug!("Block reward: height={}, generator={}, net_fee={}", block.height, generator_id, net_fee);
 

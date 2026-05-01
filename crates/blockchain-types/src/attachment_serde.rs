@@ -304,9 +304,11 @@ pub fn build_attachment_bytes_from_json(
 fn serialize_phasing_appendix(buf: &mut Vec<u8>, version: u8, att_map: &Map<String, serde_json::Value>) {
     put_version_and_data(buf, version, |buf| {
         // finishHeight (4 bytes, i32 LE)
-        let finish_height = att_map.get("phasingFinishHeight")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0) as i32;
+        let finish_height = if let Some(val) = att_map.get("phasingFinishHeight") {
+            parse_i32(val)
+        } else {
+            0
+        };
         put_i32(buf, finish_height);
 
         // === PhasingParams ===
@@ -557,6 +559,13 @@ fn parse_u64_as_i64(val: &serde_json::Value) -> i64 {
         .and_then(|s| s.parse::<u64>().ok().map(|u| u as i64))
         .or_else(|| val.as_u64().map(|u| u as i64))
         .or_else(|| val.as_i64())
+        .unwrap_or(0)
+}
+
+fn parse_i32(val: &serde_json::Value) -> i32 {
+    val.as_str()
+        .and_then(|s| s.parse::<i32>().ok())
+        .or_else(|| val.as_i64().map(|i| i as i32))
         .unwrap_or(0)
 }
 
@@ -828,39 +837,88 @@ fn serialize_light_contract_attachment(subtype: u8, att_map: &Map<String, serde_
             //   NAME_RW.writeToBuffer(contractName, buffer);      // BYTE prefix
             //   PARAMS_RW.writeToBuffer(contractParams, buffer);  // BYTE prefix
             //   contractId.put(buffer);                            // chainId(i32) + hash(32B)
-            if let Some(name) = att_map.get("contractName").and_then(|v| v.as_str()) {
+            
+            // 支持多种字段名: contractName 或 name
+            let name = att_map.get("contractName")
+                .and_then(|v| v.as_str())
+                .or_else(|| att_map.get("name").and_then(|v| v.as_str()))
+                .unwrap_or("");
+            
+            if !name.is_empty() {
                 put_byte(&mut buf, name.as_bytes().len() as u8);
                 put_string(&mut buf, name);
             } else {
                 put_byte(&mut buf, 0);
             }
-            if let Some(params) = att_map.get("contractParams").and_then(|v| v.as_str()) {
+            
+            // 支持多种字段名: contractParams 或 params
+            let params = att_map.get("contractParams")
+                .and_then(|v| v.as_str())
+                .or_else(|| att_map.get("params").and_then(|v| v.as_str()))
+                .unwrap_or("");
+            
+            if !params.is_empty() {
                 put_byte(&mut buf, params.as_bytes().len() as u8);
                 put_string(&mut buf, params);
             } else {
                 put_byte(&mut buf, 0);
             }
-            // ChainTransactionId: chainId(i32) + hash(32B)
-            if let Some(contract_obj) = att_map.get("contract").and_then(|v| v.as_object()) {
-                // chainId
-                if let Some(chain) = contract_obj.get("chain") {
-                    put_i32(&mut buf, chain.as_i64().unwrap_or(0) as i32);
+            
+            // ChainTransactionId: chainId(i32) + hash(32B or 24B)
+            // 支持多种格式:
+            // 1. contract.transactionFullHash (嵌套对象)
+            // 2. transactionFullHash (顶层字段)
+            // 3. hash (顶层字段)
+            // 4. referencedTransactionFullHash (顶层字段)
+            let hash_bytes = if let Some(contract_obj) = att_map.get("contract").and_then(|v| v.as_object()) {
+                // 格式1: 嵌套对象
+                if let Some(hash_str) = contract_obj.get("transactionFullHash")
+                    .or_else(|| contract_obj.get("hash"))
+                    .and_then(|v| v.as_str())
+                {
+                    hex::decode(hash_str).unwrap_or_default()
                 } else {
-                    put_i32(&mut buf, 0);
+                    Vec::new()
                 }
-                // hash (transactionFullHash)
-                if let Some(hash_str) = contract_obj.get("transactionFullHash").and_then(|v| v.as_str()) {
-                    if let Ok(hash_bytes) = hex::decode(hash_str) {
-                        put_bytes(&mut buf, &hash_bytes);
-                    } else {
-                        put_bytes(&mut buf, &[0u8; 32]);
-                    }
-                } else {
-                    put_bytes(&mut buf, &[0u8; 32]);
-                }
+            } else if let Some(hash_str) = att_map.get("transactionFullHash")
+                .or_else(|| att_map.get("hash"))
+                .or_else(|| att_map.get("referencedTransactionFullHash"))
+                .and_then(|v| v.as_str())
+            {
+                // 格式2/3/4: 顶层字段
+                hex::decode(hash_str).unwrap_or_default()
             } else {
-                put_i32(&mut buf, 0);
-                put_bytes(&mut buf, &[0u8; 32]);
+                Vec::new()
+            };
+            
+            // chainId - 支持多种字段位置
+            let chain_id = if let Some(contract_obj) = att_map.get("contract").and_then(|v| v.as_object()) {
+                contract_obj.get("chain")
+                    .or_else(|| contract_obj.get("chainId"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0) as i32
+            } else {
+                att_map.get("chain")
+                    .or_else(|| att_map.get("chainId"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0) as i32
+            };
+            
+            put_i32(&mut buf, chain_id);
+            
+            // 写入 hash（Java NRCS 存储时截断到 24 字节）
+            // 注意：实际观察到的数据表明 hash 可能是 24 字节或 32 字节
+            // 为了与数据库兼容，统一截断到 24 字节
+            if !hash_bytes.is_empty() {
+                let truncated_hash = if hash_bytes.len() > 24 {
+                    &hash_bytes[..24]
+                } else {
+                    &hash_bytes
+                };
+                put_bytes(&mut buf, truncated_hash);
+            } else {
+                // 默认写入 24 字节的零（与数据库格式一致）
+                put_bytes(&mut buf, &[0u8; 24]);
             }
         }
         SUBTYPE_LIGHT_CONTRACT_REFERENCE_DELETE => {
@@ -994,7 +1052,7 @@ fn serialize_digital_goods_attachment(subtype: u8, att_map: &Map<String, serde_j
                 put_i64(&mut buf, 0);
             }
             if let Some(deadline) = att_map.get("deliveryDeadlineTimestamp") {
-                put_i32(&mut buf, deadline.as_i64().unwrap_or(0) as i32);
+                put_i32(&mut buf, parse_i32(deadline));
             } else {
                 put_i32(&mut buf, 0);
             }
