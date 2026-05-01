@@ -3781,16 +3781,34 @@ impl AccountCurrencyRepository for PgAccountCurrencyRepository {
         Ok(record)
     }
 
-    async fn update_units(&self, account_id: i64, currency_id: i64, units: i64) -> RepositoryResult<()> {
-        sqlx::query(
-            "UPDATE account_currency SET units = $1 WHERE account_id = $2 AND currency_id = $3 AND latest = TRUE"
+    async fn update_units(&self, account_id: i64, currency_id: i64, delta: i64) -> RepositoryResult<()> {
+        let result = sqlx::query(
+            "UPDATE account_currency SET units = units + $1, latest = TRUE WHERE account_id = $2 AND currency_id = $3 AND latest = TRUE"
         )
-        .bind(units)
+        .bind(delta)
         .bind(account_id)
         .bind(currency_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
+
+        if result.rows_affected() == 0 && delta != 0 {
+            let current_height: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(height), 0) FROM block")
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
+            sqlx::query(
+                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES ($1, $2, $3, 0, $4, TRUE)"
+            )
+            .bind(account_id)
+            .bind(currency_id)
+            .bind(delta)
+            .bind(current_height)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        }
+
         Ok(())
     }
 

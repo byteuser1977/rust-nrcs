@@ -803,7 +803,7 @@ impl BlockVerifier for BlockchainVerifier {
         );
 
         // Step 2: Wrap in database transaction for atomicity
-        let mut db_tx = self.pool.begin().await
+        let db_tx = self.pool.begin().await
             .map_err(|e| anyhow::anyhow!("Failed to begin database transaction: {}", e))?;
 
         // Step 3: Collect all transaction IDs to delete

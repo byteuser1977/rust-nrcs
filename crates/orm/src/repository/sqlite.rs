@@ -3249,16 +3249,34 @@ impl AccountCurrencyRepository for SqliteAccountCurrencyRepository {
         Ok(record)
     }
 
-    async fn update_units(&self, account_id: i64, currency_id: i64, units: i64) -> RepositoryResult<()> {
-        sqlx::query(
-            "UPDATE account_currency SET units = ? WHERE account_id = ? AND currency_id = ? AND latest = 1"
+    async fn update_units(&self, account_id: i64, currency_id: i64, delta: i64) -> RepositoryResult<()> {
+        let result = sqlx::query(
+            "UPDATE account_currency SET units = units + ?, latest = 1 WHERE account_id = ? AND currency_id = ? AND latest = 1"
         )
-        .bind(units)
+        .bind(delta)
         .bind(account_id)
         .bind(currency_id)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
+
+        if result.rows_affected() == 0 && delta != 0 {
+            let current_height: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(height), 0) FROM block")
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
+            sqlx::query(
+                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES (?, ?, ?, 0, ?, 1)"
+            )
+            .bind(account_id)
+            .bind(currency_id)
+            .bind(delta)
+            .bind(current_height)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        }
+
         Ok(())
     }
 

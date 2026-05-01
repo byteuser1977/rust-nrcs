@@ -1409,7 +1409,7 @@ impl DatabaseTransactionProcessor {
                 let dividend_record = orm::models::AssetDividendModel {
                     db_id: 0,
                     id: tx.id as i64,
-                    asset_id: asset_id,
+                    asset_id,
                     amount: dividend_per_share,        // 每股分红金额（不是总金额）
                     dividend_height: current_height,
                     total_dividend: 0,                  // 初始为0
@@ -3686,7 +3686,7 @@ impl DatabaseTransactionProcessor {
                 // CURRENCY_TRANSFER: Pre-deduct currency units from sender
                 let sender_id = tx.sender_id as i64;
                 let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
-                let units = tx.amount as i64;
+                let units = self.parse_long_field(tx, "units").unwrap_or(tx.amount as i64);
 
                 if currency_id == 0 {
                     return Ok(true);
@@ -3720,7 +3720,7 @@ impl DatabaseTransactionProcessor {
                 // EXCHANGE_SELL: Pre-deduct currency units for the sell
                 let sender_id = tx.sender_id as i64;
                 let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
-                let units = tx.amount as i64;
+                let units = self.parse_long_field(tx, "units").unwrap_or(tx.amount as i64);
 
                 if currency_id == 0 {
                     return Ok(true);
@@ -3825,7 +3825,7 @@ impl DatabaseTransactionProcessor {
                 // CURRENCY_TRANSFER: Restore currency units to sender
                 let sender_id = tx.sender_id as i64;
                 let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
-                let units = tx.amount as i64;
+                let units = self.parse_long_field(tx, "units").unwrap_or(tx.amount as i64);
 
                 if currency_id == 0 {
                     return Ok(());
@@ -3839,7 +3839,7 @@ impl DatabaseTransactionProcessor {
                 // EXCHANGE_SELL: Restore currency units to sender
                 let sender_id = tx.sender_id as i64;
                 let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
-                let units = tx.amount as i64;
+                let units = self.parse_long_field(tx, "units").unwrap_or(tx.amount as i64);
 
                 if currency_id == 0 {
                     return Ok(());

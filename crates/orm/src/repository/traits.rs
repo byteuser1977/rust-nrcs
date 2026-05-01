@@ -205,7 +205,7 @@ pub trait AccountCurrencyRepository: Repository<AccountCurrencyModel> {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountCurrencyModel>>;
     async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<AccountCurrencyModel>>;
     async fn find_by_account_and_currency(&self, account_id: i64, currency_id: i64) -> RepositoryResult<Option<AccountCurrencyModel>>;
-    async fn update_units(&self, account_id: i64, currency_id: i64, units: i64) -> RepositoryResult<()>;
+    async fn update_units(&self, account_id: i64, currency_id: i64, delta: i64) -> RepositoryResult<()>;
     // Unconfirmed units operations (for mempool pre-deduction)
     async fn add_to_unconfirmed_units(&self, account_id: i64, currency_id: i64, delta: i64) -> RepositoryResult<()>;
 }
