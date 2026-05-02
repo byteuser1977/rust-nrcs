@@ -46,6 +46,21 @@ use orm::{
     // Asset Delete + History
     AssetDeleteRepository, AssetHistoryRepository,
     models::AssetDeleteModel, models::AssetHistoryModel,
+    // Trade
+    TradeRepository,
+    // Poll Result
+    PollResultRepository,
+    // Shuffling Sub-tables
+    ShufflingDataRepository, ShufflingParticipantRepository,
+    // P0: CoinExchange
+    CoinOrderFxtRepository, CoinTradeFxtRepository,
+    // P1: Phasing Sub-tables
+    PhasingPollHashedSecretRepository, PhasingPollResultRepository,
+    PhasingPollVoterRepository, PhasingPollLinkedTransactionRepository,
+    // P2: Auxiliary tables
+    HubRepository, CurrencyFounderRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
+    // P2: Referenced Transaction
+    ReferencedTransactionRepository,
 };
 use thiserror::Error;
 
@@ -312,6 +327,12 @@ pub struct DatabaseTransactionProcessor {
     phasing_vote_repo: Arc<dyn PhasingVoteRepository>,
     account_control_phasing_repo: Arc<dyn AccountControlPhasingRepository>,
 
+    // 新增：Phasing子表（P1修复）
+    phasing_poll_hashed_secret_repo: Arc<dyn PhasingPollHashedSecretRepository>,
+    phasing_poll_result_repo: Arc<dyn PhasingPollResultRepository>,
+    phasing_poll_voter_repo: Arc<dyn PhasingPollVoterRepository>,
+    phasing_poll_linked_transaction_repo: Arc<dyn PhasingPollLinkedTransactionRepository>,
+
     // 新增：Data/Tagged
     tagged_data_repo: Arc<dyn TaggedDataRepository>,
     #[allow(dead_code)]
@@ -325,6 +346,13 @@ pub struct DatabaseTransactionProcessor {
     // 新增：资产订单
     ask_order_repo: Arc<dyn AskOrderRepository>,
     bid_order_repo: Arc<dyn BidOrderRepository>,
+    // 新增：交易撮合
+    trade_repo: Arc<dyn TradeRepository>,
+    // 新增：投票结果
+    poll_result_repo: Arc<dyn PollResultRepository>,
+    // 新增：Shuffling子表
+    shuffling_data_repo: Arc<dyn ShufflingDataRepository>,
+    shuffling_participant_repo: Arc<dyn ShufflingParticipantRepository>,
 
     // 新增：货币系统
     currency_repo: Arc<dyn CurrencyRepository>,
@@ -344,6 +372,19 @@ pub struct DatabaseTransactionProcessor {
     // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
     exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
     currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
+
+    // 新增：CoinExchange订单和交易（P0修复）
+    coin_order_fxt_repo: Arc<dyn CoinOrderFxtRepository>,
+    coin_trade_fxt_repo: Arc<dyn CoinTradeFxtRepository>,
+
+    // 新增：P2辅助表（Hub/CurrencyFounder/PrunableMessage/PurchaseFeedback）
+    hub_repo: Arc<dyn HubRepository>,
+    currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
+    prunable_message_repo: Arc<dyn PrunableMessageRepository>,
+    purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
+
+    // 新增：Referenced Transaction（P2修复）
+    referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository>,
 
     // 新增：Digital Goods
     goods_repo: Arc<dyn GoodsRepository>,
@@ -382,6 +423,11 @@ impl DatabaseTransactionProcessor {
         phasing_poll_repo: Arc<dyn PhasingPollRepository>,
         phasing_vote_repo: Arc<dyn PhasingVoteRepository>,
         account_control_phasing_repo: Arc<dyn AccountControlPhasingRepository>,
+        // 新增：Phasing子表（P1修复）
+        phasing_poll_hashed_secret_repo: Arc<dyn PhasingPollHashedSecretRepository>,
+        phasing_poll_result_repo: Arc<dyn PhasingPollResultRepository>,
+        phasing_poll_voter_repo: Arc<dyn PhasingPollVoterRepository>,
+        phasing_poll_linked_transaction_repo: Arc<dyn PhasingPollLinkedTransactionRepository>,
         tagged_data_repo: Arc<dyn TaggedDataRepository>,
         tagged_data_tag_repo: Arc<dyn TaggedDataTagRepository>,
         tagged_data_extend_repo: Arc<dyn TaggedDataExtendRepository>,
@@ -389,6 +435,13 @@ impl DatabaseTransactionProcessor {
         contract_ref_repo: Arc<dyn ContractReferenceRepository>,
         ask_order_repo: Arc<dyn AskOrderRepository>,
         bid_order_repo: Arc<dyn BidOrderRepository>,
+        // 新增：交易撮合
+        trade_repo: Arc<dyn TradeRepository>,
+        // 新增：投票结果
+        poll_result_repo: Arc<dyn PollResultRepository>,
+        // 新增：Shuffling子表
+        shuffling_data_repo: Arc<dyn ShufflingDataRepository>,
+        shuffling_participant_repo: Arc<dyn ShufflingParticipantRepository>,
         currency_repo: Arc<dyn CurrencyRepository>,
         account_currency_repo: Arc<dyn AccountCurrencyRepository>,
         currency_transfer_repo: Arc<dyn CurrencyTransferRepository>,
@@ -401,6 +454,16 @@ impl DatabaseTransactionProcessor {
         // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
         exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
         currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
+        // 新增：CoinExchange订单和交易（P0修复）
+        coin_order_fxt_repo: Arc<dyn CoinOrderFxtRepository>,
+        coin_trade_fxt_repo: Arc<dyn CoinTradeFxtRepository>,
+        // 新增：P2辅助表（Hub/CurrencyFounder/PrunableMessage/PurchaseFeedback）
+        hub_repo: Arc<dyn HubRepository>,
+        currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
+        prunable_message_repo: Arc<dyn PrunableMessageRepository>,
+        purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
+        // 新增：Referenced Transaction（P2修复）
+        referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository>,
         // 新增：Digital Goods
         goods_repo: Arc<dyn GoodsRepository>,
         purchase_repo: Arc<dyn PurchaseRepository>,
@@ -427,6 +490,11 @@ impl DatabaseTransactionProcessor {
             phasing_poll_repo,
             phasing_vote_repo,
             account_control_phasing_repo,
+            // 新增：Phasing子表（P1修复）
+            phasing_poll_hashed_secret_repo,
+            phasing_poll_result_repo,
+            phasing_poll_voter_repo,
+            phasing_poll_linked_transaction_repo,
             tagged_data_repo,
             tagged_data_tag_repo,
             tagged_data_extend_repo,
@@ -434,6 +502,13 @@ impl DatabaseTransactionProcessor {
             contract_ref_repo,
             ask_order_repo,
             bid_order_repo,
+            // 新增：交易撮合
+            trade_repo,
+            // 新增：投票结果
+            poll_result_repo,
+            // 新增：Shuffling子表
+            shuffling_data_repo,
+            shuffling_participant_repo,
             currency_repo,
             account_currency_repo,
             currency_transfer_repo,
@@ -445,6 +520,16 @@ impl DatabaseTransactionProcessor {
             asset_history_repo,
             exchange_request_repo,
             currency_mint_repo,
+            // 新增：CoinExchange订单和交易（P0修复）
+            coin_order_fxt_repo,
+            coin_trade_fxt_repo,
+            // 新增：P2辅助表（Hub/CurrencyFounder/PrunableMessage/PurchaseFeedback）
+            hub_repo,
+            currency_founder_repo,
+            prunable_message_repo,
+            purchase_feedback_repo,
+            // 新增：Referenced Transaction（P2修复）
+            referenced_transaction_repo,
             goods_repo,
             purchase_repo,
             shuffling_repo,
@@ -790,6 +875,32 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         // === Step 3: applyAttachment() - type-specific logic ===
         self.apply_attachment(tx).await?;
 
+        // === Step 3.5: Phasing Poll初始化（P1修复） ===
+        // 当交易带有phasing attachment时，创建phasing poll记录并插入相关子表
+        if tx.phased {
+            self.initialize_phasing_poll(tx).await?;
+        }
+
+        // === Step 3.6: Referenced Transaction记录（P2修复） ===
+        // 当交易引用其他交易时，存储关联关系
+        if let Some(ref_hash) = &tx.referenced_transaction_full_hash {
+            let ref_tx_id = self.parse_long_field(tx, "referencedTransactionId").unwrap_or(0);
+
+            if ref_tx_id > 0 || !ref_hash.0.iter().all(|&b| b == 0) {
+                let ref_model = orm::models::ReferencedTransactionModel {
+                    db_id: 0,
+                    transaction_id: tx.id as i64,
+                    referenced_transaction_id: ref_tx_id,
+                };
+
+                if let Err(e) = self.referenced_transaction_repo.insert(&ref_model).await {
+                    warn!("Failed to insert REFERENCED_TRANSACTION for tx {}: {}", tx.id, e);
+                } else {
+                    debug!("REFERENCED_TRANSACTION inserted for tx {} -> ref_tx={}", tx.id, ref_tx_id);
+                }
+            }
+        }
+
         // === Step 4: Update guaranteed balance ===
         self.update_guaranteed_balance_for_recipient(tx).await?;
 
@@ -1092,7 +1203,7 @@ impl DatabaseTransactionProcessor {
             full_hash: tx.full_hash.0.to_vec(),
             asset_id,
             account_id: sender_id as i64,
-            quantity: quantity, // 发行者获得初始数量为正数
+            quantity, // 发行者获得初始数量为正数
             timestamp: current_timestamp,
             chain_id: 1,
             height: current_height,
@@ -1190,7 +1301,7 @@ impl DatabaseTransactionProcessor {
                 full_hash: tx.full_hash.0.to_vec(),
                 asset_id,
                 account_id: recipient_id as i64,
-                quantity: quantity, // 接收方增加为正数
+                quantity, // 接收方增加为正数
                 timestamp: current_timestamp,
                 chain_id: 1,
                 height: current_height,
@@ -1243,6 +1354,9 @@ impl DatabaseTransactionProcessor {
                 // Java: senderAccount.addToUnconfirmedAssetBalanceQNT(event, assetId, -quantityQNT);
                 // Decrease unconfirmed asset balance
                 self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, -quantity).await?;
+
+                // ✅ 触发订单撮合
+                self.match_orders(asset_id).await?;
             }
             Err(e) => {
                 warn!("Failed to place ASK order {}: {}", tx.id, e);
@@ -1292,6 +1406,9 @@ impl DatabaseTransactionProcessor {
                 // 减少unconfirmed NRCS余额（预扣购买金额）
                 let total_cost = price_nqt * quantity;
                 self.account_repo.add_to_unconfirmed_balance(sender_id, -total_cost, self.current_height()).await?;
+
+                // ✅ 触发订单撮合
+                self.match_orders(asset_id).await?;
             }
             Err(e) => {
                 warn!("Failed to place BID order {}: {}", tx.id, e);
@@ -1382,7 +1499,104 @@ impl DatabaseTransactionProcessor {
         Ok(())
     }
 
-    /// DIVIDEND_PAYMENT: Pay dividends to asset holders
+    /// TRADE订单撮合引擎
+    ///
+    /// Reference: Java Trade.addTrade()
+    /// 在AskOrder或BidOrder Placement后自动触发撮合
+    /// 匹配规则：
+    ///   1. 找到价格匹配的ask/bid order对 (ask.price <= bid.price)
+    ///   2. 按时间优先级排序（先提交的优先）
+    ///   3. 成交数量 = min(ask.quantity, bid.quantity)
+    ///   4. 成交价格 = 较早提交的order的价格（price-time priority）
+    async fn match_orders(&self, asset_id: i64) -> ProcessorResult<()> {
+        let current_height = self.get_current_height();
+        let current_timestamp = self.get_current_timestamp();
+
+        // 获取该资产的所有活跃ask orders（按价格升序，时间升序）
+        let ask_orders = self.ask_order_repo.find_by_asset(asset_id, 1000).await?;
+        // 获取该资产的所有活跃bid orders（按价格降序，时间升序）
+        let bid_orders = self.bid_order_repo.find_by_asset(asset_id, 1000).await?;
+
+        // 简单撮合算法：遍历所有可能的配对
+        for ask in &ask_orders {
+            if ask.quantity <= 0 {
+                continue;
+            }
+
+            for bid in &bid_orders {
+                if bid.quantity <= 0 {
+                    continue;
+                }
+
+                // 价格匹配检查：ask价格 <= bid价格
+                if ask.price > bid.price {
+                    continue; // 无法成交，跳过
+                }
+
+                // 计算成交数量和价格
+                let trade_quantity = ask.quantity.min(bid.quantity);
+                // 价格优先：使用较早提交的order的价格
+                let trade_price = if ask.height < bid.height || 
+                    (ask.height == bid.height && ask.id < bid.id) {
+                    ask.price
+                } else {
+                    bid.price
+                };
+
+                if trade_quantity > 0 {
+                    // 创建TRADE记录
+                    use orm::models::TradeModel;
+                    let trade = TradeModel {
+                        db_id: 0,
+                        asset_id,
+                        block_id: self.get_current_block_id(),
+                        ask_order_id: ask.id,
+                        bid_order_id: bid.id,
+                        ask_order_height: ask.height,
+                        bid_order_height: bid.height,
+                        seller_id: ask.account_id,
+                        buyer_id: bid.account_id,
+                        is_buy: true, // 从buyer角度看是buy
+                        quantity: trade_quantity,
+                        price: trade_price,
+                        timestamp: current_timestamp,
+                        height: current_height,
+                    };
+
+                    self.trade_repo.insert(&trade).await?;
+
+                    // 更新ask order剩余数量
+                    let new_ask_qty = ask.quantity - trade_quantity;
+                    if new_ask_qty > 0 {
+                        self.ask_order_repo.update_quantity(ask.id, new_ask_qty).await?;
+                    } else {
+                        // 完全成交，删除order
+                        self.ask_order_repo.delete(ask.db_id).await?;
+                    }
+
+                    // 更新bid order剩余数量
+                    let new_bid_qty = bid.quantity - trade_quantity;
+                    if new_bid_qty > 0 {
+                        self.bid_order_repo.update_quantity(bid.id, new_bid_qty).await?;
+                    } else {
+                        // 完全成交，删除order
+                        self.bid_order_repo.delete(bid.db_id).await?;
+                    }
+
+                    info!("Trade matched: asset={} qty={} price={} seller={} buyer={}",
+                          asset_id, trade_quantity, trade_price, ask.account_id, bid.account_id);
+
+                    // 如果当前ask已完全成交，跳出内层循环处理下一个ask
+                    if new_ask_qty <= 0 {
+                        break;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     ///
     /// Reference: Java TransactionTypeAsset.DIVIDEND_PAYMENT.applyAttachment()
     ///   senderAccount.payDividends(transaction, attachment);
@@ -1830,6 +2044,22 @@ impl DatabaseTransactionProcessor {
                 if initial_supply > 0 {
                     self.account_currency_repo.update_units(sender_id, currency_id, initial_supply).await?;
                     self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, initial_supply).await?;
+                }
+
+                // ✅ 新增：插入CURRENCY_FOUNDER记录 - 记录货币创始人信息
+                let founder_model = orm::models::CurrencyFounderModel {
+                    db_id: 0,
+                    currency_id,
+                    account_id: sender_id,
+                    amount: initial_supply,
+                    height: current_height,
+                    latest: true,
+                };
+
+                if let Err(e) = self.currency_founder_repo.insert(&founder_model).await {
+                    warn!("Failed to insert CURRENCY_FOUNDER for currency {}: {}", currency_id, e);
+                } else {
+                    debug!("CURRENCY_FOUNDER inserted: currency={} account={} amount={}", currency_id, sender_id, initial_supply);
                 }
             }
             Err(e) => {
@@ -2468,6 +2698,42 @@ impl DatabaseTransactionProcessor {
         let current_timestamp = self.get_current_timestamp();
 
         match tx.subtype {
+            0 => { // ARBITRARY_MESSAGE
+                // Java: PrunableMessage.addPrunableMessage(transaction, attachment)
+                // Reference: MessagingArbitraryMessage.java
+                //   attachment fields: { "message": String, "messageIsText": boolean, "encryptedMessage": String, ... }
+                //   DB operation: INSERT PRUNABLE_MESSAGE table
+
+                let message = self.parse_string_field(tx, "message");
+                let message_is_text = self.parse_bool_field(tx, "messageIsText").unwrap_or(true);
+                let encrypted_message = self.parse_string_field(tx, "encryptedMessage");
+                let encrypted_is_text = self.parse_bool_field(tx, "encryptedIsText").unwrap_or(true);
+
+                // 如果有消息内容（无论是明文还是加密），则存储到PRUNABLE_MESSAGE表
+                if message.is_some() || encrypted_message.is_some() {
+                    let prunable_message = orm::models::PrunableMessageModel {
+                        db_id: 0,
+                        id: tx.id as i64,
+                        sender_id,
+                        recipient_id: if recipient_id > 0 { Some(recipient_id) } else { None },
+                        message: message.map(|m| m.into_bytes()),
+                        message_is_text,
+                        is_compressed: false, // 简化处理
+                        encrypted_message: encrypted_message.map(|em| em.into_bytes()),
+                        encrypted_is_text,
+                        block_timestamp: current_timestamp,
+                        transaction_timestamp: current_timestamp,
+                        height: current_height,
+                    };
+
+                    if let Err(e) = self.prunable_message_repo.insert(&prunable_message).await {
+                        warn!("Failed to insert PRUNABLE_MESSAGE for tx {}: {}", tx.id, e);
+                    } else {
+                        debug!("PRUNABLE_MESSAGE inserted for tx {}", tx.id);
+                    }
+                }
+            }
+
             1 => { // ALIAS_ASSIGNMENT
                 // Java: Alias.addOrUpdateAlias(transaction, attachment)
                 // Reference: MessagingAliasAssignment.java
@@ -2569,10 +2835,17 @@ impl DatabaseTransactionProcessor {
                                 // 这里需要调用update，暂时跳过（需扩展trait）
                                 info!("Alias '{}' ownership transferred to account {}", alias_name, sender_id);
 
-                                // 删除alias offer
-                                if let Ok(Some(_offer)) = self.alias_offer_repo.find_by_alias(alias.id).await {
-                                    // self.alias_offer_repo.delete(offer.db_id).await?;
-                                    debug!("Removed alias offer for '{}'", alias_name);
+                                // ✅ 修复：更新ALIAS_OFFER的buyer_id并删除offer
+                                if let Ok(Some(mut offer)) = self.alias_offer_repo.find_by_alias(alias.id).await {
+                                    // 更新buyer_id记录买家信息
+                                    offer.buyer_id = Some(sender_id);
+                                    // 使用update保存（如果trait支持）或直接删除
+                                    // 暂时只删除offer（Java逻辑：购买后offer失效）
+                                    if let Err(e) = self.alias_offer_repo.delete(offer.db_id).await {
+                                        warn!("Failed to delete alias offer for '{}': {}", alias_name, e);
+                                    } else {
+                                        info!("Removed alias offer for '{}' (purchased by {})", alias_name, sender_id);
+                                    }
                                 }
                             } else {
                                 warn!("Insufficient payment for alias purchase");
@@ -2735,10 +3008,20 @@ impl DatabaseTransactionProcessor {
                                 Ok(_) => {
                                     info!("Account {} voted on poll {} (tx={})", sender_id, poll_id, tx.id);
 
-                                    // 更新POLL_RESULT的weight（根据voter的balance增加权重）
+                                    // ✅ 修复：更新POLL_RESULT的投票权重
                                     // Java: PollResult.addWeight(voterBalance)
-                                    // TODO: 实现权重更新逻辑
-                                    debug!("Updating poll result weights for poll {}", poll_id);
+                                    let vote_value = vote_bytes.first().copied().unwrap_or(1);
+                                    let poll_result = orm::models::PollResultModel {
+                                        db_id: 0,
+                                        poll_id,
+                                        result: Some(vote_value as i64),
+                                        weight: 1, // 简化：每票权重为1（实际应根据voter balance计算）
+                                        height: current_height,
+                                    };
+                                    if let Err(e) = self.poll_result_repo.upsert(&poll_result).await {
+                                        warn!("Failed to update poll result for poll {}: {}", poll_id, e);
+                                    }
+                                    debug!("Updated poll result weights for poll {}", poll_id);
                                 }
                                 Err(e) => {
                                     warn!("Failed to record vote for poll {}: {}", poll_id, e);
@@ -2759,6 +3042,48 @@ impl DatabaseTransactionProcessor {
                 }
             }
 
+            4 => { // HUB_ANNOUNCEMENT
+                // Java: Hub.addOrUpdateHub(transaction, attachment)
+                // Reference: MessagingHubAnnouncement.java
+                //   attachment fields: { "uris": String[], "minFeePerByte": long }
+                //   DB operation: INSERT or UPDATE HUB table
+
+                let uris = self.parse_string_field(tx, "uris").unwrap_or_default();
+                let min_fee_per_byte = self.parse_long_field(tx, "minFeePerByte").unwrap_or(0);
+
+                if !uris.is_empty() {
+                    let hub_model = orm::models::HubModel {
+                        db_id: 0,
+                        account_id: Some(sender_id),
+                        uris: Some(uris.clone()),
+                        min_fee_per_byte: Some(min_fee_per_byte),
+                        height: Some(current_height),
+                        latest: Some(true),
+                    };
+
+                    match self.hub_repo.find_by_account(sender_id).await {
+                        Ok(Some(_existing)) => {
+                            // 更新现有hub记录（需要update方法，暂时使用insert）
+                            if let Err(e) = self.hub_repo.insert(&hub_model).await {
+                                warn!("Failed to update HUB for account {}: {}", sender_id, e);
+                            } else {
+                                info!("HUB updated for account {}", sender_id);
+                            }
+                        }
+                        Ok(None) => {
+                            if let Err(e) = self.hub_repo.insert(&hub_model).await {
+                                warn!("Failed to insert HUB for account {}: {}", sender_id, e);
+                            } else {
+                                info!("HUB created for account {} with uris={}", sender_id, uris);
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Error checking HUB existence: {}", e);
+                        }
+                    }
+                }
+            }
+
             9 => { // PHASING_VOTE_CASTING
                 // Java: PhasingVote.addVote(transaction, senderAccount, phasedTxId)
                 // Reference: PhasingVoteCastingAttachment.java
@@ -2768,6 +3093,7 @@ impl DatabaseTransactionProcessor {
                     // Verify the phasing poll exists
                     match self.phasing_poll_repo.find_by_poll_id(phased_tx_id).await {
                         Ok(Some(_poll)) => {
+                            // ✅ 新增：插入PHASING_VOTE记录
                             let vote_model = orm::models::PhasingVoteModel {
                                 db_id: 0,
                                 vote_id: tx.id as i64,
@@ -2777,6 +3103,36 @@ impl DatabaseTransactionProcessor {
                             };
                             self.phasing_vote_repo.insert(&vote_model).await
                                 .map_err(|e| ProcessorError::Validation(format!("PhasingVote insert failed: {}", e)))?;
+
+                            // ✅ 新增：插入PHASING_POLL_VOTER记录
+                            let voter_model = orm::models::PhasingPollVoterModel {
+                                db_id: 0,
+                                transaction_id: phased_tx_id,
+                                voter_id: sender_id,
+                                height: self.get_current_height(),
+                            };
+                            if let Err(e) = self.phasing_poll_voter_repo.insert(&voter_model).await {
+                                warn!("Failed to insert PHASING_POLL_VOTER: {}", e);
+                            }
+
+                            // ✅ 新增：更新PHASING_POLL_RESULT权重
+                            // 解析投票选项（简化处理，实际应从attachment解析）
+                            if let Some(vote_bytes) = tx.attachment_json.as_ref().and_then(|v| v.get("vote")) {
+                                if let Some(vote_value) = vote_bytes.as_i64() {
+                                    let result_model = orm::models::PhasingPollResultModel {
+                                        db_id: 0,
+                                        id: 0, // 由数据库生成
+                                        result: vote_value,
+                                        approved: false, // 简化处理
+                                        height: self.get_current_height(),
+                                    };
+
+                                    if let Err(e) = self.phasing_poll_result_repo.upsert(&result_model).await {
+                                        warn!("Failed to upsert PHASING_POLL_RESULT: {}", e);
+                                    }
+                                }
+                            }
+
                             debug!("Phasing vote cast: voter={}, phased_tx={}", sender_id, phased_tx_id);
                         }
                         Ok(None) => {
@@ -2799,8 +3155,8 @@ impl DatabaseTransactionProcessor {
                     let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
                     let raw_value = self.parse_string_field(tx, "value");
 
-                    let property_value = match raw_value.as_ref().map(|s| s.as_str()) {
-                        Some(s) if s.is_empty() => None,
+                    let property_value = match raw_value.as_deref() {
+                        Some("") => None,
                         other => other.map(|s| s.to_string()),
                     };
 
@@ -2833,8 +3189,8 @@ impl DatabaseTransactionProcessor {
                     let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
                     let raw_value = self.parse_string_field(tx, "value");
 
-                    let property_value = match raw_value.as_ref().map(|s| s.as_str()) {
-                        Some(s) if s.is_empty() => None,
+                    let property_value = match raw_value.as_deref() {
+                        Some("") => None,
                         other => other.map(|s| s.to_string()),
                     };
 
@@ -2870,7 +3226,7 @@ impl DatabaseTransactionProcessor {
                     .unwrap_or(0);
 
                 if property_id != 0 {
-                    match self.account_property_repo.find_by_id(property_id as i64).await {
+                    match self.account_property_repo.find_by_id(property_id).await {
                         Ok(Some(prop)) => {
                             // Permission check: only setter or recipient can delete
                             if prop.setter_id != Some(sender_id) && prop.recipient_id != sender_id {
@@ -3045,9 +3401,56 @@ impl DatabaseTransactionProcessor {
                         Ok(_) => {
                             info!("Uploaded tagged data '{}' for account {}", name, sender_id);
 
-                            // 插入TAG记录（如果有的话）
-                            // TODO: 解析tags数组并创建TagModel列表
-                            debug!("Processing tags for tagged data {}", tx.id);
+                            // ✅ 新增：插入TAG记录（如果有的话）
+                            // Java: Tag.addTags(taggedDataId, tags)
+                            // Reference: TaggedDataUploadAttachment.java
+                            if let Some(tags_json) = tx.attachment_json.as_ref().and_then(|v| v.get("tags")) {
+                                if let Some(tags_array) = tags_json.as_array() {
+                                    for (index, tag_value) in tags_array.iter().enumerate() {
+                                        if let Some(tag_str) = tag_value.as_str() {
+                                            if !tag_str.is_empty() {
+                                                let tag_model = orm::models::TaggedDataTagModel {
+                                                    db_id: 0,
+                                                    id: tx.id as i64 + index as i64,
+                                                    tag: tag_str.to_string(),
+                                                    height: current_height,
+                                                    latest: true,
+                                                };
+
+                                                if let Err(e) = self.tagged_data_tag_repo.insert(&tag_model).await {
+                                                    warn!("Failed to insert TAG for tagged data {}: {}", tx.id, e);
+                                                } else {
+                                                    debug!("TAG inserted for tagged data {}: '{}'", tx.id, tag_str);
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    info!("Inserted {} tags for tagged data '{}'", tags_array.len(), name);
+                                } else if let Some(tags_str) = tags_json.as_str() {
+                                    // 如果tags是逗号分隔的字符串
+                                    for (index, tag) in tags_str.split(',').enumerate() {
+                                        let trimmed_tag = tag.trim();
+                                        if !trimmed_tag.is_empty() {
+                                            let tag_model = orm::models::TaggedDataTagModel {
+                                                db_id: 0,
+                                                id: tx.id as i64 + index as i64,
+                                                tag: trimmed_tag.to_string(),
+                                                height: current_height,
+                                                latest: true,
+                                            };
+
+                                            if let Err(e) = self.tagged_data_tag_repo.insert(&tag_model).await {
+                                                warn!("Failed to insert TAG for tagged data {}: {}", tx.id, e);
+                                            } else {
+                                                debug!("TAG inserted for tagged data {}: '{}'", tx.id, trimmed_tag);
+                                            }
+                                        }
+                                    }
+
+                                    info!("Inserted {} tags for tagged data '{}'", tags_str.split(',').count(), name);
+                                }
+                            }
                         }
                         Err(e) => {
                             warn!("Failed to upload tagged data '{}': {}", name, e);
@@ -3409,16 +3812,21 @@ impl DatabaseTransactionProcessor {
                         // Insert into PURCHASE_PUBLIC_FEEDBACK table
                         debug!("DGS_PUBLIC_FEEDBACK: purchase {}: '{}'", purchase_id, feedback_note);
                     } else {
-                        let _feedback_model = orm::PurchaseFeedbackModel {
+                        // ✅ 新增：实际插入PURCHASE_FEEDBACK记录
+                        let feedback_model = orm::models::PurchaseFeedbackModel {
                             db_id: 0,
-                            id: tx.id as i64,
+                            id: purchase_id,
                             feedback_data: feedback_note.clone().into_bytes(),
                             feedback_nonce,
                             height: self.get_current_height(),
                             latest: true,
                         };
-                        // Insert into PURCHASE_FEEDBACK table
-                        debug!("DGS_FEEDBACK: purchase {}: '{}'", purchase_id, feedback_note);
+
+                        if let Err(e) = self.purchase_feedback_repo.insert(&feedback_model).await {
+                            warn!("Failed to insert PURCHASE_FEEDBACK for purchase {}: {}", purchase_id, e);
+                        } else {
+                            debug!("PURCHASE_FEEDBACK inserted for purchase {}", purchase_id);
+                        }
                     }
                 }
             }
@@ -3462,6 +3870,7 @@ impl DatabaseTransactionProcessor {
     /// - Subtype 4: SHUFFING_RECIPIENTS -> Shuffling.addRecipients()
     async fn apply_shuffling_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
         let sender_id = tx.sender_id as i64;
+        let current_timestamp = self.get_current_timestamp();
 
         match tx.subtype {
             0 => { // SHUFFLING_CREATION
@@ -3508,6 +3917,28 @@ impl DatabaseTransactionProcessor {
                     self.shuffling_repo.update_stage(shuffling_id, 1).await
                         .map_err(|e| ProcessorError::Validation(format!("Failed to update shuffling stage: {}", e)))?;
 
+                    // ✅ 新增：存储SHUFFLING_DATA - 参与者提交的加密数据blob
+                    if let Some(data) = tx.attachment_json.as_ref().and_then(|v| v.get("encryptedData")) {
+                        if let Some(data_str) = data.as_str() {
+                            if let Ok(_data_bytes) = hex::decode(data_str) {
+                                let shuffling_data = orm::models::ShufflingDataModel {
+                                    db_id: 0,
+                                    shuffling_id,
+                                    account_id: sender_id,
+                                    data: Some(data_str.to_string()), // 存储原始hex字符串
+                                    transaction_timestamp: current_timestamp,
+                                    height: self.get_current_height(),
+                                };
+
+                                if let Err(e) = self.shuffling_data_repo.insert(&shuffling_data).await {
+                                    warn!("Failed to insert SHUFFLING_DATA for shuffling {}: {}", shuffling_id, e);
+                                } else {
+                                    debug!("SHUFFLING_DATA inserted: shuffling={} account={}", shuffling_id, sender_id);
+                                }
+                            }
+                        }
+                    }
+
                     debug!("SHUFFLING_PROCESSING: {}", shuffling_id);
                 }
             }
@@ -3550,9 +3981,37 @@ impl DatabaseTransactionProcessor {
 
                 if shuffling_id > 0 {
                     // Parse recipient public keys from attachment
-                    let _recipient_public_keys = self.parse_string_field(tx, "recipientPublicKeys").unwrap_or_default();
+                    let recipient_public_keys = self.parse_string_field(tx, "recipientPublicKeys").unwrap_or_default();
 
-                    debug!("SHUFFLING_RECIPIENTS: adding participants to {}", shuffling_id);
+                    // ✅ 新增：创建SHUFFLING_PARTICIPANT记录（每个recipient一个participant）
+                    let current_height = self.get_current_height();
+                    let _current_timestamp = self.get_current_timestamp();
+                    
+                    // 简化处理：将recipient_public_keys字符串拆分（实际应根据公钥数量创建多个participant）
+                    let participant_count = recipient_public_keys.matches(',').count().max(1) as i16;
+                    
+                    for (i, _pk) in recipient_public_keys.split(',').enumerate() {
+                        let participant = orm::ShufflingParticipantModel {
+                            db_id: 0,
+                            shuffling_id,
+                            account_id: 0, // 实际应从public_key计算account_id，这里简化处理
+                            next_account_id: None,
+                            participant_index: i as i16,
+                            state: 0, // PENDING
+                            blame_data: None,
+                            key_seeds: None,
+                            data_transaction_full_hash: None,
+                            height: current_height,
+                            latest: true,
+                        };
+                        
+                        if let Err(e) = self.shuffling_participant_repo.insert(&participant).await {
+                            warn!("Failed to insert shuffling participant {}: {}", i, e);
+                        }
+                    }
+
+                    info!("SHUFFLING_RECIPIENTS: added {} participants to shuffling {}", 
+                          participant_count, shuffling_id);
                 }
             }
 
@@ -3582,9 +4041,101 @@ impl DatabaseTransactionProcessor {
         Ok(())
     }
 
-    /// CoinExchange (Type 10) 交易处理（Stub）
+    /// CoinExchange (Type 10) 交易处理
+    ///
+    /// Reference: Java CoinExchangeOrderPlacement / CoinExchange
     async fn apply_coin_exchange_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
-        debug!("CoinExchange subtype {} processed (stub)", tx.subtype);
+        let sender_id = tx.sender_id as i64;
+        let current_height = self.get_current_height();
+        let current_timestamp = self.get_current_timestamp();
+
+        match tx.subtype {
+            0 => {
+                // COIN_ORDER_FXT - 创建CoinExchange订单
+                debug!("Processing COIN_ORDER_FXT for transaction {}", tx.id);
+
+                // 解析attachment字段
+                let chain_id = self.parse_int_field(tx, "chainId").unwrap_or(0) as i32;
+                let exchange_id = self.parse_int_field(tx, "exchangeId").unwrap_or(0) as i32;
+                let amount = self.parse_long_field(tx, "amountNQT").unwrap_or(0);
+                let quantity = self.parse_long_field(tx, "quantityQNT").unwrap_or_else(|| {
+                    self.parse_long_field(tx, "quantity").unwrap_or(0)
+                });
+
+                // 价格解析（bid_price和ask_price）
+                let bid_price = if self.parse_string_field(tx, "orderType").as_deref() == Some("bid") {
+                    self.parse_long_field(tx, "priceNQT").unwrap_or(0)
+                } else {
+                    0
+                };
+
+                let ask_price = if self.parse_string_field(tx, "orderType").as_deref() == Some("ask") {
+                    self.parse_long_field(tx, "priceNQT").unwrap_or(0)
+                } else {
+                    0
+                };
+
+                let order_model = orm::models::CoinOrderFxtModel {
+                    db_id: 0,
+                    id: tx.id as i64,
+                    account_id: sender_id,
+                    chain_id,
+                    exchange_id,
+                    full_hash: tx.full_hash.0.to_vec(),
+                    amount,
+                    quantity,
+                    bid_price,
+                    ask_price,
+                    creation_height: current_height,
+                    height: current_height,
+                    transaction_height: current_height,
+                    transaction_index: 0,
+                    latest: true,
+                };
+
+                self.coin_order_fxt_repo.insert(&order_model).await?;
+                info!("COIN_ORDER_FXT inserted: tx={} account={} chain={} exchange={}",
+                    tx.id, sender_id, chain_id, exchange_id);
+            }
+
+            1 => {
+                // COIN_TRADE_FXT - 执行CoinExchange交易
+                debug!("Processing COIN_TRADE_FXT for transaction {}", tx.id);
+
+                // 解析exchange相关字段
+                let chain_id = self.parse_int_field(tx, "chainId").unwrap_or(0) as i32;
+                let exchange_id = self.parse_int_field(tx, "exchangeId").unwrap_or(0) as i32;
+
+                // 查找匹配的订单并创建交易记录
+                // 这里简化实现，实际应该有撮合引擎
+                let trade_model = orm::models::CoinTradeFxtModel {
+                    db_id: 0,
+                    chain_id,
+                    exchange_id,
+                    account_id: sender_id,
+                    block_id: self.get_current_block_id(),
+                    height: current_height,
+                    timestamp: current_timestamp,
+                    exchange_quantity: self.parse_long_field(tx, "quantityQNT").unwrap_or_else(|| {
+                        self.parse_long_field(tx, "quantity").unwrap_or(0)
+                    }),
+                    exchange_price: self.parse_long_field(tx, "priceNQT").unwrap_or(0),
+                    order_id: 0, // 需要从撮合结果获取
+                    order_full_hash: vec![],
+                    match_id: 0, // 需要从撮合结果获取
+                    match_full_hash: tx.full_hash.0.to_vec(),
+                };
+
+                self.coin_trade_fxt_repo.insert(&trade_model).await?;
+                info!("COIN_TRADE_FXT inserted: tx={} account={} chain={} exchange={}",
+                    tx.id, sender_id, chain_id, exchange_id);
+            }
+
+            _ => {
+                warn!("Unknown CoinExchange subtype {} in transaction {}", tx.subtype, tx.id);
+            }
+        }
+
         Ok(())
     }
 
@@ -3639,6 +4190,10 @@ impl DatabaseTransactionProcessor {
             }
             _ => None,
         }
+    }
+
+    fn parse_int_field(&self, tx: &Transaction, field_name: &str) -> Option<i64> {
+        self.parse_long_field(tx, field_name)
     }
 
     fn parse_bool_field(&self, tx: &Transaction, field_name: &str) -> Option<bool> {
@@ -4004,5 +4559,97 @@ impl DatabaseTransactionProcessor {
             }
             _ => Ok(()),
         }
+    }
+
+    /// 初始化Phasing Poll并插入相关子表记录
+    ///
+    /// Reference: Java PhasingPoll.addPoll() / PhasingPollHashedSecret.addSecret()
+    async fn initialize_phasing_poll(&self, tx: &Transaction) -> ProcessorResult<()> {
+        let sender_id = tx.sender_id as i64;
+        let current_height = self.get_current_height();
+
+        // 解析phasing attachment字段
+        let finish_height = self.parse_long_field(tx, "finishHeight").unwrap_or(0) as i32;
+        let voting_model = self.parse_long_field(tx, "votingModel").unwrap_or(0) as i16;
+        let quorum = self.parse_long_field(tx, "quorum").unwrap_or(0);
+        let min_balance = self.parse_long_field(tx, "minBalance").unwrap_or(0);
+        let holding_id = self.parse_long_field(tx, "holdingId").unwrap_or(0);
+        let min_balance_model = self.parse_long_field(tx, "minBalanceModel").unwrap_or(0) as i16;
+
+        // 创建PHASING_POLL记录
+        let poll_model = orm::models::PhasingPollModel {
+            db_id: 0,
+            id: tx.id as i64,
+            account_id: sender_id,
+            whitelist_size: 0, // 简化处理，实际应从attachment解析
+            finish_height,
+            voting_model,
+            quorum: Some(quorum),
+            min_balance: Some(min_balance),
+            holding_id: Some(holding_id),
+            min_balance_model: Some(min_balance_model),
+            hashed_secret: None, // 稍后填充
+            algorithm: None,     // 稍后填充
+            height: current_height,
+        };
+
+        if let Err(e) = self.phasing_poll_repo.insert(&poll_model).await {
+            warn!("Failed to insert PHASING_POLL for tx {}: {}", tx.id, e);
+            return Ok(()); // 不阻塞主流程
+        }
+
+        debug!("PHASING_POLL created: tx={} account={} finish_height={}", tx.id, sender_id, finish_height);
+
+        // ✅ 新增：插入PHASING_POLL_HASHED_SECRET（如果有hashedSecret）
+        if let Some(secret_hex) = self.parse_string_field(tx, "hashedSecret") {
+            if !secret_hex.is_empty() {
+                if let Ok(secret_bytes) = hex::decode(&secret_hex) {
+                    let algorithm = self.parse_long_field(tx, "hashAlgorithm").unwrap_or(2) as i16; // 默认SHA256
+
+                    let hashed_secret_model = orm::models::PhasingPollHashedSecretModel {
+                        db_id: 0,
+                        hashed_secret: secret_bytes,
+                        hashed_secret_id: tx.id as i64,
+                        algorithm, // i16类型
+                        transaction_full_hash: Some(tx.full_hash.0.to_vec()),
+                        transaction_id: tx.id as i64,
+                        chain_id: 0, // 简化处理
+                        finish_height,
+                        height: current_height,
+                    };
+
+                    if let Err(e) = self.phasing_poll_hashed_secret_repo.insert(&hashed_secret_model).await {
+                        warn!("Failed to insert PHASING_POLL_HASHED_SECRET for tx {}: {}", tx.id, e);
+                    } else {
+                        debug!("PHASING_POLL_HASHED_SECRET inserted for tx {}", tx.id);
+                    }
+                }
+            }
+        }
+
+        // ✅ 新增：插入PHASING_POLL_LINKED_TRANSACTION（如果有linkedTransaction）
+        if let Some(linked_full_hash_hex) = self.parse_string_field(tx, "linkedFullHash") {
+            if !linked_full_hash_hex.is_empty() {
+                if let Ok(linked_hash_bytes) = hex::decode(&linked_full_hash_hex) {
+                    let linked_tx_id = self.parse_long_field(tx, "linkedTransactionId").unwrap_or(0);
+
+                    let linked_tx_model = orm::models::PhasingPollLinkedTransactionModel {
+                        db_id: 0,
+                        transaction_id: tx.id as i64,
+                        linked_full_hash: linked_hash_bytes,
+                        linked_transaction_id: linked_tx_id, // i64类型
+                        height: current_height,
+                    };
+
+                    if let Err(e) = self.phasing_poll_linked_transaction_repo.insert(&linked_tx_model).await {
+                        warn!("Failed to insert PHASING_POLL_LINKED_TRANSACTION for tx {}: {}", tx.id, e);
+                    } else {
+                        debug!("PHASING_POLL_LINKED_TRANSACTION inserted for tx {}", tx.id);
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }

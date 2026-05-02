@@ -248,6 +248,19 @@ pub trait ShufflingRepository: Repository<ShufflingModel> {
     async fn update_stage(&self, shuffling_id: i64, stage: i32) -> RepositoryResult<()>;
 }
 
+/// Shuffling Data Repository (SHUFFLING_DATA表)
+#[async_trait]
+pub trait ShufflingDataRepository: Repository<ShufflingDataModel> {
+    async fn find_by_shuffling(&self, shuffling_id: i64) -> RepositoryResult<Vec<ShufflingDataModel>>;
+}
+
+/// Shuffling Participant Repository (SHUFFLING_PARTICIPANT表)
+#[async_trait]
+pub trait ShufflingParticipantRepository: Repository<ShufflingParticipantModel> {
+    async fn find_by_shuffling(&self, shuffling_id: i64) -> RepositoryResult<Vec<ShufflingParticipantModel>>;
+    async fn find_by_account_and_shuffling(&self, account_id: i64, shuffling_id: i64) -> RepositoryResult<Option<ShufflingParticipantModel>>;
+}
+
 #[async_trait]
 pub trait ContractReferenceRepository: Repository<ContractReferenceModel> {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<ContractReferenceModel>>;
@@ -331,10 +344,15 @@ pub trait AssetDividendRepository: Repository<AssetDividendModel> {
     async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetDividendModel>>;
 }
 
+/// Phasing Poll Hashed Secret Repository (PHASING_POLL_HASHED_SECRET表)
+#[async_trait]
+pub trait PhasingPollHashedSecretRepository: Repository<PhasingPollHashedSecretModel> {
+    async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingPollHashedSecretModel>>;
+}
+
 #[async_trait]
 pub trait PhasingPollRepository: Repository<PhasingPollModel> {
     async fn find_by_poll_id(&self, id: i64) -> RepositoryResult<Option<PhasingPollModel>>;
-    async fn upsert(&self, model: &PhasingPollModel) -> RepositoryResult<()>;
 }
 
 #[async_trait]
@@ -362,5 +380,49 @@ pub trait PhasingVoteRepository: Repository<PhasingVoteModel> {
 pub trait PollResultRepository: Repository<PollResultModel> {
     async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PollResultModel>>;
     async fn upsert(&self, model: &PollResultModel) -> RepositoryResult<()>;
+}
+
+/// CoinExchange Order Repository (COIN_ORDER_FXT表)
+#[async_trait]
+pub trait CoinOrderFxtRepository: Repository<CoinOrderFxtModel> {
+    async fn find_by_exchange(&self, exchange_id: i32) -> RepositoryResult<Vec<CoinOrderFxtModel>>;
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<CoinOrderFxtModel>>;
+}
+
+/// CoinExchange Trade Repository (COIN_TRADE_FXT表)
+#[async_trait]
+pub trait CoinTradeFxtRepository: Repository<CoinTradeFxtModel> {
+    async fn find_by_exchange(&self, exchange_id: i32, limit: i64) -> RepositoryResult<Vec<CoinTradeFxtModel>>;
+    async fn find_by_order(&self, order_id: i64) -> RepositoryResult<Vec<CoinTradeFxtModel>>;
+}
+
+/// Hub Repository (HUB表)
+#[async_trait]
+pub trait HubRepository: Repository<HubModel> {
+    async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Option<HubModel>>;
+}
+
+/// Currency Founder Repository (CURRENCY_FOUNDER表)
+#[async_trait]
+pub trait CurrencyFounderRepository: Repository<CurrencyFounderModel> {
+    async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<CurrencyFounderModel>>;
+}
+
+/// Prunable Message Repository (PRUNABLE_MESSAGE表)
+#[async_trait]
+pub trait PrunableMessageRepository: Repository<PrunableMessageModel> {
+    async fn find_by_transaction(&self, transaction_id: i64) -> RepositoryResult<Option<PrunableMessageModel>>;
+}
+
+/// Purchase Feedback Repository (PURCHASE_FEEDBACK表)
+#[async_trait]
+pub trait PurchaseFeedbackRepository: Repository<PurchaseFeedbackModel> {
+    async fn find_by_purchase(&self, purchase_id: i64) -> RepositoryResult<Vec<PurchaseFeedbackModel>>;
+}
+
+/// Referenced Transaction Repository (REFERENCED_TRANSACTION表)
+#[async_trait]
+pub trait ReferencedTransactionRepository: Repository<ReferencedTransactionModel> {
+    async fn find_by_transaction(&self, transaction_id: i64) -> RepositoryResult<Vec<ReferencedTransactionModel>>;
 }
 

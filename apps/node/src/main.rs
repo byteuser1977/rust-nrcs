@@ -41,6 +41,9 @@ use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransfer
          TaggedDataRepository, TaggedDataTagRepository,
          ContractReferenceRepository,
          AskOrderRepository, BidOrderRepository,
+         TradeRepository,
+         PollResultRepository,
+         ShufflingDataRepository, ShufflingParticipantRepository,
          CurrencyRepository, AccountCurrencyRepository, CurrencyTransferRepository,
          AssetPropertyRepository, AccountPropertyRepository,
          // Digital Goods
@@ -52,7 +55,15 @@ use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransfer
          // Asset Dividend
          AssetDividendRepository,
          // Asset Delete + History
-         AssetDeleteRepository, AssetHistoryRepository};
+         AssetDeleteRepository, AssetHistoryRepository,
+         // P0: CoinExchange
+         CoinOrderFxtRepository, CoinTradeFxtRepository,
+         // P1: Phasing Sub-tables
+         PhasingPollHashedSecretRepository, PhasingPollResultRepository,
+         PhasingPollVoterRepository, PhasingPollLinkedTransactionRepository,
+         // P2: Auxiliary tables
+         HubRepository, CurrencyFounderRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
+         ReferencedTransactionRepository};
 use orm::repository::sqlite::SqliteAccountGuaranteedBalanceRepository;
 
 use p2p::BlockchainVerifier;
@@ -248,6 +259,13 @@ async fn main() -> Result<()> {
             let contract_ref_repo: Arc<dyn ContractReferenceRepository> = Arc::new(orm::SqliteContractReferenceRepository::new(pool.clone()));
             let ask_order_repo: Arc<dyn AskOrderRepository> = Arc::new(orm::SqliteAskOrderRepository::new(pool.clone()));
             let bid_order_repo: Arc<dyn BidOrderRepository> = Arc::new(orm::SqliteBidOrderRepository::new(pool.clone()));
+            // 新增：交易撮合
+            let trade_repo: Arc<dyn TradeRepository> = Arc::new(orm::SqliteTradeRepository::new(pool.clone()));
+            // 新增：投票结果
+            let poll_result_repo: Arc<dyn PollResultRepository> = Arc::new(orm::SqlitePollResultRepository::new(pool.clone()));
+            // 新增：Shuffling子表
+            let shuffling_data_repo: Arc<dyn ShufflingDataRepository> = Arc::new(orm::SqliteShufflingDataRepository::new(pool.clone()));
+            let shuffling_participant_repo: Arc<dyn ShufflingParticipantRepository> = Arc::new(orm::SqliteShufflingParticipantRepository::new(pool.clone()));
             let currency_repo: Arc<dyn CurrencyRepository> = Arc::new(orm::SqliteCurrencyRepository::new(pool.clone()));
             let account_currency_repo: Arc<dyn AccountCurrencyRepository> = Arc::new(orm::SqliteAccountCurrencyRepository::new(pool.clone()));
             let currency_transfer_repo: Arc<dyn CurrencyTransferRepository> = Arc::new(orm::SqliteCurrencyTransferRepository::new(pool.clone()));
@@ -275,6 +293,28 @@ async fn main() -> Result<()> {
             // Account Lease
             let account_lease_repo: Arc<dyn AccountLeaseRepository> = Arc::new(orm::SqliteAccountLeaseRepository::new(pool.clone()));
 
+            // ✅ 新增（P0修复）：CoinExchange订单和交易
+            let coin_order_fxt_repo: Arc<dyn CoinOrderFxtRepository> = Arc::new(orm::SqliteCoinOrderFxtRepository::new(pool.clone()));
+            let coin_trade_fxt_repo: Arc<dyn CoinTradeFxtRepository> = Arc::new(orm::SqliteCoinTradeFxtRepository::new(pool.clone()));
+
+            // ✅ 新增（P1修复）：Phasing 4张子表
+            let phasing_poll_hashed_secret_repo: Arc<dyn PhasingPollHashedSecretRepository> =
+                Arc::new(orm::SqlitePhasingPollHashedSecretRepository::new(pool.clone()));
+            let phasing_poll_result_repo: Arc<dyn PhasingPollResultRepository> =
+                Arc::new(orm::SqlitePhasingPollResultRepository::new(pool.clone()));
+            let phasing_poll_voter_repo: Arc<dyn PhasingPollVoterRepository> =
+                Arc::new(orm::SqlitePhasingPollVoterRepository::new(pool.clone()));
+            let phasing_poll_linked_transaction_repo: Arc<dyn PhasingPollLinkedTransactionRepository> =
+                Arc::new(orm::SqlitePhasingPollLinkedTransactionRepository::new(pool.clone()));
+
+            // ✅ 新增（P2修复）：辅助表6张
+            let hub_repo: Arc<dyn HubRepository> = Arc::new(orm::SqliteHubRepository::new(pool.clone()));
+            let currency_founder_repo: Arc<dyn CurrencyFounderRepository> = Arc::new(orm::SqliteCurrencyFounderRepository::new(pool.clone()));
+            let prunable_message_repo: Arc<dyn PrunableMessageRepository> = Arc::new(orm::SqlitePrunableMessageRepository::new(pool.clone()));
+            let purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository> = Arc::new(orm::SqlitePurchaseFeedbackRepository::new(pool.clone()));
+            let referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository> =
+                Arc::new(orm::SqliteReferencedTransactionRepository::new(pool.clone()));
+
             // 确保创世区块存在
             orm::genesis::ensure_genesis(
                 &*block_repo,
@@ -286,13 +326,19 @@ async fn main() -> Result<()> {
             info!("Genesis block ensured");
 
             start_node(cfg, pool, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
-                alias_repo, alias_offer_repo, poll_repo, vote_repo, account_property_repo, account_info_repo, phasing_poll_repo, phasing_vote_repo, account_control_phasing_repo, tagged_data_repo, tagged_data_tag_repo, tagged_data_extend_repo, tagged_timestamp_repo, contract_ref_repo, ask_order_repo, bid_order_repo, currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo,
+                alias_repo, alias_offer_repo, poll_repo, vote_repo, account_property_repo, account_info_repo, phasing_poll_repo, phasing_vote_repo, account_control_phasing_repo, tagged_data_repo, tagged_data_tag_repo, tagged_data_extend_repo, tagged_timestamp_repo, contract_ref_repo, ask_order_repo, bid_order_repo, trade_repo, poll_result_repo,
+                shuffling_data_repo, shuffling_participant_repo,
+                currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo,
                 dividend_repo,
                 asset_delete_repo, asset_history_repo,
                 exchange_request_repo, currency_mint_repo,
                 goods_repo, purchase_repo,
                 shuffling_repo,
-                account_lease_repo
+                account_lease_repo,
+                // ✅ 新增：13个Repository
+                coin_order_fxt_repo, coin_trade_fxt_repo,
+                phasing_poll_hashed_secret_repo, phasing_poll_result_repo, phasing_poll_voter_repo, phasing_poll_linked_transaction_repo,
+                hub_repo, currency_founder_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
             ).await
         }
     }
@@ -328,6 +374,13 @@ async fn start_node(
     contract_ref_repo: Arc<dyn ContractReferenceRepository>,
     ask_order_repo: Arc<dyn AskOrderRepository>,
     bid_order_repo: Arc<dyn BidOrderRepository>,
+    // 新增：交易撮合
+    trade_repo: Arc<dyn TradeRepository>,
+    // 新增：投票结果
+    poll_result_repo: Arc<dyn PollResultRepository>,
+    // 新增：Shuffling子表
+    shuffling_data_repo: Arc<dyn ShufflingDataRepository>,
+    shuffling_participant_repo: Arc<dyn ShufflingParticipantRepository>,
     currency_repo: Arc<dyn CurrencyRepository>,
     account_currency_repo: Arc<dyn AccountCurrencyRepository>,
     currency_transfer_repo: Arc<dyn CurrencyTransferRepository>,
@@ -347,9 +400,24 @@ async fn start_node(
     shuffling_repo: Arc<dyn ShufflingRepository>,
     // Account Lease
     account_lease_repo: Arc<dyn AccountLeaseRepository>,
+    // ✅ 新增（P0修复）：CoinExchange订单和交易
+    coin_order_fxt_repo: Arc<dyn CoinOrderFxtRepository>,
+    coin_trade_fxt_repo: Arc<dyn CoinTradeFxtRepository>,
+    // ✅ 新增（P1修复）：Phasing 4张子表
+    phasing_poll_hashed_secret_repo: Arc<dyn PhasingPollHashedSecretRepository>,
+    phasing_poll_result_repo: Arc<dyn PhasingPollResultRepository>,
+    phasing_poll_voter_repo: Arc<dyn PhasingPollVoterRepository>,
+    phasing_poll_linked_transaction_repo: Arc<dyn PhasingPollLinkedTransactionRepository>,
+    // ✅ 新增（P2修复）：辅助表6张
+    hub_repo: Arc<dyn HubRepository>,
+    currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
+    prunable_message_repo: Arc<dyn PrunableMessageRepository>,
+    purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
+    referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository>,
 ) -> Result<()> {
     // 创建交易处理器（完整版本 - 支持所有交易类型）
     let tx_processor: Arc<dyn TransactionProcessor> = Arc::new(DatabaseTransactionProcessor::new(
+        // 基础Repository (7个)
         Arc::clone(&account_repo),
         Arc::clone(&account_asset_repo),
         Arc::clone(&asset_repo),
@@ -357,7 +425,7 @@ async fn start_node(
         Arc::clone(&tx_repo),
         Arc::clone(&guaranteed_balance_repo),
         Arc::clone(&ledger_repo),
-        // 新增：完整交易处理所需的Repository
+        // 新增参数 (9个)
         Arc::clone(&alias_repo),
         Arc::clone(&alias_offer_repo),
         Arc::clone(&poll_repo),
@@ -367,31 +435,53 @@ async fn start_node(
         Arc::clone(&phasing_poll_repo),
         Arc::clone(&phasing_vote_repo),
         Arc::clone(&account_control_phasing_repo),
+        // Phasing子表（P1修复）(4个)
+        Arc::clone(&phasing_poll_hashed_secret_repo),
+        Arc::clone(&phasing_poll_result_repo),
+        Arc::clone(&phasing_poll_voter_repo),
+        Arc::clone(&phasing_poll_linked_transaction_repo),
+        // Data/Tagged (5个)
         Arc::clone(&tagged_data_repo),
         Arc::clone(&tagged_data_tag_repo),
         Arc::clone(&tagged_data_extend_repo),
         Arc::clone(&tagged_timestamp_repo),
         Arc::clone(&contract_ref_repo),
+        // Order/Trade (3个)
         Arc::clone(&ask_order_repo),
         Arc::clone(&bid_order_repo),
+        Arc::clone(&trade_repo),
+        // Poll Result (1个)
+        Arc::clone(&poll_result_repo),
+        // Shuffling子表 (2个)
+        Arc::clone(&shuffling_data_repo),
+        Arc::clone(&shuffling_participant_repo),
+        // Currency (4个)
         Arc::clone(&currency_repo),
         Arc::clone(&account_currency_repo),
         Arc::clone(&currency_transfer_repo),
         Arc::clone(&asset_property_repo),
-        // Asset Dividend
+        // Asset Dividend + Delete + History (3个)
         Arc::clone(&dividend_repo),
-        // Asset Delete + History
         Arc::clone(&asset_delete_repo),
         Arc::clone(&asset_history_repo),
-        // 新增：Exchange和Mint
+        // Exchange和Mint (2个)
         exchange_request_repo,
         currency_mint_repo,
-        // Digital Goods
+        // CoinExchange订单和交易（P0修复）(2个)
+        coin_order_fxt_repo,
+        coin_trade_fxt_repo,
+        // P2辅助表（Hub/CurrencyFounder/PrunableMessage/PurchaseFeedback/ReferencedTransaction）(5个)
+        hub_repo,
+        currency_founder_repo,
+        prunable_message_repo,
+        purchase_feedback_repo,
+        referenced_transaction_repo,
+        // Digital Goods (2个)
         goods_repo,
         purchase_repo,
-        // Shuffling
+        // Shuffling (1个)
         shuffling_repo,
-        // Account Lease
+        // Account Lease (1个)
         account_lease_repo,
     ));
 
