@@ -60,7 +60,7 @@ fn get_attachment_version(type_byte: u8, subtype: u8, att_map: &Map<String, serd
         },
         TYPE_ACCOUNT_CONTROL => match subtype {
             SUBTYPE_ACCOUNT_CONTROL_EFFECTIVE_BALANCE_LEASING => "version.EffectiveBalanceLeasing",
-            SUBTYPE_ACCOUNT_CONTROL_PHASING_ONLY => "version.PhaserOnly",
+            SUBTYPE_ACCOUNT_CONTROL_PHASING_ONLY => "version.SetPhasingOnly",
             _ => "version.AccountControl",
         },
         TYPE_MONETARY_SYSTEM => match subtype {
@@ -95,7 +95,7 @@ fn get_attachment_version(type_byte: u8, subtype: u8, att_map: &Map<String, serd
             _ => "version.Voting",
         },
         TYPE_ACCOUNT_PROPERTY => match subtype {
-            SUBTYPE_ACCOUNT_PROPERTY_SET => "version.AccountPropertySet",
+            SUBTYPE_ACCOUNT_PROPERTY_SET => "version.AccountProperty",
             _ => "version.AccountProperty",
         },
         TYPE_COIN_EXCHANGE => match subtype {
@@ -104,7 +104,7 @@ fn get_attachment_version(type_byte: u8, subtype: u8, att_map: &Map<String, serd
             _ => "version.CoinExchange",
         },
         TYPE_LIGHT_CONTRACT => match subtype {
-            SUBTYPE_LIGHT_CONTRACT_REFERENCE_SET => "version.ContractReferenceSet",
+            SUBTYPE_LIGHT_CONTRACT_REFERENCE_SET => "version.ContractReference",
             SUBTYPE_LIGHT_CONTRACT_REFERENCE_DELETE => "version.ContractReferenceDelete",
             _ => "version.LightContract",
         },
@@ -864,14 +864,10 @@ fn serialize_light_contract_attachment(subtype: u8, att_map: &Map<String, serde_
                 put_byte(&mut buf, 0);
             }
             
-            // ChainTransactionId: chainId(i32) + hash(32B or 24B)
-            // 支持多种格式:
-            // 1. contract.transactionFullHash (嵌套对象)
-            // 2. transactionFullHash (顶层字段)
-            // 3. hash (顶层字段)
-            // 4. referencedTransactionFullHash (顶层字段)
+            // ChainTransactionId: chainId(i32, BIG-ENDIAN) + hash(32B)
+            // Java: buffer.putInt(chainId) + buffer.put(hash)
+            // ByteBuffer defaults to BIG_ENDIAN
             let hash_bytes = if let Some(contract_obj) = att_map.get("contract").and_then(|v| v.as_object()) {
-                // 格式1: 嵌套对象
                 if let Some(hash_str) = contract_obj.get("transactionFullHash")
                     .or_else(|| contract_obj.get("hash"))
                     .and_then(|v| v.as_str())
@@ -885,13 +881,11 @@ fn serialize_light_contract_attachment(subtype: u8, att_map: &Map<String, serde_
                 .or_else(|| att_map.get("referencedTransactionFullHash"))
                 .and_then(|v| v.as_str())
             {
-                // 格式2/3/4: 顶层字段
                 hex::decode(hash_str).unwrap_or_default()
             } else {
                 Vec::new()
             };
             
-            // chainId - 支持多种字段位置
             let chain_id = if let Some(contract_obj) = att_map.get("contract").and_then(|v| v.as_object()) {
                 contract_obj.get("chain")
                     .or_else(|| contract_obj.get("chainId"))
@@ -904,21 +898,17 @@ fn serialize_light_contract_attachment(subtype: u8, att_map: &Map<String, serde_
                     .unwrap_or(0) as i32
             };
             
-            put_i32(&mut buf, chain_id);
+            // Java ByteBuffer.putInt() uses BIG-ENDIAN
+            buf.extend_from_slice(&chain_id.to_be_bytes());
             
-            // 写入 hash（Java NRCS 存储时截断到 24 字节）
-            // 注意：实际观察到的数据表明 hash 可能是 24 字节或 32 字节
-            // 为了与数据库兼容，统一截断到 24 字节
+            // Java ChainTransactionId.put(): buffer.put(hash) - full 32 bytes
             if !hash_bytes.is_empty() {
-                let truncated_hash = if hash_bytes.len() > 24 {
-                    &hash_bytes[..24]
-                } else {
-                    &hash_bytes
-                };
-                put_bytes(&mut buf, truncated_hash);
+                put_bytes(&mut buf, &hash_bytes[..32.min(hash_bytes.len())]);
+                if hash_bytes.len() < 32 {
+                    put_bytes(&mut buf, &vec![0u8; 32 - hash_bytes.len()]);
+                }
             } else {
-                // 默认写入 24 字节的零（与数据库格式一致）
-                put_bytes(&mut buf, &[0u8; 24]);
+                put_bytes(&mut buf, &[0u8; 32]);
             }
         }
         SUBTYPE_LIGHT_CONTRACT_REFERENCE_DELETE => {
@@ -1211,7 +1201,10 @@ fn serialize_voting_attachment(subtype: u8, att_map: &Map<String, serde_json::Va
             if let Some(vote) = att_map.get("vote").and_then(|v| v.as_array()) {
                 put_byte(&mut buf, vote.len() as u8);
                 for v in vote {
-                    put_byte(&mut buf, v.as_u64().unwrap_or(0) as u8);
+                    let byte_val = v.as_i64()
+                        .map(|val| val as u8)
+                        .unwrap_or_else(|| v.as_u64().map(|val| val as u8).unwrap_or(0));
+                    put_byte(&mut buf, byte_val);
                 }
             } else {
                 put_byte(&mut buf, 0);
@@ -1419,6 +1412,7 @@ fn serialize_messaging_attachment(subtype: u8, att_map: &Map<String, serde_json:
         SUBTYPE_MESSAGING_VOTE_CASTING => {
             // 对应 Java: MessagingVoteCasting.putMyBytes()
             // Java: buffer.putLong(pollId) + buffer.put(pollVote.length) + buffer.put(pollVote)
+            // Note: Java byte is signed (-128~127), vote values can be negative
             if let Some(poll) = att_map.get("poll") {
                 put_i64(&mut buf, parse_u64_as_i64(poll));
             } else {
@@ -1427,7 +1421,10 @@ fn serialize_messaging_attachment(subtype: u8, att_map: &Map<String, serde_json:
             if let Some(vote_arr) = att_map.get("vote").and_then(|v| v.as_array()) {
                 put_byte(&mut buf, vote_arr.len() as u8);
                 for vote_val in vote_arr {
-                    put_byte(&mut buf, vote_val.as_u64().unwrap_or(0) as u8);
+                    let byte_val = vote_val.as_i64()
+                        .map(|v| v as u8)
+                        .unwrap_or_else(|| vote_val.as_u64().map(|v| v as u8).unwrap_or(0));
+                    put_byte(&mut buf, byte_val);
                 }
             } else {
                 put_byte(&mut buf, 0);

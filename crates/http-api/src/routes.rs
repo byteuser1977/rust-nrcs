@@ -16,6 +16,7 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/nrcs", post(nrcs_handler::handle_nrcs_post))
         .route("/test", get(test_page::api_test_page))
         .route("/health", get(crate::handlers::system::health_check))
+        .route("/api/v1/accounts", post(crate::handlers::restful::create_account))
         .route("/api/v1/accounts/:id", get(crate::handlers::restful::get_account))
         .route("/api/v1/accounts/:id/balance", get(crate::handlers::restful::get_balance))
         .route("/api/v1/blocks/latest", get(crate::handlers::restful::get_latest_block))

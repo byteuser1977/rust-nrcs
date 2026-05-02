@@ -470,8 +470,14 @@ impl Transaction {
         let sender_id = Self::public_key_to_account_id(&sender_public_key.0);
 
         let recipient_id = match obj.get("recipient") {
-            Some(serde_json::Value::String(s)) => s.parse::<u64>().ok(),
-            Some(serde_json::Value::Number(n)) => n.as_u64(),
+            Some(serde_json::Value::String(s)) => {
+                s.parse::<i64>().ok().map(|i| i as u64)
+                    .or_else(|| s.parse::<u64>().ok())
+            }
+            Some(serde_json::Value::Number(n)) => {
+                n.as_i64().map(|i| i as u64)
+                    .or_else(|| n.as_u64())
+            }
             _ => None,
         };
 
@@ -489,9 +495,14 @@ impl Transaction {
             .map(|v| v as u32);
         let ec_block_id = obj.get("ecBlockId")
             .and_then(|v| {
-                // Java 中 ecBlockId 是 long 类型，JSON 中可能是字符串也可能是数字
+                // Java 中 ecBlockId 是 long (i64) 类型，可能为负数
+                // 优先从字符串解析，支持有符号和无符号两种形式
                 v.as_str()
-                    .and_then(|s| s.parse::<u64>().ok())
+                    .and_then(|s| {
+                        s.parse::<i64>().ok().map(|i| i as u64)
+                            .or_else(|| s.parse::<u64>().ok())
+                    })
+                    .or_else(|| v.as_i64().map(|i| i as u64))
                     .or_else(|| v.as_u64())
             });
 
@@ -543,7 +554,7 @@ impl Transaction {
             has_encrypted_message,
             has_public_key_announcement,
             has_prunable_message,
-            has_prunable_attachment: has_prunable_message || has_prunable_encrypted_message || has_tagged_data_prunable,
+            has_prunable_attachment: has_tagged_data_prunable,
             ec_block_height,
             ec_block_id,
             has_encrypttoself_message,

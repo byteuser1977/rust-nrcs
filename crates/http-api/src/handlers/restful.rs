@@ -17,6 +17,35 @@ fn parse_account_id(account_str: &str) -> Result<AccountId, ApiError> {
         .map_err(|_| ApiError::InvalidParameter(format!("Invalid account ID: {}", account_str)))
 }
 
+pub async fn create_account(
+    State(state): State<ApiState>,
+    Json(body): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let start_time = Instant::now();
+
+    let initial_balance = body.get("initial_balance")
+        .and_then(|v| v.as_u64());
+
+    let (kp, account_id, address) = state.account_manager
+        .create_account(initial_balance)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    state.account_manager
+        .register_account(account_id, kp.public_key().as_bytes().to_vec())
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let processing_time = start_time.elapsed().as_millis() as u32;
+
+    Ok(Json(serde_json::json!({
+        "account": account_id.to_string(),
+        "accountRS": address,
+        "publicKey": hex::encode(kp.public_key().as_bytes()),
+        "requestProcessingTime": processing_time
+    })))
+}
+
 pub async fn get_account(
     State(state): State<ApiState>,
     Path(id): Path<String>,

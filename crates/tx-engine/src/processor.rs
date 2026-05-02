@@ -1082,7 +1082,8 @@ impl DatabaseTransactionProcessor {
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(0);
-            let quantity = att_json.get("quantity")
+            let quantity = att_json.get("quantityQNT")
+                .or_else(|| att_json.get("quantity"))
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(0);
@@ -3020,36 +3021,55 @@ impl DatabaseTransactionProcessor {
 
         match tx.subtype {
             0 => { // CONTRACT_REFERENCE_SET
-                // Java: ContractReference.setContractReference(account, name, data)
-                // Reference: ContractReferenceSetAttachment.java
-                //   attachment fields: { "name": String, "data": String }
-                //   DB operation:
-                //     1. DELETE existing CONTRACT_REFERENCE (account+name)
-                //     2. INSERT new CONTRACT_REFERENCE
+                // Java: ContractReference.setContractReference(transaction, senderAccount, contractName, contractParams, contractId)
+                // Java: canHaveRecipient() returns false, account_id = sender_id
+                let sender_id = tx.sender_id as i64;
+                let ref_name = self.parse_string_field(tx, "contractName")
+                    .or_else(|| self.parse_string_field(tx, "name"))
+                    .unwrap_or_default();
+                let ref_params = self.parse_string_field(tx, "contractParams")
+                    .or_else(|| self.parse_string_field(tx, "params"));
 
-                let ref_name = self.parse_string_field(tx, "name").unwrap_or_default();
-                let ref_data = self.parse_string_field(tx, "data");
+                let (chain_id, full_hash) = if let Some(att_json) = self.get_attachment_json(tx) {
+                    let (cid, fh) = if let Some(contract_obj) = att_json.get("contract").and_then(|v| v.as_object()) {
+                        let cid = contract_obj.get("chain")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0) as i32;
+                        let fh = contract_obj.get("transactionFullHash")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| hex::decode(s).ok());
+                        (cid, fh)
+                    } else {
+                        let cid = att_json.get("chain")
+                            .and_then(|v| v.as_i64())
+                            .unwrap_or(0) as i32;
+                        let fh = att_json.get("transactionFullHash")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| hex::decode(s).ok());
+                        (cid, fh)
+                    };
+                    (cid, fh)
+                } else {
+                    (0i32, None)
+                };
 
-                if !ref_name.is_empty() && recipient_id != 0 {
+                if !ref_name.is_empty() {
                     let contract_ref_model = ContractReferenceModel {
                         db_id: 0,
                         id: tx.id as i64,
-                        account_id: recipient_id,
+                        account_id: sender_id,
                         contract_name: ref_name.clone(),
-                        contract_params: ref_data, // 使用contract_params字段存储数据
-                        contract_transaction_chain_id: 0, // TODO: 从attachment解析
-                        contract_transaction_full_hash: None, // TODO: 从attachment解析
+                        contract_params: ref_params,
+                        contract_transaction_chain_id: chain_id,
+                        contract_transaction_full_hash: full_hash,
                         height: current_height,
                         latest: true,
                     };
 
-                    // 先删除已存在的同名引用（如果存在）
-                    // TODO: 调用contract_ref_repo.delete_by_account_and_name(recipient_id, &ref_name)
-
                     match self.contract_ref_repo.insert(&contract_ref_model).await {
                         Ok(_) => {
                             info!("Set contract reference '{}' on account {} (tx={})",
-                                ref_name, recipient_id, tx.id);
+                                ref_name, sender_id, tx.id);
                         }
                         Err(e) => {
                             warn!("Failed to set contract reference '{}': {}", ref_name, e);
@@ -3057,12 +3077,7 @@ impl DatabaseTransactionProcessor {
                         }
                     }
                 } else {
-                    if ref_name.is_empty() {
-                        warn!("Empty reference name in transaction {}", tx.id);
-                    }
-                    if recipient_id == 0 {
-                        warn!("CONTRACT_REFERENCE_SET without recipient in tx {}", tx.id);
-                    }
+                    warn!("Empty reference name in transaction {}", tx.id);
                 }
             }
 
@@ -3555,7 +3570,8 @@ impl DatabaseTransactionProcessor {
                 // ASSET_TRANSFER: Pre-deduct asset quantity from sender
                 let sender_id = tx.sender_id as i64;
                 let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
-                let quantity = tx.amount as i64;
+                let quantity = self.parse_long_field(tx, "quantityQNT")
+                    .unwrap_or_else(|| self.parse_long_field(tx, "quantity").unwrap_or(tx.amount as i64));
 
                 if asset_id == 0 {
                     return Ok(true); // No asset to deduct
@@ -3776,7 +3792,8 @@ impl DatabaseTransactionProcessor {
                 // ASSET_TRANSFER: Restore asset quantity to sender
                 let sender_id = tx.sender_id as i64;
                 let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
-                let quantity = tx.amount as i64;
+                let quantity = self.parse_long_field(tx, "quantityQNT")
+                    .unwrap_or_else(|| self.parse_long_field(tx, "quantity").unwrap_or(tx.amount as i64));
 
                 if asset_id == 0 {
                     return Ok(());
