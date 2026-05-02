@@ -3798,10 +3798,11 @@ impl AccountCurrencyRepository for PgAccountCurrencyRepository {
                 .await
                 .unwrap_or(0);
             sqlx::query(
-                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES ($1, $2, $3, 0, $4, TRUE)"
+                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES ($1, $2, $3, $4, $5, TRUE)"
             )
             .bind(account_id)
             .bind(currency_id)
+            .bind(delta)
             .bind(delta)
             .bind(current_height)
             .execute(&self.pool)

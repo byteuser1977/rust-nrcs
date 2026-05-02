@@ -45,6 +45,7 @@ use orm::{
     AssetDividendRepository,
     // Asset Delete + History
     AssetDeleteRepository, AssetHistoryRepository,
+    models::AssetDeleteModel, models::AssetHistoryModel,
 };
 use thiserror::Error;
 

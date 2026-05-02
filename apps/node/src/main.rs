@@ -50,7 +50,9 @@ use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransfer
          // Account Lease
          AccountLeaseRepository,
          // Asset Dividend
-         AssetDividendRepository};
+         AssetDividendRepository,
+         // Asset Delete + History
+         AssetDeleteRepository, AssetHistoryRepository};
 use orm::repository::sqlite::SqliteAccountGuaranteedBalanceRepository;
 
 use p2p::BlockchainVerifier;
@@ -253,6 +255,9 @@ async fn main() -> Result<()> {
             let account_property_repo: Arc<dyn AccountPropertyRepository> = Arc::new(orm::SqliteAccountPropertyRepository::new(pool.clone()));
             // Asset Dividend
             let dividend_repo: Arc<dyn AssetDividendRepository> = Arc::new(orm::SqliteAssetDividendRepository::new(pool.clone()));
+            // Asset Delete + History
+            let asset_delete_repo: Arc<dyn AssetDeleteRepository> = Arc::new(orm::SqliteAssetDeleteRepository::new(pool.clone()));
+            let asset_history_repo: Arc<dyn AssetHistoryRepository> = Arc::new(orm::SqliteAssetHistoryRepository::new(pool.clone()));
             let phasing_poll_repo: Arc<dyn PhasingPollRepository> = Arc::new(orm::SqlitePhasingPollRepository::new(pool.clone()));
             let phasing_vote_repo: Arc<dyn PhasingVoteRepository> = Arc::new(orm::SqlitePhasingVoteRepository::new(pool.clone()));
             let account_control_phasing_repo: Arc<dyn AccountControlPhasingRepository> = Arc::new(orm::SqliteAccountControlPhasingRepository::new(pool.clone()));
@@ -283,6 +288,7 @@ async fn main() -> Result<()> {
             start_node(cfg, pool, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
                 alias_repo, alias_offer_repo, poll_repo, vote_repo, account_property_repo, account_info_repo, phasing_poll_repo, phasing_vote_repo, account_control_phasing_repo, tagged_data_repo, tagged_data_tag_repo, tagged_data_extend_repo, tagged_timestamp_repo, contract_ref_repo, ask_order_repo, bid_order_repo, currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo,
                 dividend_repo,
+                asset_delete_repo, asset_history_repo,
                 exchange_request_repo, currency_mint_repo,
                 goods_repo, purchase_repo,
                 shuffling_repo,
@@ -328,6 +334,9 @@ async fn start_node(
     asset_property_repo: Arc<dyn AssetPropertyRepository>,
     // Asset Dividend
     dividend_repo: Arc<dyn AssetDividendRepository>,
+    // Asset Delete + History
+    asset_delete_repo: Arc<dyn AssetDeleteRepository>,
+    asset_history_repo: Arc<dyn AssetHistoryRepository>,
     // 新增：Exchange和Mint（P1优化完成）
     exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
     currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
@@ -371,6 +380,9 @@ async fn start_node(
         Arc::clone(&asset_property_repo),
         // Asset Dividend
         Arc::clone(&dividend_repo),
+        // Asset Delete + History
+        Arc::clone(&asset_delete_repo),
+        Arc::clone(&asset_history_repo),
         // 新增：Exchange和Mint
         exchange_request_repo,
         currency_mint_repo,

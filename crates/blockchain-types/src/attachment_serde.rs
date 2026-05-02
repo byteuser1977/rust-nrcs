@@ -1924,9 +1924,15 @@ fn serialize_phasing_params(buf: &mut Vec<u8>, att_map: &Map<String, serde_json:
 mod tests {
     use super::*;
 
+    /// 辅助函数：简化测试中的 attachment_bytes 构建（忽略 pruned_bytes）
+    fn build_att_bytes(type_byte: u8, subtype: u8, version: u8, att_obj: Option<&Map<String, serde_json::Value>>) -> Vec<u8> {
+        let mut pruned_bytes = 0u32;
+        build_attachment_bytes_from_json(type_byte, subtype, version, att_obj, &mut pruned_bytes)
+    }
+
     #[test]
     fn test_binary_serialize_empty_payment() {
-        let bytes = build_attachment_bytes_from_json(TYPE_PAYMENT, SUBTYPE_PAYMENT_ORDINARY_PAYMENT, 1, None);
+        let bytes = build_att_bytes(TYPE_PAYMENT, SUBTYPE_PAYMENT_ORDINARY_PAYMENT, 1, None);
         assert!(bytes.is_empty(), "Ordinary payment should have empty attachment bytes");
     }
 
@@ -1936,7 +1942,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_COLORED_COINS, SUBTYPE_COLORED_COINS_ASSET_ISSUANCE, 1, Some(att_map)
         );
 
@@ -1952,7 +1958,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_COLORED_COINS, SUBTYPE_COLORED_COINS_ASSET_TRANSFER, 1, Some(att_map)
         );
 
@@ -1971,7 +1977,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_PAYMENT, SUBTYPE_PAYMENT_ORDINARY_PAYMENT, 1, Some(att_map)
         );
 
@@ -2049,7 +2055,7 @@ mod tests {
 
         // === 2. 序列化 attachment_bytes ===
         // type=2(ColoredCoins), subtype=0(AssetIssuance), version=1
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_COLORED_COINS,
             SUBTYPE_COLORED_COINS_ASSET_ISSUANCE,
             1,
@@ -2196,7 +2202,7 @@ mod tests {
 
         // === 2. 序列化 attachment_bytes ===
         // type=1(Messaging), subtype=9(PhasingVoteCasting), version=1
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_MESSAGING,
             SUBTYPE_MESSAGING_PHASING_VOTE_CASTING,
             1,
@@ -2264,7 +2270,7 @@ mod tests {
         let att_map = val.as_object().unwrap();
 
         // === 1. 序列化 attachment_bytes ===
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_COLORED_COINS,
             SUBTYPE_COLORED_COINS_ASK_ORDER_PLACEMENT,
             1,
@@ -2325,7 +2331,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_COLORED_COINS,
             SUBTYPE_COLORED_COINS_DIVIDEND_PAYMENT,
             1,
@@ -2378,7 +2384,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_MESSAGING,
             SUBTYPE_MESSAGING_ARBITRARY_MESSAGE,
             1,
@@ -2409,7 +2415,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_DATA,
             SUBTYPE_DATA_TAGGED_DATA_EXTEND,
             1,
@@ -2448,7 +2454,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_PAYMENT,
             SUBTYPE_PAYMENT_ORDINARY_PAYMENT,
             1,
@@ -2483,7 +2489,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_COLORED_COINS,
             SUBTYPE_COLORED_COINS_PROPERTY_SET,
             1,
@@ -2519,7 +2525,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_LIGHT_CONTRACT,
             SUBTYPE_LIGHT_CONTRACT_REFERENCE_DELETE,
             1,
@@ -2738,7 +2744,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_DATA, SUBTYPE_DATA_TAGGED_DATA_UPLOAD, 1, Some(att_map)
         );
 
@@ -2821,7 +2827,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_DATA, SUBTYPE_DATA_TAGGED_DATA_EXTEND, 1, Some(att_map)
         );
 
@@ -2846,7 +2852,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_PAYMENT, SUBTYPE_PAYMENT_ORDINARY_PAYMENT, 1, Some(att_map)
         );
 
@@ -2871,7 +2877,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_MESSAGING, SUBTYPE_MESSAGING_ARBITRARY_MESSAGE, 1, Some(att_map)
         );
 
@@ -2895,7 +2901,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_LIGHT_CONTRACT, SUBTYPE_LIGHT_CONTRACT_REFERENCE_DELETE, 1, Some(att_map)
         );
 
@@ -2932,7 +2938,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_MONETARY_SYSTEM, SUBTYPE_MONETARY_SYSTEM_CURRENCY_ISSUANCE, 1, Some(att_map)
         );
 
@@ -2961,7 +2967,7 @@ mod tests {
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
-        let bytes = build_attachment_bytes_from_json(
+        let bytes = build_att_bytes(
             TYPE_COLORED_COINS, SUBTYPE_COLORED_COINS_PROPERTY_SET, 1, Some(att_map)
         );
 

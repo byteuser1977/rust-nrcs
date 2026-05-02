@@ -3266,10 +3266,11 @@ impl AccountCurrencyRepository for SqliteAccountCurrencyRepository {
                 .await
                 .unwrap_or(0);
             sqlx::query(
-                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES (?, ?, ?, 0, ?, 1)"
+                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES (?, ?, ?, ?, ?, 1)"
             )
             .bind(account_id)
             .bind(currency_id)
+            .bind(delta)
             .bind(delta)
             .bind(current_height)
             .execute(&self.pool)
