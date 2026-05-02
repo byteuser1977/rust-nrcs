@@ -260,6 +260,8 @@ pub struct Transaction {
     #[serde(default)]
     pub attachment_bytes: Vec<u8>,
     #[serde(skip)]
+    pub pruned_attachment_bytes: u32,
+    #[serde(skip)]
     pub attachment_json: Option<serde_json::Map<String, serde_json::Value>>,
     #[serde(default)]
     pub phased: bool,
@@ -305,6 +307,7 @@ impl Default for Transaction {
             full_hash: Hash256([0u8; 32]),
             referenced_transaction_full_hash: None,
             attachment_bytes: vec![],
+            pruned_attachment_bytes: 0,
             attachment_json: None,
             phased: false,
             has_message: false,
@@ -350,6 +353,7 @@ impl Transaction {
             full_hash: Hash256([0u8; 32]),
             referenced_transaction_full_hash: None,
             attachment_bytes: vec![],
+            pruned_attachment_bytes: 0,
             attachment_json: None,
             phased: false,
             has_message: false,
@@ -512,13 +516,14 @@ impl Transaction {
 
         // 使用二进制协议序列化 attachment_bytes（与 Java NRCS 一致）
         // 优先使用 JSON 中的 attachmentBytes 字段（hex 编码），否则从 attachment 对象生成
+        let mut pruned_bytes: u32 = 0;
         let attachment_bytes = if let Some(hex_str) = obj.get("attachmentBytes")
             .and_then(|v| v.as_str())
         {
             hex::decode(hex_str).unwrap_or_default()
         } else {
             crate::attachment_serde::build_attachment_bytes_from_json(
-                type_byte, subtype, version, att_obj.as_ref(),
+                type_byte, subtype, version, att_obj.as_ref(), &mut pruned_bytes,
             )
         };
 
@@ -548,6 +553,7 @@ impl Transaction {
             full_hash,
             referenced_transaction_full_hash,
             attachment_bytes,
+            pruned_attachment_bytes: pruned_bytes,
             attachment_json: att_obj,
             phased,
             has_message,

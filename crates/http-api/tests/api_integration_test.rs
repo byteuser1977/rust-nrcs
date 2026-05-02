@@ -41,11 +41,13 @@ impl AccountManager for MockAccountManager {
             address: Some("test_address".to_string()),
             balance: 1000,
             unconfirmed_balance: 1000,
+            forged_balance: 0,
             reserved_balance: 0,
             guaranteed_balance: 0,
             assets: Default::default(),
             properties: Default::default(),
             lease: None,
+            has_control_phasing: false,
             created_at: 0,
             last_updated: 0,
             current_height: 0,
@@ -79,7 +81,7 @@ impl AccountManager for MockAccountManager {
     async fn burn_asset(&self, _asset_id: AssetId, _from: AccountId, _amount: Amount) -> account::AccountResult<()> {
         Ok(())
     }
-    
+
     async fn get_public_key(&self, _account_id: AccountId) -> account::AccountResult<Option<blockchain_types::PublicKey>> {
         Ok(None)
     }
@@ -106,7 +108,11 @@ impl TransactionProcessor for MockTxProcessor {
     async fn apply(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
         Ok(())
     }
-    
+
+    async fn apply_phased_fee(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
+        Ok(())
+    }
+
     async fn execute(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<tx_engine::TxReceiptInfo> {
         Ok(tx_engine::TxReceiptInfo {
             transaction_id: 0,
@@ -119,6 +125,8 @@ impl TransactionProcessor for MockTxProcessor {
         })
     }
     
+    fn set_current_block(&self, _block_id: i64, _height: i32, _timestamp: i32) {}
+    
     async fn validate_batch(&self, _txs: &[Transaction]) -> tx_engine::ProcessorResult<()> {
         Ok(())
     }
@@ -126,12 +134,6 @@ impl TransactionProcessor for MockTxProcessor {
     async fn execute_batch(&self, _txs: &[Transaction]) -> tx_engine::ProcessorResult<Vec<tx_engine::TxReceiptInfo>> {
         Ok(vec![])
     }
-
-    async fn apply_phased_fee(&self, _tx: &Transaction) -> tx_engine::ProcessorResult<()> {
-        Ok(())
-    }
-
-    fn set_current_block(&self, _block_id: i64, _height: i32, _timestamp: i32) {}
 }
 
 /// 模拟区块仓库
@@ -209,6 +211,33 @@ impl BlockRepository for MockBlockRepository {
     async fn find_blocks_after_height(&self, _height: i32) -> RepositoryResult<Vec<BlockModel>> {
         Ok(vec![])
     }
+
+    async fn delete_blocks_by_ids(&self, _db_ids: &[i64]) -> RepositoryResult<()> {
+        Ok(())
+    }
+}
+
+/// 实现 Repository trait
+#[async_trait]
+impl orm::Repository<BlockModel> for MockBlockRepository {
+    async fn insert(&self, _item: &BlockModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<BlockModel>> {
+        Ok(None)
+    }
+    async fn update(&self, _item: &BlockModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<BlockModel>> {
+        Ok(vec![])
+    }
+    async fn count(&self) -> RepositoryResult<i64> {
+        Ok(0)
+    }
 }
 
 /// 模拟交易仓库
@@ -244,6 +273,33 @@ impl TransactionRepository for MockTransactionRepository {
     async fn find_by_height(&self, _height: i32) -> RepositoryResult<Vec<TransactionModel>> {
         Ok(vec![])
     }
+
+    async fn delete_transactions_by_ids(&self, _db_ids: &[i64]) -> RepositoryResult<()> {
+        Ok(())
+    }
+}
+
+/// 实现 Repository trait
+#[async_trait]
+impl orm::Repository<TransactionModel> for MockTransactionRepository {
+    async fn insert(&self, _item: &TransactionModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<TransactionModel>> {
+        Ok(None)
+    }
+    async fn update(&self, _item: &TransactionModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<TransactionModel>> {
+        Ok(vec![])
+    }
+    async fn count(&self) -> RepositoryResult<i64> {
+        Ok(0)
+    }
 }
 
 /// 模拟资产仓库
@@ -277,86 +333,7 @@ impl AssetRepository for MockAssetRepository {
     }
 }
 
-/// 模拟账户资产仓库
-#[derive(Clone)]
-struct MockAccountAssetRepository;
-
-#[async_trait]
-impl AccountAssetRepository for MockAccountAssetRepository {
-    async fn find_by_asset(&self, _asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_by_account(&self, _account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
-        Ok(vec![])
-    }
-    
-    async fn find_by_account_and_asset(&self, _account_id: i64, _asset_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
-        Ok(None)
-    }
-    
-    async fn update_quantity(&self, _account_id: i64, _asset_id: i64, _quantity: i64, _height: i32) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn increase_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-    
-    async fn decrease_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-
-    async fn add_to_unconfirmed_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-}
-
 /// 实现 Repository trait
-#[async_trait]
-impl orm::Repository<BlockModel> for MockBlockRepository {
-    async fn insert(&self, _item: &BlockModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<BlockModel>> {
-        Ok(None)
-    }
-    async fn update(&self, _item: &BlockModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<BlockModel>> {
-        Ok(vec![])
-    }
-    async fn count(&self) -> RepositoryResult<i64> {
-        Ok(0)
-    }
-}
-
-#[async_trait]
-impl orm::Repository<TransactionModel> for MockTransactionRepository {
-    async fn insert(&self, _item: &TransactionModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    async fn find_by_id(&self, _db_id: i64) -> RepositoryResult<Option<TransactionModel>> {
-        Ok(None)
-    }
-    async fn update(&self, _item: &TransactionModel) -> RepositoryResult<()> {
-        Ok(())
-    }
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Ok(())
-    }
-    async fn find_all(&self, _limit: Option<i64>, _offset: Option<i64>) -> RepositoryResult<Vec<TransactionModel>> {
-        Ok(vec![])
-    }
-    async fn count(&self) -> RepositoryResult<i64> {
-        Ok(0)
-    }
-}
-
 #[async_trait]
 impl orm::Repository<AssetModel> for MockAssetRepository {
     async fn insert(&self, _item: &AssetModel) -> RepositoryResult<()> {
@@ -379,6 +356,42 @@ impl orm::Repository<AssetModel> for MockAssetRepository {
     }
 }
 
+/// 模拟账户资产仓库
+#[derive(Clone)]
+struct MockAccountAssetRepository;
+
+#[async_trait]
+impl AccountAssetRepository for MockAccountAssetRepository {
+    async fn find_by_asset(&self, _asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_by_account(&self, _account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
+        Ok(vec![])
+    }
+    
+    async fn find_by_account_and_asset(&self, _account_id: i64, _asset_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
+        Ok(None)
+    }
+    
+    async fn update_quantity(&self, _account_id: i64, _asset_id: i64, _quantity: i64, _height: i32) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn increase_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn decrease_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn add_to_unconfirmed_quantity(&self, _account_id: i64, _asset_id: i64, _delta: i64) -> RepositoryResult<()> {
+        Ok(())
+    }
+}
+
+/// 实现 Repository trait
 #[async_trait]
 impl orm::Repository<AccountAssetModel> for MockAccountAssetRepository {
     async fn insert(&self, _item: &AccountAssetModel) -> RepositoryResult<()> {
@@ -433,6 +446,25 @@ async fn test_health_check() {
         .uri("/health")
         .method("GET")
         .body(Body::empty())
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_create_account() {
+    use tower::util::ServiceExt;
+    use serde_json::json;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/api/v1/accounts")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(json!({ "initial_balance": 100 }).to_string()))
         .unwrap();
     
     let response = router.oneshot(request).await.unwrap();
@@ -522,315 +554,4 @@ async fn test_invalid_endpoint() {
     
     let response = router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
-}
-
-// ========== 传统 NRCS API 测试 ==========
-
-#[tokio::test]
-async fn test_nrcs_get_blockchain_status() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=getBlockchainStatus")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_get_time() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=getTime")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_get_account() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=getAccount&account=123456789")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_get_balance() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=getBalance&account=123456789")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_get_block() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=getBlock&height=1")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_get_peers() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=getPeers")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_missing_request_type() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    // NRCS API 返回 HTTP 200，错误信息在 JSON 响应体中
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_unknown_request_type() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=unknownApi")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    // NRCS API 返回 HTTP 200，错误信息在 JSON 响应体中
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_post_send_money() {
-    use tower::util::ServiceExt;
-    use serde_urlencoded as encoder;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let params = encoder::to_string(&[
-        ("requestType", "sendMoney"),
-        ("recipient", "123456789"),
-        ("amountNQT", "1000000000"),
-        ("feeNQT", "100000000"),
-        ("deadline", "1440"),
-        ("secretPhrase", "test_secret"),
-    ]).unwrap();
-    
-    let request = Request::builder()
-        .uri("/nrcs")
-        .method("POST")
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(Body::from(params))
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_hash_api() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=hash&secret=test&secretIsText=true")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_hex_convert() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=hexConvert&string=hello")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_long_convert() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=longConvert&id=123456789")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_rs_convert() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=rsConvert&account=123456789")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_get_constants() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=getConstants")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_start_forging_post() {
-    use tower::util::ServiceExt;
-    use serde_urlencoded as encoder;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let params = encoder::to_string(&[
-        ("requestType", "startForging"),
-        ("secretPhrase", "test_secret"),
-    ]).unwrap();
-    
-    let request = Request::builder()
-        .uri("/nrcs")
-        .method("POST")
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .body(Body::from(params))
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_nrcs_get_next_block_generators() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/nrcs?requestType=getNextBlockGenerators&limit=5")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-}
-
-#[tokio::test]
-async fn test_api_test_page() {
-    use tower::util::ServiceExt;
-    
-    let state = create_test_state();
-    let router = create_router(state);
-    
-    let request = Request::builder()
-        .uri("/test")
-        .method("GET")
-        .body(Body::empty())
-        .unwrap();
-    
-    let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
 }

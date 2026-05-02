@@ -135,8 +135,10 @@ pub fn build_attachment_bytes_from_json(
     subtype: u8,
     _version: u8,
     att_obj: Option<&Map<String, serde_json::Value>>,
+    pruned_bytes: &mut u32,
 ) -> Vec<u8> {
     let mut result = Vec::new();
+    *pruned_bytes = 0;
 
     let att_map = match att_obj {
         Some(m) => m,
@@ -252,17 +254,28 @@ pub fn build_attachment_bytes_from_json(
 
     // PrunablePlainMessage appendix（对应 Java: PrunablePlainMessage）
     // Java 源码 (PrunablePlainMessage.java:106-108): buffer.put(getHash())
-    // JSON 中使用 "messageHash" 字段存储 hash
-    // 检测方式：有 "messageHash" 字段 或 有 "version.PrunablePlainMessage" 字段
+    // getBytes() 始终包含 PrunablePlainMessage 字节（用于 payload_hash 计算）
+    // 但 getFullSize() 在 pruned 时排除该附录（用于 payload length 检查）
+    // attachment_bytes 包含完整字节以保证 payload_hash 匹配
     let ppm_hash = att_map.get("messageHash")
         .and_then(|v| v.as_str())
         .and_then(|s| hex::decode(s).ok());
 
     if let Some(hash_bytes) = ppm_hash {
         let ppm_version = get_appendix_version("version.PrunablePlainMessage", att_map);
+        let before = result.len();
         put_version_and_data(&mut result, ppm_version, |buf| {
             put_bytes(buf, &hash_bytes);
         });
+        // 记录被裁剪数据（仅 hash 无实际消息内容）的字节数
+        let ppm_has_message = att_map.get("message")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+        if !ppm_has_message {
+            let data_len = (result.len() - before) as u32;
+            *pruned_bytes += data_len;
+        }
     } else if att_map.get("version.PrunablePlainMessage").is_some() {
         let ppm_version = get_appendix_version("version.PrunablePlainMessage", att_map);
         put_version_and_data(&mut result, ppm_version, |buf| {
@@ -271,16 +284,30 @@ pub fn build_attachment_bytes_from_json(
     }
 
     // PrunableEncryptedMessage appendix（对应 Java: PrunableEncryptedMessage）
-    // JSON 中使用 "encryptedMessageHash" 字段存储 hash
     let pem_hash = att_map.get("encryptedMessageHash")
         .and_then(|v| v.as_str())
         .and_then(|s| hex::decode(s).ok());
 
     if let Some(hash_bytes) = pem_hash {
         let pem_version = get_appendix_version("version.PrunableEncryptedMessage", att_map);
+        let before = result.len();
         put_version_and_data(&mut result, pem_version, |buf| {
             put_bytes(buf, &hash_bytes);
         });
+        let pem_has_data = att_map.get("encryptedMessage")
+            .and_then(|v| v.as_object())
+            .and_then(|obj| obj.get("data"))
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false)
+            || att_map.get("encryptedData")
+                .and_then(|v| v.as_str())
+                .map(|s| !s.is_empty())
+                .unwrap_or(false);
+        if !pem_has_data {
+            let data_len = (result.len() - before) as u32;
+            *pruned_bytes += data_len;
+        }
     } else if att_map.get("version.PrunableEncryptedMessage").is_some() {
         let pem_version = get_appendix_version("version.PrunableEncryptedMessage", att_map);
         put_version_and_data(&mut result, pem_version, |buf| {

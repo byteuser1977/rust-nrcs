@@ -4052,14 +4052,18 @@ impl Repository<ContractReferenceModel> for PgContractReferenceRepository {
     async fn insert(&self, cr: &ContractReferenceModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO contract_reference (id, account_id, contract_name, height)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO contract_reference (id, account_id, contract_name, contract_params, contract_transaction_chain_id, contract_transaction_full_hash, height, latest)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
         .bind(cr.id)
         .bind(cr.account_id)
         .bind(&cr.contract_name)
+        .bind(&cr.contract_params)
+        .bind(cr.contract_transaction_chain_id)
+        .bind(&cr.contract_transaction_full_hash)
         .bind(cr.height)
+        .bind(cr.latest)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;

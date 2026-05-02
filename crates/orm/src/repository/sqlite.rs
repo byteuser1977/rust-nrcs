@@ -3520,14 +3520,18 @@ impl Repository<ContractReferenceModel> for SqliteContractReferenceRepository {
     async fn insert(&self, cr: &ContractReferenceModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO contract_reference (id, account_id, contract_name, height)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO contract_reference (id, account_id, contract_name, contract_params, contract_transaction_chain_id, contract_transaction_full_hash, height, latest)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(cr.id)
         .bind(cr.account_id)
         .bind(&cr.contract_name)
+        .bind(&cr.contract_params)
+        .bind(cr.contract_transaction_chain_id)
+        .bind(&cr.contract_transaction_full_hash)
         .bind(cr.height)
+        .bind(cr.latest)
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -4833,6 +4837,15 @@ impl AccountPropertyRepository for SqliteAccountPropertyRepository {
     async fn delete_by_id(&self, id: i64) -> RepositoryResult<()> {
         sqlx::query("UPDATE account_property SET latest = 0 WHERE id = ? AND latest = 1")
             .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn soft_delete_by_id(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("UPDATE account_property SET latest = 0 WHERE db_id = ? AND latest = 1")
+            .bind(db_id)
             .execute(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;

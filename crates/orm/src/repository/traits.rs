@@ -312,6 +312,7 @@ pub trait AccountPropertyRepository: Repository<AccountPropertyModel> {
     async fn find_by_property(&self, account_id: i64, property: &str) -> RepositoryResult<Option<AccountPropertyModel>>;
     async fn upsert(&self, model: &AccountPropertyModel) -> RepositoryResult<()>;
     async fn delete_by_id(&self, id: i64) -> RepositoryResult<()>;
+    async fn soft_delete_by_id(&self, db_id: i64) -> RepositoryResult<()>;
 }
 
 #[async_trait]

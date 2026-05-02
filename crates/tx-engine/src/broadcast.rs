@@ -298,6 +298,7 @@ mod tests {
             full_hash: Hash256([1u8; 32]),
             referenced_transaction_full_hash: None,
             attachment_bytes: vec![],
+            pruned_attachment_bytes: 0,
             attachment_json: None,
             phased: false,
             has_message: false,

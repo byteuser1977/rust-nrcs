@@ -383,11 +383,13 @@ async fn start_node(
         account_lease_repo,
     ));
 
-    // 创建区块奖励应用器
-    let block_reward_applicator = Arc::new(BlockRewardApplicator::new(
+    // 创建区块奖励应用器（含guaranteed_balance更新）
+    let block_reward_applicator = Arc::new(BlockRewardApplicator::with_guaranteed_balance(
         Arc::clone(&account_repo),
         Arc::clone(&block_repo),
         Arc::clone(&public_key_repo),
+        Some(Arc::clone(&ledger_repo)),
+        Arc::clone(&guaranteed_balance_repo),
     ));
 
     // 创建区块验证器（包含完整的两阶段提交逻辑）

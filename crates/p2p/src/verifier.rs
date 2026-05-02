@@ -75,14 +75,25 @@ impl BlockchainVerifier {
                     format!("transaction {} basic validation failed: {}", idx, e)
                 ))?;
 
-            // 2. 验证交易签名（Curve25519 EC-KCDSA）
-            if !tx.verify_signature() {
+            // 2. 检测 pruned transaction（对应 Java: IPrunable && !hasPrunableData()）
+            // P2P 传输时 prunable attachment 仅保留 hash，实际数据被裁剪
+            let tx_is_pruned = Self::is_transaction_pruned(tx);
+            if !has_pruned_transactions && tx_is_pruned {
+                has_pruned_transactions = true;
+            }
+
+            // 3. 验证交易签名（Curve25519 EC-KCDSA）
+            // 注意：pruned 交易的 attachment_bytes 不包含被裁剪的附录数据，
+            // 因此 get_bytes() 与签名时的完整数据不同，签名验证会失败。
+            // 对 pruned 交易跳过单笔签名验证，依赖区块级 payload_hash 校验保证完整性。
+            // （对应 Java: BlockchainProcessor.validateTransactions() 同样跳过）
+            if !tx_is_pruned && !tx.verify_signature() {
                 return Err(BlockchainError::InvalidTransaction(
                     format!("transaction {} signature verification failed", tx.id)
                 ));
             }
 
-            // 3. 累加金额和费用
+            // 4. 累加金额和费用
             total_amount = total_amount.checked_add(tx.amount)
                 .ok_or_else(|| BlockchainError::InvalidTransaction(
                     format!("transaction {} amount overflow", tx.id)
@@ -92,18 +103,15 @@ impl BlockchainVerifier {
                     format!("transaction {} fee overflow", tx.id)
                 ))?;
 
-            // 4. 累加 payload 长度（对应 Java: payloadLength += transaction.getFullSize()）
+            // 5. 累加 payload 长度（对应 Java: payloadLength += transaction.getFullSize()）
             // 基础大小 176 = signatureOffset(96) + signature(64) + version扩展(16)
-            let tx_payload_len = 176 + tx.attachment_bytes.len() as u32;
+            // attachment_bytes 包含 prunable 附录（用于 payload_hash），
+            // 但 Java getFullSize() 排除 pruned 数据，故减去 pruned_attachment_bytes
+            let tx_payload_len = 176 + tx.attachment_bytes.len() as u32 - tx.pruned_attachment_bytes;
             total_payload_length = total_payload_length.checked_add(tx_payload_len)
                 .ok_or_else(|| BlockchainError::InvalidTransaction(
                     format!("transaction {} payload length overflow", tx.id)
                 ))?;
-
-            // 5. 检测 pruned transaction（对应 Java: IPrunable && !hasPrunableData()）
-            if !has_pruned_transactions && Self::is_transaction_pruned(tx) {
-                has_pruned_transactions = true;
-            }
         }
 
         // 6. 验证区块头中的总金额和总费用

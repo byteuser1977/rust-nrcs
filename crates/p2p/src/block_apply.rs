@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use blockchain_types::prelude::{Block, AccountId, Transaction, TransactionType};
-use orm::{AccountRepository, BlockRepository, PublicKeyRepository, AccountLedgerRepository};
+use orm::{AccountRepository, BlockRepository, PublicKeyRepository, AccountLedgerRepository, AccountGuaranteedBalanceRepository};
 use orm::models::AccountLedgerModel;
 use tracing::debug;
 
@@ -19,6 +19,7 @@ pub struct BlockRewardApplicator {
     block_repo: Arc<dyn BlockRepository>,
     public_key_repo: Arc<dyn PublicKeyRepository>,
     ledger_repo: Option<Arc<dyn AccountLedgerRepository>>,
+    guaranteed_balance_repo: Option<Arc<dyn AccountGuaranteedBalanceRepository>>,
 }
 
 impl BlockRewardApplicator {
@@ -27,7 +28,7 @@ impl BlockRewardApplicator {
         block_repo: Arc<dyn BlockRepository>,
         public_key_repo: Arc<dyn PublicKeyRepository>,
     ) -> Self {
-        Self { account_repo, block_repo, public_key_repo, ledger_repo: None }
+        Self { account_repo, block_repo, public_key_repo, ledger_repo: None, guaranteed_balance_repo: None }
     }
 
     pub fn with_ledger(
@@ -36,7 +37,17 @@ impl BlockRewardApplicator {
         public_key_repo: Arc<dyn PublicKeyRepository>,
         ledger_repo: Arc<dyn AccountLedgerRepository>,
     ) -> Self {
-        Self { account_repo, block_repo, public_key_repo, ledger_repo: Some(ledger_repo) }
+        Self { account_repo, block_repo, public_key_repo, ledger_repo: Some(ledger_repo), guaranteed_balance_repo: None }
+    }
+
+    pub fn with_guaranteed_balance(
+        account_repo: Arc<dyn AccountRepository>,
+        block_repo: Arc<dyn BlockRepository>,
+        public_key_repo: Arc<dyn PublicKeyRepository>,
+        ledger_repo: Option<Arc<dyn AccountLedgerRepository>>,
+        guaranteed_balance_repo: Arc<dyn AccountGuaranteedBalanceRepository>,
+    ) -> Self {
+        Self { account_repo, block_repo, public_key_repo, ledger_repo, guaranteed_balance_repo: Some(guaranteed_balance_repo) }
     }
 
     /// Apply block rewards (Java: Block.apply())
@@ -73,6 +84,13 @@ impl BlockRewardApplicator {
             net_fee,
             block.height as i32
         ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+        if let Some(ref gb_repo) = self.guaranteed_balance_repo {
+            if net_fee > 0 {
+                gb_repo.upsert_additions(generator_id as i64, block.height as i32, net_fee).await
+                    .map_err(|e| anyhow::anyhow!("failed to update guaranteed balance: {}", e))?;
+            }
+        }
 
         // Step 5: Update forged_balance
         self.account_repo.add_to_forged_balance(
@@ -213,6 +231,11 @@ impl BlockRewardApplicator {
                     fee,
                     target_height
                 ).await.map_err(|e| anyhow::anyhow!("{}", e))?;
+
+                if let Some(ref gb_repo) = self.guaranteed_balance_repo {
+                    gb_repo.upsert_additions(prev_generator_id as i64, target_height, fee).await
+                        .map_err(|e| anyhow::anyhow!("failed to update guaranteed balance for back fee: {}", e))?;
+                }
 
                 self.account_repo.add_to_forged_balance(
                     prev_generator_id as i64,

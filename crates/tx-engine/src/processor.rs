@@ -43,6 +43,8 @@ use orm::{
     AccountLeaseRepository,
     // Asset Dividend
     AssetDividendRepository,
+    // Asset Delete + History
+    AssetDeleteRepository, AssetHistoryRepository,
 };
 use thiserror::Error;
 
@@ -334,6 +336,10 @@ pub struct DatabaseTransactionProcessor {
     // 新增：资产分红
     dividend_repo: Arc<dyn AssetDividendRepository>,
 
+    // 新增：资产删除记录 + 资产历史
+    asset_delete_repo: Arc<dyn AssetDeleteRepository>,
+    asset_history_repo: Arc<dyn AssetHistoryRepository>,
+
     // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
     exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
     currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
@@ -388,6 +394,9 @@ impl DatabaseTransactionProcessor {
         asset_property_repo: Arc<dyn AssetPropertyRepository>,
         // 新增：资产分红
         dividend_repo: Arc<dyn AssetDividendRepository>,
+        // 新增：资产删除记录 + 资产历史
+        asset_delete_repo: Arc<dyn AssetDeleteRepository>,
+        asset_history_repo: Arc<dyn AssetHistoryRepository>,
         // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
         exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
         currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
@@ -430,6 +439,9 @@ impl DatabaseTransactionProcessor {
             asset_property_repo,
             // 新增：资产分红
             dividend_repo,
+            // 新增：资产删除记录 + 资产历史
+            asset_delete_repo,
+            asset_history_repo,
             exchange_request_repo,
             currency_mint_repo,
             goods_repo,
@@ -689,6 +701,19 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
 
         if !tx.verify_signature() {
             return Err(ProcessorError::Validation("signature verification failed".to_string()));
+        }
+
+        // Java NRCS: TransactionTypeAccount.ACCOUNT_PROPERTY.validateId()
+        //   → if (Account.getProperty(txId) != null) throw NotCurrentlyValidException
+        // Prevents duplicate account property IDs
+        if tx.type_id == blockchain_types::TransactionType::Messaging
+            && (tx.subtype == 10 || tx.subtype == 11)
+        {
+            if let Ok(Some(_existing)) = self.account_property_repo.find_by_id(tx.id as i64).await {
+                return Err(ProcessorError::Validation(
+                    format!("Duplicate account property id {}", tx.id)
+                ));
+            }
         }
 
         let account = self.get_account(tx.sender_id).await?;
@@ -1058,6 +1083,21 @@ impl DatabaseTransactionProcessor {
 
         self.account_asset_repo.insert(&account_asset).await?;
 
+        // ✅ 新增：ASSET_HISTORY 记录（资产发行，发行者获得初始数量）
+        let current_timestamp = self.get_current_timestamp();
+        let history_record = AssetHistoryModel {
+            db_id: 0,
+            id: tx.id as i64,
+            full_hash: tx.full_hash.0.to_vec(),
+            asset_id,
+            account_id: sender_id as i64,
+            quantity: quantity, // 发行者获得初始数量为正数
+            timestamp: current_timestamp,
+            chain_id: 1,
+            height: current_height,
+        };
+        self.asset_history_repo.insert(&history_record).await?;
+
         info!("Asset issued: id={} owner={} quantity={} decimals={} height={}",
               asset_id, sender_id, quantity, decimals, current_height);
 
@@ -1077,20 +1117,10 @@ impl DatabaseTransactionProcessor {
         // Java: Parse asset_id and quantity from attachment
         // long assetId = transaction.getAttachment().getAssetId();
         // long quantityQNT = transaction.getAttachment().getQuantityQNT();
-        let (asset_id, quantity) = if let Some(att_json) = self.get_attachment_json(tx) {
-            let asset_id = att_json.get("asset")
-                .and_then(|v| v.as_str())
-                .and_then(|s| s.parse::<i64>().ok())
-                .unwrap_or(0);
-            let quantity = att_json.get("quantityQNT")
-                .or_else(|| att_json.get("quantity"))
-                .and_then(|v| v.as_str())
-                .and_then(|s| s.parse::<i64>().ok())
-                .unwrap_or(0);
-            (asset_id, quantity)
-        } else {
-            (0i64, 0i64)
-        };
+        let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
+        let quantity = self.parse_long_field(tx, "quantityQNT")
+            .or_else(|| self.parse_long_field(tx, "quantity"))
+            .unwrap_or(0);
 
         if asset_id == 0 || quantity <= 0 {
             return Err(ProcessorError::Validation(
@@ -1099,9 +1129,24 @@ impl DatabaseTransactionProcessor {
         }
 
         let current_height = self.get_current_height();
+        let current_timestamp = self.get_current_timestamp();
 
         // Java: senderAccount.addToAssetBalanceQNT(event, txId, assetId, -quantityQNT);
         self.account_asset_repo.decrease_quantity(sender_id as i64, asset_id, quantity).await?;
+
+        // ✅ 新增：发送方 ASSET_HISTORY 记录（减少）
+        let sender_history = AssetHistoryModel {
+            db_id: 0,
+            id: tx.id as i64,
+            full_hash: tx.full_hash.0.to_vec(),
+            asset_id,
+            account_id: sender_id as i64,
+            quantity: -quantity, // 发送方减少为负数
+            timestamp: current_timestamp,
+            chain_id: 1,
+            height: current_height,
+        };
+        self.asset_history_repo.insert(&sender_history).await?;
 
         if recipient_id != 0 {
             // Java: recipientAccount.addToAssetAndUnconfirmedAssetBalanceQNT(event, txId, assetId, quantityQNT);
@@ -1132,10 +1177,24 @@ impl DatabaseTransactionProcessor {
                 sender_id as i64,
                 recipient_id as i64,
                 quantity,
-                self.get_current_timestamp(),
+                current_timestamp,
                 current_height,
             );
             self.asset_transfer_repo.insert(&transfer).await?;
+
+            // ✅ 新增：接收方 ASSET_HISTORY 记录（增加）
+            let recipient_history = AssetHistoryModel {
+                db_id: 0,
+                id: tx.id as i64,
+                full_hash: tx.full_hash.0.to_vec(),
+                asset_id,
+                account_id: recipient_id as i64,
+                quantity: quantity, // 接收方增加为正数
+                timestamp: current_timestamp,
+                chain_id: 1,
+                height: current_height,
+            };
+            self.asset_history_repo.insert(&recipient_history).await?;
         }
 
         info!("Asset transferred: asset_id={} from={} to={} quantity={}",
@@ -1452,7 +1511,35 @@ impl DatabaseTransactionProcessor {
             // Java: senderAccount.addToAssetBalanceQNT(event, txId, assetId, -quantityQNT);
             self.account_asset_repo.decrease_quantity(sender_id, asset_id, delete_quantity).await?;
 
-            info!("Deleted {} of asset {} from account {}", delete_quantity, asset_id, sender_id);
+            // ✅ 新增：向 ASSET_DELETE 表插入删除记录（完全对齐Java实现）
+            let current_height = self.get_current_height();
+            let current_timestamp = self.get_current_timestamp();
+            let delete_record = AssetDeleteModel {
+                db_id: 0,
+                id: tx.id as i64,
+                asset_id,
+                account_id: sender_id,
+                quantity: delete_quantity,
+                timestamp: current_timestamp,
+                height: current_height,
+            };
+            self.asset_delete_repo.insert(&delete_record).await?;
+
+            // ✅ 新增：向 ASSET_HISTORY 表插入历史记录
+            let history_record = AssetHistoryModel {
+                db_id: 0,
+                id: tx.id as i64,
+                full_hash: tx.full_hash.0.to_vec(),
+                asset_id,
+                account_id: sender_id,
+                quantity: -delete_quantity, // 删除为负数
+                timestamp: current_timestamp,
+                chain_id: 1, // NRCS chain ID
+                height: current_height,
+            };
+            self.asset_history_repo.insert(&history_record).await?;
+
+            info!("Deleted {} of asset {} from account {} (tx:{})", delete_quantity, asset_id, sender_id, tx.id);
         } else {
             warn!("Invalid asset delete parameters in transaction {}", tx.id);
         }
@@ -1479,6 +1566,22 @@ impl DatabaseTransactionProcessor {
             // Update both confirmed and unconfirmed asset balance
             self.account_asset_repo.increase_quantity(sender_id, asset_id, increase_quantity).await?;
             self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, increase_quantity).await?;
+
+            // ✅ 新增：ASSET_HISTORY 记录（增加）
+            let current_height = self.get_current_height();
+            let current_timestamp = self.get_current_timestamp();
+            let history_record = AssetHistoryModel {
+                db_id: 0,
+                id: tx.id as i64,
+                full_hash: tx.full_hash.0.to_vec(),
+                asset_id,
+                account_id: sender_id,
+                quantity: increase_quantity, // 增加为正数
+                timestamp: current_timestamp,
+                chain_id: 1,
+                height: current_height,
+            };
+            self.asset_history_repo.insert(&history_record).await?;
 
             info!("Increased asset {} by {} for account {}", asset_id, increase_quantity, sender_id);
         } else {
@@ -2098,16 +2201,15 @@ impl DatabaseTransactionProcessor {
     async fn update_guaranteed_balance_for_recipient(&self, tx: &Transaction) -> ProcessorResult<()> {
         let recipient_id = tx.recipient_id.unwrap_or(0);
         let amount_nqt = tx.amount as i64;
+        let fee_nqt = tx.fee as i64;
 
-        // ✅ 修复：移除 recipient_id != 0 的限制条件
-        // NRCS Java 版本会记录所有收到金额的交易，包括发送到 Genesis 的交易
-        // 这对于 PoS 共识算法的有效余额计算至关重要
         if amount_nqt > 0 {
             let current_height = self.get_current_height();
+            let total = amount_nqt + fee_nqt;
             self.guaranteed_balance_repo.upsert_additions(
                 recipient_id as i64,
                 current_height,
-                amount_nqt
+                total
             ).await?;
         }
 
@@ -2686,12 +2788,20 @@ impl DatabaseTransactionProcessor {
                 }
             }
 
-            10 => { // ACCOUNT_PROPERTY
-                // Java: recipientAccount.setProperty(tx, sender, property, value)
-                // Reference: AccountPropertyAttachment.java
+            10 => { // ACCOUNT_PROPERTY (SUBTYPE_MESSAGING_ACCOUNT_PROPERTY)
+                // Java: recipientAccount.setProperty(tx, senderAccount, property, value)
+                // Reference: TransactionTypeAccount.ACCOUNT_PROPERTY.applyAttachment()
+                //   → Account.setProperty(tx, setterAccount, property, value)
+                //   → Convert.emptyToNull(value) — empty string → null
+                //   → find by (recipient_id, property, setter_id), upsert
                 if recipient_id != 0 {
                     let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
-                    let property_value = self.parse_string_field(tx, "value").unwrap_or_default();
+                    let raw_value = self.parse_string_field(tx, "value");
+
+                    let property_value = match raw_value.as_ref().map(|s| s.as_str()) {
+                        Some(s) if s.is_empty() => None,
+                        other => other.map(|s| s.to_string()),
+                    };
 
                     if !property_name.is_empty() {
                         let model = orm::models::AccountPropertyModel {
@@ -2700,47 +2810,32 @@ impl DatabaseTransactionProcessor {
                             recipient_id,
                             setter_id: Some(sender_id),
                             property: property_name.clone(),
-                            value: Some(property_value),
+                            value: property_value.clone(),
                             height: self.get_current_height(),
                             latest: true,
                         };
                         self.account_property_repo.upsert(&model).await
                             .map_err(|e| ProcessorError::Validation(format!("AccountProperty upsert failed: {}", e)))?;
-                        debug!("Account property set: account={}, property='{}'", recipient_id, property_name);
+                        debug!("Account property set: account={}, property='{}', value={:?}",
+                               recipient_id, property_name, property_value);
                     }
                 } else {
                     warn!("ACCOUNT_PROPERTY transaction without recipient in tx {}", tx.id);
                 }
             }
 
-            11 => { // ACCOUNT_PROPERTY_DELETE
-                // Java: senderAccount.deleteProperty(propertyId)
-                // Reference: AccountPropertyDeleteAttachment.java
-                let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
-
-                if !property_name.is_empty() {
-                    match self.account_property_repo.find_by_property(sender_id, &property_name).await {
-                        Ok(Some(prop)) => {
-                            self.account_property_repo.delete_by_id(prop.db_id).await
-                                .map_err(|e| ProcessorError::Validation(format!("AccountProperty delete failed: {}", e)))?;
-                            debug!("Account property deleted: account={}, property='{}'", sender_id, property_name);
-                        }
-                        Ok(None) => {
-                            debug!("Account property '{}' not found for account {}, skipping delete", property_name, sender_id);
-                        }
-                        Err(e) => {
-                            return Err(ProcessorError::Validation(format!("AccountProperty lookup failed: {}", e)));
-                        }
-                    }
-                }
-            }
-
-            12 => { // ACCOUNT_LONG_VALUE_PROPERTY
-                // Java: recipientAccount.setProperty(tx, sender, property, value)
-                // Reference: AccountLongValuePropertyAttachment.java
+            11 => { // ACCOUNT_LONG_VALUE_PROPERTY (SUBTYPE_MESSAGING_ACCOUNT_LONG_VALUE_PROPERTY)
+                // Java: recipientAccount.setProperty(tx, senderAccount, property, value)
+                // Same as subtype 10, but value can be longer (up to 8KB vs 255 chars)
+                // Reference: TransactionTypeAccount.ACCOUNT_LONG_VALUE_PROPERTY.applyAttachment()
                 if recipient_id != 0 {
                     let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
-                    let long_value = self.parse_long_field(tx, "value").unwrap_or(0);
+                    let raw_value = self.parse_string_field(tx, "value");
+
+                    let property_value = match raw_value.as_ref().map(|s| s.as_str()) {
+                        Some(s) if s.is_empty() => None,
+                        other => other.map(|s| s.to_string()),
+                    };
 
                     if !property_name.is_empty() {
                         let model = orm::models::AccountPropertyModel {
@@ -2749,14 +2844,54 @@ impl DatabaseTransactionProcessor {
                             recipient_id,
                             setter_id: Some(sender_id),
                             property: property_name.clone(),
-                            value: Some(long_value.to_string()),
+                            value: property_value.clone(),
                             height: self.get_current_height(),
                             latest: true,
                         };
                         self.account_property_repo.upsert(&model).await
-                            .map_err(|e| ProcessorError::Validation(format!("AccountProperty upsert failed: {}", e)))?;
-                        debug!("Account long-value property set: account={}, property='{}', value={}", recipient_id, property_name, long_value);
+                            .map_err(|e| ProcessorError::Validation(format!("AccountLongValueProperty upsert failed: {}", e)))?;
+                        debug!("Account long-value property set: account={}, property='{}'",
+                               recipient_id, property_name);
                     }
+                } else {
+                    warn!("ACCOUNT_LONG_VALUE_PROPERTY transaction without recipient in tx {}", tx.id);
+                }
+            }
+
+            12 => { // ACCOUNT_PROPERTY_DELETE (SUBTYPE_MESSAGING_ACCOUNT_PROPERTY_DELETE)
+                // Java: senderAccount.deleteProperty(propertyId)
+                // Reference: TransactionTypeAccount.ACCOUNT_PROPERTY_DELETE.applyAttachment()
+                //   → AccountProperty.dao.findFirstBy("id=?", propertyId)
+                //   → Permission: setterId==caller || recipientId==caller
+                //   → ap.delete(height) — soft delete (set latest=false)
+                let property_id = self.parse_long_field(tx, "propertyId")
+                    .or_else(|| self.parse_long_field(tx, "property"))
+                    .unwrap_or(0);
+
+                if property_id != 0 {
+                    match self.account_property_repo.find_by_id(property_id as i64).await {
+                        Ok(Some(prop)) => {
+                            // Permission check: only setter or recipient can delete
+                            if prop.setter_id != Some(sender_id) && prop.recipient_id != sender_id {
+                                return Err(ProcessorError::Validation(
+                                    format!("Account {} cannot delete property {} belonging to another account",
+                                            sender_id, property_id)));
+                            }
+
+                            // Soft delete: set latest=false (consistent with Java's delete(height))
+                            self.account_property_repo.soft_delete_by_id(prop.db_id).await
+                                .map_err(|e| ProcessorError::Validation(format!("AccountProperty soft_delete failed: {}", e)))?;
+                            debug!("Account property soft-deleted: id={}, db_id={}", property_id, prop.db_id);
+                        }
+                        Ok(None) => {
+                            debug!("Account property id={} not found, skipping delete", property_id);
+                        }
+                        Err(e) => {
+                            return Err(ProcessorError::Validation(format!("AccountProperty lookup failed: {}", e)));
+                        }
+                    }
+                } else {
+                    warn!("ACCOUNT_PROPERTY_DELETE transaction without propertyId in tx {}", tx.id);
                 }
             }
             _ => {

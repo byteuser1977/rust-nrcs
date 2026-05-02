@@ -146,6 +146,7 @@ impl TransactionModel {
                 BlockchainError::InvalidHash("full_hash length mismatch".to_string())
             })?,
             attachment_bytes: self.attachment_bytes.clone().unwrap_or_default(),
+            pruned_attachment_bytes: 0,
             phased: self.phased,
             has_message: self.has_message,
             has_encrypted_message: self.has_encrypted_message,
@@ -180,6 +181,7 @@ impl TransactionModel {
             transaction_index: 0,
             phased: tx.phased,
             attachment_bytes: Some(tx.attachment_bytes.clone()),
+            pruned_attachment_bytes: 0,
             version: tx.version as i16,
             has_message: tx.has_message,
             has_encrypted_message: tx.has_encrypted_message,
