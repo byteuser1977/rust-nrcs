@@ -176,9 +176,9 @@ async fn main() -> Result<()> {
     let cfg = NodeConfig::load().context("Failed to load configuration")?;
 
     let filter = if std::env::var("RUST_LOG").is_ok() {
-        EnvFilter::from_default_env()
+        EnvFilter::from_default_env().add_directive("sqlx=warn".parse()?)
     } else {
-        EnvFilter::new(&cfg.log_level)
+        EnvFilter::new(&cfg.log_level).add_directive("sqlx=warn".parse()?)
     };
     tracing_subscriber::registry()
         .with(filter)

@@ -30,4 +30,4 @@ algorithm = "pos"
 # 日志配置
 level = "debug"  # trace / debug / info / warn / error
 format = "json"  # json / text
-output = "stdout"  # stdout / file
+output = "file"  # stdout / file
