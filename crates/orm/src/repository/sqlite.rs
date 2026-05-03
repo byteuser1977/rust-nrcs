@@ -1225,7 +1225,7 @@ impl AccountAssetRepository for SqliteAccountAssetRepository {
     }
 
     async fn add_to_unconfirmed_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE account_asset
             SET unconfirmed_quantity = unconfirmed_quantity + ?, latest = 1
@@ -1238,6 +1238,24 @@ impl AccountAssetRepository for SqliteAccountAssetRepository {
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
+
+        if result.rows_affected() == 0 && delta != 0 {
+            let current_height: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(height), 0) FROM block")
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
+            sqlx::query(
+                "INSERT INTO account_asset (account_id, asset_id, quantity, unconfirmed_quantity, height, latest) VALUES (?, ?, 0, ?, ?, 1)"
+            )
+            .bind(account_id)
+            .bind(asset_id)
+            .bind(delta)
+            .bind(current_height)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        }
+
         Ok(())
     }
 }
@@ -1713,8 +1731,8 @@ impl Repository<AliasModel> for SqliteAliasRepository {
             r#"
             INSERT INTO alias (
                 id, account_id, alias_name, alias_name_lower, alias_uri,
-                height, latest
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                timestamp, height, latest
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(alias.id)
@@ -1984,8 +2002,8 @@ impl Repository<AssetTransferModel> for SqliteAssetTransferRepository {
     async fn insert(&self, transfer: &AssetTransferModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO asset_transfer (id, asset_id, sender_id, recipient_id, quantity, height)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO asset_transfer (id, asset_id, sender_id, recipient_id, quantity, timestamp, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(transfer.id)
@@ -2155,8 +2173,13 @@ impl Repository<AskOrderModel> for SqliteAskOrderRepository {
         Err(RepositoryError::Validation("use update_quantity for ask_order".to_string()))
     }
 
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("delete not implemented for ask_order".to_string()))
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("UPDATE ask_order SET latest = 0 WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AskOrderModel>> {
@@ -2294,8 +2317,13 @@ impl Repository<BidOrderModel> for SqliteBidOrderRepository {
         Err(RepositoryError::Validation("use update_quantity for bid_order".to_string()))
     }
 
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("delete not implemented for bid_order".to_string()))
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("UPDATE bid_order SET latest = 0 WHERE db_id = ?")
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<BidOrderModel>> {
@@ -2399,8 +2427,9 @@ impl Repository<TradeModel> for SqliteTradeRepository {
             r#"
             INSERT INTO trade (
                 asset_id, block_id, ask_order_id, bid_order_id, ask_order_height,
-                bid_order_height, seller_id, buyer_id, is_buy, quantity, price, height
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                bid_order_height, seller_id, buyer_id, is_buy, quantity, price,
+                timestamp, height
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(trade.asset_id)
@@ -2548,8 +2577,8 @@ impl Repository<GoodsModel> for SqliteGoodsRepository {
             r#"
             INSERT INTO goods (
                 id, seller_id, name, description, parsed_tags, tags,
-                quantity, price, delisted, height, latest, has_image
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                timestamp, quantity, price, delisted, height, latest, has_image
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(goods.id)
@@ -2992,9 +3021,9 @@ impl Repository<PollModel> for SqlitePollRepository {
             r#"
             INSERT INTO poll (
                 id, account_id, name, description, options, min_num_options, max_num_options,
-                min_range_value, max_range_value, finish_height, voting_model,
+                min_range_value, max_range_value, timestamp, finish_height, voting_model,
                 min_balance, min_balance_model, holding_id, height
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(poll.id)
@@ -3536,11 +3565,10 @@ impl AccountCurrencyRepository for SqliteAccountCurrencyRepository {
                 .await
                 .unwrap_or(0);
             sqlx::query(
-                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES (?, ?, ?, ?, ?, ?)"
+                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES (?, ?, ?, 0, ?, 1)"
             )
             .bind(account_id)
             .bind(currency_id)
-            .bind(delta)
             .bind(delta)
             .bind(current_height)
             .execute(&self.pool)
@@ -3552,7 +3580,7 @@ impl AccountCurrencyRepository for SqliteAccountCurrencyRepository {
     }
 
     async fn add_to_unconfirmed_units(&self, account_id: i64, currency_id: i64, delta: i64) -> RepositoryResult<()> {
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE account_currency
             SET unconfirmed_units = unconfirmed_units + ?, latest = 1
@@ -3565,6 +3593,24 @@ impl AccountCurrencyRepository for SqliteAccountCurrencyRepository {
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
+
+        if result.rows_affected() == 0 && delta != 0 {
+            let current_height: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(height), 0) FROM block")
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
+            sqlx::query(
+                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES (?, ?, 0, ?, ?, 1)"
+            )
+            .bind(account_id)
+            .bind(currency_id)
+            .bind(delta)
+            .bind(current_height)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        }
+
         Ok(())
     }
 }
@@ -3684,8 +3730,8 @@ impl Repository<CurrencyTransferModel> for SqliteCurrencyTransferRepository {
     async fn insert(&self, transfer: &CurrencyTransferModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO currency_transfer (id, currency_id, sender_id, recipient_id, units, height)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO currency_transfer (id, currency_id, sender_id, recipient_id, units, timestamp, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(transfer.id)
@@ -4024,8 +4070,8 @@ impl Repository<AssetHistoryModel> for SqliteAssetHistoryRepository {
     async fn insert(&self, history: &AssetHistoryModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO asset_history (id, full_hash, asset_id, account_id, quantity, chain_id, height)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO asset_history (id, full_hash, asset_id, account_id, quantity, timestamp, chain_id, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(history.id)

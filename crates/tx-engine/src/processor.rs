@@ -2378,7 +2378,6 @@ impl DatabaseTransactionProcessor {
                 // Java: recipientAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, txId, currencyId, +units);
                 self.account_repo.get_or_create(recipient_id).await?;
 
-                // Update both confirmed and unconfirmed for recipient
                 self.account_currency_repo.update_units(recipient_id, currency_id, units).await?;
                 self.account_currency_repo.add_to_unconfirmed_units(recipient_id, currency_id, units).await?;
             }

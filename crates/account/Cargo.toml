@@ -37,3 +37,5 @@ tracing = "0.1"
 [dev-dependencies]
 criterion = "0.5"
 tokio-test = "0.4"
+sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "sqlite"] }
+tokio = { version = "1.0", features = ["rt", "macros", "sync"] }

@@ -4,7 +4,7 @@
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode},
+    http::{Request, StatusCode, Method},
 };
 use http_api::{routes::create_router, state::ApiState};
 use blockchain_types::prelude::*;
@@ -14,7 +14,6 @@ use tx_engine::TransactionProcessor;
 use async_trait::async_trait;
 use std::sync::Arc;
 
-/// 模拟账户管理器
 #[derive(Clone)]
 struct MockAccountManager;
 
@@ -87,7 +86,6 @@ impl AccountManager for MockAccountManager {
     }
 }
 
-/// 模拟交易处理器
 #[derive(Clone)]
 struct MockTxProcessor;
 
@@ -136,7 +134,6 @@ impl TransactionProcessor for MockTxProcessor {
     }
 }
 
-/// 模拟区块仓库
 #[derive(Clone)]
 struct MockBlockRepository;
 
@@ -217,7 +214,6 @@ impl BlockRepository for MockBlockRepository {
     }
 }
 
-/// 实现 Repository trait
 #[async_trait]
 impl orm::Repository<BlockModel> for MockBlockRepository {
     async fn insert(&self, _item: &BlockModel) -> RepositoryResult<()> {
@@ -240,7 +236,6 @@ impl orm::Repository<BlockModel> for MockBlockRepository {
     }
 }
 
-/// 模拟交易仓库
 #[derive(Clone)]
 struct MockTransactionRepository;
 
@@ -279,7 +274,6 @@ impl TransactionRepository for MockTransactionRepository {
     }
 }
 
-/// 实现 Repository trait
 #[async_trait]
 impl orm::Repository<TransactionModel> for MockTransactionRepository {
     async fn insert(&self, _item: &TransactionModel) -> RepositoryResult<()> {
@@ -302,7 +296,6 @@ impl orm::Repository<TransactionModel> for MockTransactionRepository {
     }
 }
 
-/// 模拟资产仓库
 #[derive(Clone)]
 struct MockAssetRepository;
 
@@ -333,7 +326,6 @@ impl AssetRepository for MockAssetRepository {
     }
 }
 
-/// 实现 Repository trait
 #[async_trait]
 impl orm::Repository<AssetModel> for MockAssetRepository {
     async fn insert(&self, _item: &AssetModel) -> RepositoryResult<()> {
@@ -356,7 +348,6 @@ impl orm::Repository<AssetModel> for MockAssetRepository {
     }
 }
 
-/// 模拟账户资产仓库
 #[derive(Clone)]
 struct MockAccountAssetRepository;
 
@@ -391,7 +382,6 @@ impl AccountAssetRepository for MockAccountAssetRepository {
     }
 }
 
-/// 实现 Repository trait
 #[async_trait]
 impl orm::Repository<AccountAssetModel> for MockAccountAssetRepository {
     async fn insert(&self, _item: &AccountAssetModel) -> RepositoryResult<()> {
@@ -414,7 +404,6 @@ impl orm::Repository<AccountAssetModel> for MockAccountAssetRepository {
     }
 }
 
-/// 创建测试用的 ApiState
 fn create_test_state() -> ApiState {
     let account_manager = Arc::new(MockAccountManager) as Arc<dyn AccountManager>;
     let tx_processor = Arc::new(MockTxProcessor) as Arc<dyn TransactionProcessor>;
@@ -523,6 +512,23 @@ async fn test_get_latest_block() {
 }
 
 #[tokio::test]
+async fn test_get_block_by_height_not_found() {
+    use tower::util::ServiceExt;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/api/v1/blocks/999")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn test_metrics() {
     use tower::util::ServiceExt;
     
@@ -554,4 +560,188 @@ async fn test_invalid_endpoint() {
     
     let response = router.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_nrcs_get_missing_request_type() {
+    use tower::util::ServiceExt;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/nrcs")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+    let body_str = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body_str.contains("errorCode") || body_str.contains("error"), "Should contain error response");
+}
+
+#[tokio::test]
+async fn test_nrcs_get_unknown_request_type() {
+    use tower::util::ServiceExt;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/nrcs?requestType=unknownRequest")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+    let body_str = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body_str.contains("errorCode") || body_str.contains("error"), "Should contain error for unknown request type");
+}
+
+#[tokio::test]
+async fn test_nrcs_post_missing_request_type() {
+    use tower::util::ServiceExt;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/nrcs")
+        .method("POST")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(Body::from("account=1"))
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_create_account_response_format() {
+    use tower::util::ServiceExt;
+    use serde_json::json;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/api/v1/accounts")
+        .method("POST")
+        .header("Content-Type", "application/json")
+        .body(Body::from(json!({}).to_string()))
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+    let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(body_json.get("account").is_some() || body_json.get("accountRS").is_some() || body_json.get("publicKey").is_some());
+}
+
+#[tokio::test]
+async fn test_get_account_response_format() {
+    use tower::util::ServiceExt;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/api/v1/accounts/1")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+    let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(body_json.get("balanceNQT").is_some() || body_json.get("account").is_some());
+}
+
+#[tokio::test]
+async fn test_get_balance_response_format() {
+    use tower::util::ServiceExt;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/api/v1/accounts/1/balance")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+    let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(body_json.get("balanceNQT").is_some() || body_json.get("unconfirmedBalanceNQT").is_some());
+}
+
+#[tokio::test]
+async fn test_get_latest_block_response_format() {
+    use tower::util::ServiceExt;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/api/v1/blocks/latest")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+    let body_json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(body_json.get("height").is_some() || body_json.get("block").is_some());
+}
+
+#[tokio::test]
+async fn test_health_check_response_body() {
+    use tower::util::ServiceExt;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/health")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    
+    let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+    let body_str = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body_str.contains("OK") || body_str.contains("ok") || body_str.contains("healthy") || body_str.contains("status"));
+}
+
+#[tokio::test]
+async fn test_api_test_page() {
+    use tower::util::ServiceExt;
+    
+    let state = create_test_state();
+    let router = create_router(state);
+    
+    let request = Request::builder()
+        .uri("/test")
+        .method("GET")
+        .body(Body::empty())
+        .unwrap();
+    
+    let response = router.oneshot(request).await.unwrap();
+    assert!(response.status() == StatusCode::OK || response.status() == StatusCode::NOT_FOUND);
 }
