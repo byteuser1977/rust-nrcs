@@ -2301,8 +2301,10 @@ impl DatabaseTransactionProcessor {
                 Ok(_) => {
                     info!("Minted {} units of currency {} for account {}", minted_units, currency_id, sender_id);
 
-                    // 更新货币余额
+                    // 更新货币余额和未确认余额
+                    // Java: senderAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, currencyId, units)
                     self.account_currency_repo.update_units(sender_id, currency_id, minted_units).await?;
+                    self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, minted_units).await?;
 
                     // 更新currency的总supply（P1优化：使用真正的CurrencyRepository方法）
                     self.currency_repo.increase_supply(currency_id, minted_units).await?;
