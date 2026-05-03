@@ -10,7 +10,7 @@
 use crate::protocol::PeerRequest;
 use serde_json;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use orm::TransactionRepository;
 
 /// GetTransactions Handler
@@ -89,7 +89,7 @@ impl GetTransactionsHandler {
                     }
                 }
 
-                info!("[GetTransactions] Returning {} of {} requested transactions",
+                debug!("[GetTransactions] Returning {} of {} requested transactions",
                       transactions.len(), ids.len().min(limit as usize));
             } else {
                 // 模式2：获取最近确认的交易（分页）
@@ -98,7 +98,7 @@ impl GetTransactionsHandler {
                 match Self::fetch_recent_transactions(tx_repo, limit).await {
                     Ok(recent_txs) => {
                         transactions = recent_txs;
-                        info!("[GetTransactions] Returning {} recent transactions",
+                        debug!("[GetTransactions] Returning {} recent transactions",
                               transactions.len());
                     }
                     Err(e) => {

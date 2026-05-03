@@ -8,7 +8,7 @@ use orm::{BlockRepository, BlockModel, AccountRepository, PublicKeyRepository};
 use tx_engine::TransactionProcessor;
 use account::AccountManager;
 use chrono::Utc;
-use tracing::info;
+use tracing::debug;
 use num_bigint::BigUint;
 use num_traits::{Zero, ToPrimitive};
 
@@ -65,7 +65,7 @@ impl ChainService {
     }
 
     pub async fn get_block(&self, height: Height) -> anyhow::Result<Option<Block>> {
-        info!("Getting block at height {}", height);
+        debug!("Getting block at height {}", height);
         Ok(None)
     }
 
@@ -254,14 +254,14 @@ impl ChainService {
     }
 
     pub async fn start_sync(&self) -> anyhow::Result<()> {
-        info!("Chain sync started");
+        debug!("Chain sync started");
         // TODO: implement sync
         Ok(())
     }
 
 
     pub async fn start_sync(&self) -> anyhow::Result<()> {
-        info!("Chain sync started");
+        debug!("Chain sync started");
         Ok(())
     }
 }

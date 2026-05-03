@@ -24,7 +24,6 @@ pub struct UnblacklistDaemon {
 }
 
 impl UnblacklistDaemon {
-    /// Create a new unblacklist daemon
     pub fn new(peers: Arc<Peers>, config: P2PConfig) -> Self {
         Self {
             peers,
@@ -33,7 +32,6 @@ impl UnblacklistDaemon {
         }
     }
 
-    /// Start the unblacklist daemon
     pub async fn start(&self) {
         let mut running = self.running.write().await;
         if *running {
@@ -66,115 +64,47 @@ impl UnblacklistDaemon {
         });
     }
 
-    /// Stop the unblacklist daemon
     pub async fn stop(&self) {
         let mut running = self.running.write().await;
         *running = false;
         info!("[Unblacklist] Daemon stopping...");
     }
 
-    /// Main unblacklist loop（完整实现）
+    /// Main unblacklist loop
     ///
     /// 对应 NRCS Java: peerUnBlacklistingThread.run()
+    /// 遍历所有节点，调用 peer.updateBlacklistedStatus(curTime)
     async fn unblacklist_loop(peers: &Arc<Peers>, config: &P2PConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let now = current_timestamp();
-        let _unblacklisted_count = 0usize;
-        let _reset_version_count = 0usize;
-
-        // 遍历所有节点，检查黑名单状态和版本标记
         let all_peers = peers.get_known_peers().await;
-        let _total_count = all_peers.len();
         let mut unblacklisted_count = 0usize;
         let mut reset_version_count = 0usize;
 
-        for peer in &all_peers {
-            // 1. 检查黑名单是否过期
-            // 对应 NRCS Java: peer.updateBlacklistedStatus(curTime)
-            if peer.blacklisting_time > 0 {
-                let blacklist_duration = now - peer.blacklisting_time;
+        for peer_snapshot in &all_peers {
+            if let Some(peer_ref) = peers.get_peer(&peer_snapshot.address).await {
+                let mut peer = peer_ref.lock().await;
 
-                // 如果黑名单时间超过配置的周期，则解除黑名单
-                if blacklist_duration >= config.blacklisting_period_secs {
-                    debug!("[Unblacklist] Unblacklisting peer: {} (blacklisted for {}s)",
-                          peer.address, blacklist_duration);
+                let was_blacklisted = peer.is_blacklisted();
+                let had_old_version = peer.is_old_version;
 
-                    match Self::unblacklist_peer(peers, &peer.address).await {
-                        Ok(()) => {
-                            unblacklisted_count += 1;
-                        }
-                        Err(e) => {
-                            warn!("[Unblacklist] Failed to unblacklist {}: {}", peer.address, e);
-                        }
-                    }
+                // 调用 Peer.update_blacklisted_status()（对应 Java 逻辑）
+                peer.update_blacklisted_status(now, config.blacklisting_period_secs);
+
+                // 统计变化
+                if was_blacklisted && !peer.is_blacklisted() {
+                    unblacklisted_count += 1;
+                    debug!("[Unblacklist] Peer {} unblacklisted", peer.address);
                 }
-            }
-
-            // 2. 检查是否是旧版本，如果是且最后更新超过1小时，则重置
-            // 对应 NRCS Java: 重置 isOldVersion 标记
-            if peer.is_old_version {
-                let time_since_update = now - peer.last_updated;
-
-                // 如果超过 3600 秒（1小时）没有更新，重置旧版本标记
-                if time_since_update >= 3600 {
-                    debug!("[Unblacklist] Resetting old version flag for peer: {}",
-                          peer.address);
-
-                    match Self::reset_old_version_flag(peers, &peer.address).await {
-                        Ok(()) => {
-                            reset_version_count += 1;
-                        }
-                        Err(e) => {
-                            warn!("[Unblacklist] Failed to reset version flag for {}: {}", peer.address, e);
-                        }
-                    }
+                if had_old_version && !peer.is_old_version {
+                    reset_version_count += 1;
+                    debug!("[Unblacklist] Reset old version flag for peer {}", peer.address);
                 }
             }
         }
 
         if unblacklisted_count > 0 || reset_version_count > 0 {
-            info!("[Unblacklist] Processed {} peers: unblacklisted={}, reset_version={}",
+            debug!("[Unblacklist] Processed {} peers: unblacklisted={}, reset_version={}",
                   all_peers.len(), unblacklisted_count, reset_version_count);
-        }
-
-        Ok(())
-    }
-
-    /// Unblacklist a peer（完整实现）
-    ///
-    /// 对应 NRCS Java: peer.unBlacklist()
-    async fn unblacklist_peer(
-        peers: &Arc<Peers>,
-        addr: &std::net::SocketAddr,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // 如果节点存在，更新其状态
-        if let Some(peer_ref) = peers.get_peer(addr).await {
-            let mut peer = peer_ref.lock().await;
-
-            // 重置黑名单相关字段
-            peer.blacklisting_time = 0;
-            peer.blacklisting_cause = None;
-            peer.state = crate::peer::PeerState::NonConnected;
-
-            debug!("[Unblacklist] Peer {} unblacklisted successfully", addr);
-        }
-
-        Ok(())
-    }
-
-    /// Reset old version flag for a peer（完整实现）
-    ///
-    /// 对应 NRCS Java: 重置 isOldVersion 标记
-    async fn reset_old_version_flag(
-        peers: &Arc<Peers>,
-        addr: &std::net::SocketAddr,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if let Some(peer_ref) = peers.get_peer(addr).await {
-            let mut peer = peer_ref.lock().await;
-
-            // 重置旧版本标记
-            peer.is_old_version = false;
-
-            debug!("[Unblacklist] Reset old version flag for {}", addr);
         }
 
         Ok(())
@@ -183,17 +113,20 @@ impl UnblacklistDaemon {
     /// Manually unblacklist a peer (public API)
     ///
     /// 手动解除某个节点的黑名单状态
+    /// 对应 Java: Peer.unBlacklist()
     pub async fn manual_unblacklist(
         &self,
         addr: &std::net::SocketAddr,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        Self::unblacklist_peer(&self.peers, addr).await?;
-        info!("[Unblacklist] Manual unblacklist for {}", addr);
+        if let Some(peer_ref) = self.peers.get_peer(addr).await {
+            let mut peer = peer_ref.lock().await;
+            peer.un_blacklist();
+            debug!("[Unblacklist] Manual unblacklist for {}", addr);
+        }
         Ok(())
     }
 }
 
-/// Get current timestamp in seconds
 fn current_timestamp() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
@@ -234,9 +167,60 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
+    #[tokio::test]
+    async fn test_unblacklist_loop_expires_blacklist() {
+        let addr: std::net::SocketAddr = "127.0.0.1:17974".parse().unwrap();
+        let my_peer = Peer::new(addr, false);
+        let peers = Arc::new(Peers::new(my_peer));
+        let config = P2PConfig::default();
+
+        let test_addr: std::net::SocketAddr = "192.168.1.1:9000".parse().unwrap();
+        let test_peer = Peer::new(test_addr, false);
+        peers.register_peer(test_peer).await;
+
+        // Set blacklisting_time to past (expired) after registration
+        if let Some(peer_ref) = peers.get_peer(&test_addr).await {
+            let mut p = peer_ref.lock().await;
+            p.blacklisting_time = current_timestamp() - config.blacklisting_period_secs - 1;
+            p.blacklisting_cause = Some("Test".to_string());
+        }
+
+        assert!(peers.is_blacklisted_addr(&test_addr).await);
+
+        UnblacklistDaemon::unblacklist_loop(&peers, &config).await.unwrap();
+
+        assert!(!peers.is_blacklisted_addr(&test_addr).await);
+    }
+
+    #[tokio::test]
+    async fn test_unblacklist_loop_resets_old_version() {
+        let addr: std::net::SocketAddr = "127.0.0.1:17974".parse().unwrap();
+        let my_peer = Peer::new(addr, false);
+        let peers = Arc::new(Peers::new(my_peer));
+        let config = P2PConfig::default();
+
+        let test_addr: std::net::SocketAddr = "192.168.1.2:9000".parse().unwrap();
+        let test_peer = Peer::new(test_addr, false);
+        peers.register_peer(test_peer).await;
+
+        // Set is_old_version and old last_updated after registration
+        // (register_peer resets last_updated via update_metadata)
+        if let Some(peer_ref) = peers.get_peer(&test_addr).await {
+            let mut p = peer_ref.lock().await;
+            p.is_old_version = true;
+            p.last_updated = current_timestamp() - 3601;
+        }
+
+        assert!(peers.is_blacklisted_addr(&test_addr).await);
+
+        UnblacklistDaemon::unblacklist_loop(&peers, &config).await.unwrap();
+
+        assert!(!peers.is_blacklisted_addr(&test_addr).await);
+    }
+
     #[test]
     fn test_current_timestamp() {
         let ts = current_timestamp();
-        assert!(ts > 1700000000); // 2023 年以后的时间戳
+        assert!(ts > 1700000000);
     }
 }

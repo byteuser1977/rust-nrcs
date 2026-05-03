@@ -171,7 +171,7 @@ impl BundlerRateDaemon {
         *last_time.write().await = now;
         *last_hash.write().await = rates_hash;
 
-        info!("[BundlerRate] Broadcast completed to {} peers", success_count);
+        debug!("[BundlerRate] Broadcast completed to {} peers", success_count);
 
         Ok(())
     }

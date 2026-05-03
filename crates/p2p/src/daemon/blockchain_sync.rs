@@ -148,7 +148,7 @@ impl BlockchainSyncDaemon {
             let progress = state.progress_percent();
             let rate = state.blocks_per_sec();
             let eta = state.eta_secs();
-            info!(
+            debug!(
                 "Sync progress: {:.1}% | Height: {} | Blocks: {} | Rate: {:.1} blocks/s | ETA: {}s",
                 progress, current_height, blocks_processed, rate, eta
             );
@@ -160,7 +160,7 @@ impl BlockchainSyncDaemon {
         if state.blocks_processed > 0 {
             let elapsed = state.elapsed_secs();
             let rate = state.blocks_per_sec();
-            info!(
+            debug!(
                 "Sync completed: {} blocks in {}s ({:.1} blocks/s)",
                 state.blocks_processed, elapsed, rate
             );
@@ -210,7 +210,7 @@ impl BlockchainSyncDaemon {
                         } else {
                             consecutive_empty = 0;
                             total_processed += downloaded;
-                            info!("Downloaded {} blocks (total: {}), continuing sync...", downloaded, total_processed);
+                            debug!("Downloaded {} blocks (total: {}), continuing sync...", downloaded, total_processed);
                             
                             let current_height = block_verifier.get_height().await.unwrap_or(0);
                             Self::update_sync_progress(&sync_state, current_height, total_processed).await;
@@ -322,7 +322,7 @@ impl BlockchainSyncDaemon {
             return Ok(0);
         }
 
-        info!("Peer {} has higher cumulative difficulty: {} > {}", 
+        debug!("Peer {} has higher cumulative difficulty: {} > {}",
               peer_label, peer_cumulative_difficulty, local_cumulative_difficulty);
 
         let last_local_block_id = block_verifier.get_last_block_id().await
@@ -334,7 +334,7 @@ impl BlockchainSyncDaemon {
             debug!("Last local block ID: {}, continuing sync from there", last_local_block_id);
             last_local_block_id
         } else {
-            info!("No local blocks, starting from genesis block");
+            debug!("No local blocks, starting from genesis block");
             GENESIS_BLOCK_ID
         };
 
@@ -351,7 +351,7 @@ impl BlockchainSyncDaemon {
             return Ok(0);
         }
 
-        info!("Starting sync from block ID: {} (height: {})", common_block_id, common_block_height);
+        debug!("Starting sync from block ID: {} (height: {})", common_block_id, common_block_height);
 
         let chain_block_ids = Self::get_block_ids_after_common(feeder_addr, common_block_id, block_verifier).await?;
         if chain_block_ids.len() < 2 {
@@ -360,7 +360,7 @@ impl BlockchainSyncDaemon {
         }
 
         let blocks_to_download = chain_block_ids.len() - 1;
-        info!("Blocks to download: {} from {} peer(s)", blocks_to_download, peer_addrs.len());
+        debug!("Blocks to download: {} from {} peer(s)", blocks_to_download, peer_addrs.len());
 
         {
             let mut state = sync_state.write().await;
@@ -369,7 +369,7 @@ impl BlockchainSyncDaemon {
         }
 
         if !*is_downloading.read().await && blocks_to_download > 10 {
-            info!("Blockchain download in progress");
+            debug!("Blockchain download in progress");
             *is_downloading.write().await = true;
         }
 
@@ -434,10 +434,10 @@ impl BlockchainSyncDaemon {
                         for milestone_id in milestone_ids {
                             if let Some(id_str) = milestone_id.as_str() {
                                 if let Ok(block_id) = Self::parse_block_id(id_str) {
-                                    info!("Checking milestone block ID: {}", block_id);
+                                    debug!("Checking milestone block ID: {}", block_id);
                                     
                                     if Self::has_block(block_id, block_verifier).await? {
-                                        info!("Found common milestone block: {}", block_id);
+                                        debug!("Found common milestone block: {}", block_id);
                                         return Ok(block_id);
                                     }
                                     
@@ -571,7 +571,7 @@ impl BlockchainSyncDaemon {
         }
 
         let peer_count = peer_addrs.len().max(1);
-        info!("Downloading {} blocks using {} peer(s), {} segments", 
+        debug!("Downloading {} blocks using {} peer(s), {} segments",
               chain_block_ids.len() - 1, peer_count, get_list.len());
 
         let mut download_futures = Vec::new();
@@ -669,7 +669,7 @@ impl BlockchainSyncDaemon {
         }
 
         if processed > 0 {
-            info!("Downloaded and processed {} blocks total", processed);
+            debug!("Downloaded and processed {} blocks total", processed);
         }
 
         Ok(processed)
@@ -759,7 +759,7 @@ impl BlockchainSyncDaemon {
                     // 对应 Java: transaction.setBlock(this) → this.setBlockTimestamp(block.getTimestamp())
                     // block_timestamp 必须设置为所属区块的 timestamp
                     tx.block_timestamp = block.timestamp;
-                    info!("Transaction[{}] in block {}: id={}, type={:?}, sender={}, recipient={:?}, amount={}, fee={}, block_ts={}", 
+                    debug!("Transaction[{}] in block {}: id={}, type={:?}, sender={}, recipient={:?}, amount={}, fee={}, block_ts={}",
                           tx_idx, block_height, tx.id, tx.type_id, tx.sender_id, tx.recipient_id, tx.amount, tx.fee, tx.block_timestamp);
                     transactions.push(tx);
                 }
@@ -776,12 +776,12 @@ impl BlockchainSyncDaemon {
             block.id = Some(block.calculate_id().unwrap_or(0));
         }
 
-        info!("Processing downloaded block: height={}, id={}, version={}, timestamp={}, generator={}, base_target={}, txs={}", 
+        debug!("Processing downloaded block: height={}, id={}, version={}, timestamp={}, generator={}, base_target={}, txs={}",
                block.height, block.get_id(), block.version, block.timestamp, block.get_generator_id(), block.base_target, block.transactions.len());
 
         match block_verifier.verify_and_process(block).await {
             Ok(_) => {
-                info!("Block verified and processed successfully at height {}", block_height);
+                debug!("Block verified and processed successfully at height {}", block_height);
                 Ok(())
             }
             Err(e) => {

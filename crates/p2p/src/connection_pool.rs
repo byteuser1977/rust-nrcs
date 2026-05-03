@@ -19,7 +19,7 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::sync::{oneshot, RwLock, Mutex as TokioMutex};
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 /// 等待中的请求（对应 Java PeerPostRequest）
 ///
@@ -77,7 +77,7 @@ impl WebSocketConnection {
             Self::read_loop(read, pending, connected, addr_clone).await;
         });
 
-        info!("[ConnectionPool] New connection established to {}", addr);
+        debug!("[ConnectionPool] New connection established to {}", addr);
         Ok(conn)
     }
 
@@ -169,7 +169,7 @@ impl WebSocketConnection {
             let _ = req.complete.send(Err("Connection closed".to_string()));
         }
 
-        info!("[ConnectionPool] Connection to {} closed", self.addr);
+        debug!("[ConnectionPool] Connection to {} closed", self.addr);
     }
 
     /// 读取循环（在后台线程运行）
@@ -241,7 +241,7 @@ impl WebSocketConnection {
                     }
                 }
                 Some(Ok(Message::Close(_))) | None => {
-                    info!("[ConnectionPool] Connection closed by remote: {}", addr);
+                    debug!("[ConnectionPool] Connection closed by remote: {}", addr);
                     break;
                 }
                 Some(Ok(Message::Ping(_))) => {
@@ -325,7 +325,7 @@ impl ConnectionPool {
         }
 
         // 2. 创建新连接
-        info!("[ConnectionPool] Creating new connection to {}", addr);
+        debug!("[ConnectionPool] Creating new connection to {}", addr);
         let conn = WebSocketConnection::new(addr, &self.config).await?;
         let conn_arc = Arc::new(conn);
 
@@ -379,7 +379,7 @@ impl ConnectionPool {
         for (_, conn) in conns.drain() {
             conn.close().await;
         }
-        info!("[ConnectionPool] All connections shut down");
+        debug!("[ConnectionPool] All connections shut down");
     }
 }
 

@@ -201,16 +201,100 @@ impl P2PManager {
     /// Blacklist a peer
     /// 
     /// 对应 NRCS Java: Peers.blacklist(Peer peer, String cause)
+    /// 如果 blacklisting_enabled 为 false，则不执行黑名单操作
     pub async fn blacklist_peer(&self, addr: &std::net::SocketAddr, cause: String) {
+        if !self.config.blacklisting_enabled {
+            debug!("Blacklisting disabled, skipping blacklist for {}: {}", addr, cause);
+            return;
+        }
+
         if let Some(peer) = self.peers.get_peer(addr).await {
             let mut peer = peer.lock().await;
-            peer.blacklist(cause);
+            let display_cause = if self.config.hide_error_details {
+                cause.split(':').next().unwrap_or(&cause).to_string()
+            } else {
+                cause
+            };
+            peer.blacklist(display_cause);
+        }
+    }
+
+    /// Blacklist a peer with exception-based exclusion rules
+    ///
+    /// 对应 NRCS Java: Peer.blacklist(Exception cause)
+    /// 排除以下异常类型不拉黑:
+    /// - 数据库相关异常（防止从零加载区块链时误拉黑）
+    /// - EOF 解析错误
+    pub async fn blacklist_peer_with_exception(&self, addr: &std::net::SocketAddr, error_type: &str, error_msg: &str) {
+        if !self.config.blacklisting_enabled {
+            return;
+        }
+
+        // 排除不拉黑的异常类型（对应 Java 中的排除规则）
+        if error_type == "NotCurrentlyValid" || error_type == "BlockOutOfOrder" {
+            return;
+        }
+        if error_type == "Database" {
+            return;
+        }
+        if error_type == "Parse" && error_msg.contains("END_OF_FILE") {
+            return;
+        }
+
+        let cause = if self.config.hide_error_details {
+            error_type.to_string()
+        } else {
+            format!("{}: {}", error_type, error_msg)
+        };
+
+        self.blacklist_peer(addr, cause).await;
+    }
+
+    /// Unblacklist a peer
+    ///
+    /// 对应 NRCS Java: Peer.unBlacklist()
+    pub async fn unblacklist_peer(&self, addr: &std::net::SocketAddr) {
+        if let Some(peer) = self.peers.get_peer(addr).await {
+            let mut peer = peer.lock().await;
+            peer.un_blacklist();
+        }
+    }
+
+    /// Connect peer (unblacklist first, then connect)
+    ///
+    /// 对应 NRCS Java: Peers.connectPeer(Peer peer)
+    pub async fn connect_peer(&self, addr: &std::net::SocketAddr) -> Result<serde_json::Value, crate::error::P2PError> {
+        // 先解除黑名单（对应 Java: peer.unBlacklist()）
+        self.unblacklist_peer(addr).await;
+
+        if let Some(peer_ref) = self.peers.get_peer(addr).await {
+            let mut peer = peer_ref.lock().await;
+            peer.connect(&self.config).await
+        } else {
+            Err(crate::error::P2PError::internal("Peer not found".to_string()))
         }
     }
 
     /// Check if peer is blacklisted
     pub async fn is_blacklisted(&self, addr: &str) -> bool {
         self.peers.is_blacklisted(addr).await
+    }
+
+    /// Check if peer address is blacklisted
+    pub async fn is_blacklisted_addr(&self, addr: &std::net::SocketAddr) -> bool {
+        self.peers.is_blacklisted_addr(addr).await
+    }
+
+    /// Manual blacklist a peer (API call)
+    ///
+    /// 对应 NRCS Java: BlacklistPeer.processRequest()
+    pub async fn manual_blacklist(&self, addr: &std::net::SocketAddr) {
+        self.blacklist_peer(addr, "Manual blacklist".to_string()).await;
+    }
+
+    /// Manual unblacklist a peer (API call)
+    pub async fn manual_unblacklist(&self, addr: &std::net::SocketAddr) {
+        self.unblacklist_peer(addr).await;
     }
 
     /// Broadcast transaction

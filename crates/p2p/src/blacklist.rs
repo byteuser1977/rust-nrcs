@@ -3,231 +3,106 @@
 //! 对应 NRCS Java: Peers.java 中的黑名单相关方法
 //!
 //! 职责:
-//! - 管理黑名单
-//! - 管理白名单
-//! - 持久化支持
+//! - 黑名单持久化（加载/保存）
+//! - 黑名单事件监听
+//!
+//! 注意: 运行时黑名单管理已集成到 Peers 结构体中
+//! - Peer.blacklisting_time / blacklisting_cause: 运行时动态黑名单
+//! - Peer.is_old_version: 版本过旧黑名单
+//! - Peers.known_blacklisted_peers: 配置文件永久黑名单
 
-use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-/// Blacklist entry
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct BlacklistEntry {
-    /// Node address
-    pub address: SocketAddr,
-    /// Blacklist reason
-    pub reason: String,
-    /// Blacklist timestamp
-    pub timestamp: i64,
-    /// Expiration time (None means permanent)
-    pub expires_at: Option<i64>,
-    /// Is manual blacklist
-    pub is_manual: bool,
+/// 黑名单事件类型
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BlacklistEvent {
+    Blacklist(SocketAddr, String),
+    Unblacklist(SocketAddr),
 }
 
-/// Whitelist entry
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct WhitelistEntry {
-    /// Account ID
-    pub account_id: u64,
-    /// Added timestamp
-    pub added_at: i64,
-    /// Is manual
-    pub is_manual: bool,
-}
+/// 黑名单事件监听器
+pub type BlacklistListener = Box<dyn Fn(BlacklistEvent) + Send + Sync>;
 
 /// Blacklist Manager
+///
+/// 负责黑名单的持久化和事件通知
+/// 运行时黑名单管理由 Peers 和 Peer 结构体负责
 pub struct BlacklistManager {
-    /// Blacklist entries
-    blacklist: Arc<RwLock<HashMap<SocketAddr, BlacklistEntry>>>,
-    /// Whitelist entries (account ID based)
-    whitelist: Arc<RwLock<HashMap<u64, WhitelistEntry>>>,
-    /// Known blacklisted peers (from config)
-    known_blacklisted: Arc<RwLock<HashSet<SocketAddr>>>,
+    /// 事件监听器
+    listeners: Arc<RwLock<Vec<BlacklistListener>>>,
 }
 
 impl BlacklistManager {
-    /// Create a new blacklist manager
     pub fn new() -> Self {
         Self {
-            blacklist: Arc::new(RwLock::new(HashMap::new())),
-            whitelist: Arc::new(RwLock::new(HashMap::new())),
-            known_blacklisted: Arc::new(RwLock::new(HashSet::new())),
+            listeners: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
-    /// Add to blacklist
-    /// 
-    /// 对应 NRCS Java: Peers.blacklist(Peer peer, String cause)
-    pub async fn add_to_blacklist(
-        &self,
-        address: SocketAddr,
-        reason: String,
-        duration_secs: Option<i64>,
-        is_manual: bool,
-    ) {
-        let now = current_timestamp();
-        let expires_at = duration_secs.map(|d| now + d);
-
-        let entry = BlacklistEntry {
-            address,
-            reason: reason.clone(),
-            timestamp: now,
-            expires_at,
-            is_manual,
-        };
-
-        let mut blacklist = self.blacklist.write().await;
-        blacklist.insert(address, entry);
-
-        info!("Peer {} blacklisted: {} (manual: {})", address, reason, is_manual);
+    /// 添加事件监听器
+    pub async fn add_listener(&self, listener: BlacklistListener) {
+        let mut listeners = self.listeners.write().await;
+        listeners.push(listener);
     }
 
-    /// Remove from blacklist
-    /// 
-    /// 对应 NRCS Java: Peer.unBlacklist()
-    pub async fn remove_from_blacklist(&self, address: &SocketAddr) {
-        let mut blacklist = self.blacklist.write().await;
-        if blacklist.remove(address).is_some() {
-            debug!("Peer {} removed from blacklist", address);
+    /// 通知黑名单事件
+    pub async fn notify(&self, event: BlacklistEvent) {
+        let listeners = self.listeners.read().await;
+        for listener in listeners.iter() {
+            listener(event.clone());
         }
     }
 
-    /// Check if address is blacklisted
-    pub async fn is_blacklisted(&self, address: &SocketAddr) -> bool {
-        let blacklist = self.blacklist.read().await;
-        if let Some(entry) = blacklist.get(address) {
-            // Check if expired
-            if let Some(expires_at) = entry.expires_at {
-                let now = current_timestamp();
-                if now >= expires_at {
-                    return false;
-                }
+    /// 持久化黑名单到文件
+    ///
+    /// 保存当前所有被黑名单的节点地址到文件
+    pub async fn persist_blacklist(
+        peers: &crate::peer::Peers,
+        path: &str,
+    ) -> std::io::Result<()> {
+        let all_peers = peers.get_known_peers().await;
+        let mut blacklisted_addrs = Vec::new();
+
+        for peer in &all_peers {
+            if peer.is_blacklisted() {
+                blacklisted_addrs.push(peer.address.to_string());
             }
-            return true;
         }
-        false
-    }
 
-    /// Get blacklist entry
-    pub async fn get_blacklist_entry(&self, address: &SocketAddr) -> Option<BlacklistEntry> {
-        let blacklist = self.blacklist.read().await;
-        blacklist.get(address).cloned()
-    }
-
-    /// Get all blacklisted addresses
-    pub async fn get_all_blacklisted(&self) -> Vec<SocketAddr> {
-        let blacklist = self.blacklist.read().await;
-        blacklist.keys().cloned().collect()
-    }
-
-    /// Clean expired entries
-    /// 
-    /// 对应 NRCS Java: peerUnBlacklistingThread
-    pub async fn clean_expired(&self) {
-        let now = current_timestamp();
-        let mut blacklist = self.blacklist.write().await;
-        
-        let expired: Vec<_> = blacklist
-            .iter()
-            .filter_map(|(addr, entry)| {
-                if let Some(expires_at) = entry.expires_at {
-                    if now >= expires_at {
-                        return Some(*addr);
-                    }
-                }
-                None
-            })
-            .collect();
-
-        for addr in expired {
-            blacklist.remove(&addr);
-            debug!("Peer {} blacklist expired", addr);
+        let _known_bl_count = peers.known_blacklisted_count().await;
+        let known_bl = peers.known_blacklisted_peers_list().await;
+        for addr in known_bl {
+            if !blacklisted_addrs.contains(&addr) {
+                blacklisted_addrs.push(addr);
+            }
         }
-    }
 
-    /// Add to whitelist
-    pub async fn add_to_whitelist(&self, account_id: u64, is_manual: bool) {
-        let entry = WhitelistEntry {
-            account_id,
-            added_at: current_timestamp(),
-            is_manual,
-        };
-
-        let mut whitelist = self.whitelist.write().await;
-        whitelist.insert(account_id, entry);
-
-        info!("Account {} added to whitelist (manual: {})", account_id, is_manual);
-    }
-
-    /// Remove from whitelist
-    pub async fn remove_from_whitelist(&self, account_id: u64) {
-        let mut whitelist = self.whitelist.write().await;
-        if whitelist.remove(&account_id).is_some() {
-            debug!("Account {} removed from whitelist", account_id);
-        }
-    }
-
-    /// Check if account is whitelisted
-    pub async fn is_whitelisted(&self, account_id: u64) -> bool {
-        let whitelist = self.whitelist.read().await;
-        whitelist.contains_key(&account_id)
-    }
-
-    /// Add known blacklisted peer
-    /// 
-    /// 对应 NRCS Java: Peers.knownBlacklistedPeers
-    pub async fn add_known_blacklisted(&self, address: SocketAddr) {
-        let mut known = self.known_blacklisted.write().await;
-        known.insert(address);
-    }
-
-    /// Check if address is known blacklisted
-    pub async fn is_known_blacklisted(&self, address: &SocketAddr) -> bool {
-        let known = self.known_blacklisted.read().await;
-        known.contains(address)
-    }
-
-    /// Get blacklist count
-    pub async fn blacklist_count(&self) -> usize {
-        self.blacklist.read().await.len()
-    }
-
-    /// Get whitelist count
-    pub async fn whitelist_count(&self) -> usize {
-        self.whitelist.read().await.len()
-    }
-
-    /// Persist blacklist to file
-    pub async fn persist(&self, path: &str) -> std::io::Result<()> {
-        let blacklist = self.blacklist.read().await;
-        let entries: Vec<_> = blacklist.values().collect();
-        
-        let json = serde_json::to_string_pretty(&entries)
+        let json = serde_json::to_string_pretty(&blacklisted_addrs)
             .map_err(std::io::Error::other)?;
-        
+
         std::fs::write(path, json)?;
-        debug!("Blacklist persisted to {}", path);
+        debug!("Blacklist persisted to {} ({} entries)", path, blacklisted_addrs.len());
         Ok(())
     }
 
-    /// Load blacklist from file
-    pub async fn load(&self, path: &str) -> std::io::Result<()> {
+    /// 从文件加载黑名单
+    pub async fn load_blacklist(
+        peers: &crate::peer::Peers,
+        path: &str,
+    ) -> std::io::Result<()> {
         let content = std::fs::read_to_string(path)?;
-        
-        let entries: Vec<BlacklistEntry> = serde_json::from_str(&content)
+
+        let entries: Vec<String> = serde_json::from_str(&content)
             .map_err(std::io::Error::other)?;
-        
-        let mut blacklist = self.blacklist.write().await;
-        for entry in entries {
-            blacklist.insert(entry.address, entry);
+
+        for addr_str in &entries {
+            peers.add_known_blacklisted(addr_str.clone()).await;
         }
-        
-        info!("Loaded {} blacklist entries from {}", blacklist.len(), path);
+
+        info!("Loaded {} blacklist entries from {}", entries.len(), path);
         Ok(())
     }
 }
@@ -238,56 +113,52 @@ impl Default for BlacklistManager {
     }
 }
 
-/// Get current timestamp in seconds
-fn current_timestamp() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::peer::{Peer, Peers};
 
     #[tokio::test]
-    async fn test_blacklist_add_remove() {
-        let manager = BlacklistManager::new();
-        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    async fn test_blacklist_persist_and_load() {
+        let my_peer = Peer::new("127.0.0.1:8080".parse().unwrap(), false);
+        let peers = Peers::new(my_peer);
 
-        manager.add_to_blacklist(addr, "Test".to_string(), None, false).await;
-        assert!(manager.is_blacklisted(&addr).await);
+        peers.add_known_blacklisted("192.168.1.1:9000".to_string()).await;
+        peers.add_known_blacklisted("192.168.1.2:9000".to_string()).await;
 
-        manager.remove_from_blacklist(&addr).await;
-        assert!(!manager.is_blacklisted(&addr).await);
+        let tmp_dir = std::env::temp_dir();
+        let path = tmp_dir.join("nrcs_test_blacklist.json");
+        let path_str = path.to_str().unwrap();
+
+        BlacklistManager::persist_blacklist(&peers, path_str).await.unwrap();
+
+        let my_peer2 = Peer::new("127.0.0.1:8081".parse().unwrap(), false);
+        let peers2 = Peers::new(my_peer2);
+        BlacklistManager::load_blacklist(&peers2, path_str).await.unwrap();
+
+        assert!(peers2.is_known_blacklisted("192.168.1.1:9000").await);
+        assert!(peers2.is_known_blacklisted("192.168.1.2:9000").await);
+
+        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
-    async fn test_blacklist_expiration() {
+    async fn test_blacklist_event_notification() {
         let manager = BlacklistManager::new();
-        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        let received = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let received_clone = received.clone();
 
-        // Add with 1 second expiration
-        manager.add_to_blacklist(addr, "Test".to_string(), Some(1), false).await;
-        assert!(manager.is_blacklisted(&addr).await);
+        manager.add_listener(Box::new(move |event| {
+            let mut r = received_clone.lock().unwrap();
+            r.push(format!("{:?}", event));
+        })).await;
 
-        // Wait for expiration
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-        
-        // Clean expired
-        manager.clean_expired().await;
-        assert!(!manager.is_blacklisted(&addr).await);
-    }
+        manager.notify(BlacklistEvent::Blacklist(
+            "127.0.0.1:8080".parse().unwrap(),
+            "Test".to_string(),
+        )).await;
 
-    #[tokio::test]
-    async fn test_whitelist() {
-        let manager = BlacklistManager::new();
-        let account_id = 12345u64;
-
-        manager.add_to_whitelist(account_id, true).await;
-        assert!(manager.is_whitelisted(account_id).await);
-
-        manager.remove_from_whitelist(account_id).await;
-        assert!(!manager.is_whitelisted(account_id).await);
+        let events = received.lock().unwrap();
+        assert_eq!(events.len(), 1);
     }
 }

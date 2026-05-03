@@ -242,6 +242,23 @@ pub struct P2PConfig {
     #[serde(default)]
     pub hide_error_details: bool,
 
+    // --- 版本检查配置 ---
+    /// 本节点应用名称（对应 Java: Constant.APPLICATION）
+    #[serde(default = "default_application")]
+    pub application: String,
+
+    /// 本节点版本号（对应 Java: Constant.VERSION）
+    #[serde(default = "default_version")]
+    pub version: String,
+
+    /// 最低支持版本（对应 Java: Constant.MIN_VERSION）
+    #[serde(default = "default_min_version")]
+    pub min_version: Vec<i32>,
+
+    /// API代理最低版本（对应 Java: Constant.MIN_PROXY_VERSION）
+    #[serde(default = "default_min_proxy_version")]
+    pub min_proxy_version: Vec<i32>,
+
     // --- 运行模式配置 ---
     /// 离线模式（对应 Java: nrcs.offline，不连接任何节点）
     #[serde(default)]
@@ -313,6 +330,10 @@ fn default_api_port() -> u16 { DEFAULT_API_PORT }
 fn default_api_ssl_port() -> u16 { DEFAULT_API_SSL_PORT }
 fn default_api_idle_timeout_ms() -> u64 { API_IDLE_TIMEOUT_MS }
 fn default_gzip_enabled() -> bool { true }
+fn default_application() -> String { APPLICATION.to_string() }
+fn default_version() -> String { VERSION.to_string() }
+fn default_min_version() -> Vec<i32> { vec![1, 0, 0] }
+fn default_min_proxy_version() -> Vec<i32> { vec![1, 0, 0] }
 
 impl Default for P2PConfig {
     fn default() -> Self {
@@ -361,6 +382,10 @@ impl Default for P2PConfig {
             gzip_enabled: default_gzip_enabled(),
             ignore_announced_address: false,
             hide_error_details: false,
+            application: default_application(),
+            version: default_version(),
+            min_version: default_min_version(),
+            min_proxy_version: default_min_proxy_version(),
             offline_mode: false,
             default_peers: Vec::new(),
             well_known_peers: Vec::new(),
@@ -456,26 +481,69 @@ impl P2PConfig {
             if let Ok(addr) = addr_str.parse::<SocketAddr>() {
                 if !peers.contains_peer(&addr).await {
                     let mut peer = crate::peer::Peer::new(addr, false);
-                    // 标记为知名节点（services bit 0）
                     peer.services = 0x01;
                     peers.register_peer(peer).await;
                 }
             }
         }
 
-        // 3. 预加载黑名单
+        // 3. 预加载已知黑名单（对应 Java: knownBlacklistedPeers）
         for addr_str in &self.known_blacklisted_peers {
-            if let Ok(addr) = addr_str.parse::<SocketAddr>() {
-                peers.blacklist(addr).await;
-            }
+            peers.add_known_blacklisted(addr_str.clone()).await;
         }
 
-        tracing::info!(
+        tracing::debug!(
             "Loaded {} bootstrap peers, {} well-known peers, {} blacklisted",
             self.default_peers.len(),
             self.well_known_peers.len(),
             self.known_blacklisted_peers.len()
         );
+    }
+
+    /// 检查版本是否过旧（对应 Java: Peers.isOldVersion）
+    pub fn is_old_version(&self, version: &str) -> bool {
+        Self::compare_version(version, &self.min_version) == Some(std::cmp::Ordering::Less)
+    }
+
+    /// 检查版本是否过新（对应 Java: Peers.isNewVersion）
+    pub fn is_new_version(&self, version: &str) -> bool {
+        let max_version = Self::parse_version(&self.version);
+        Self::compare_version(version, &max_version) == Some(std::cmp::Ordering::Greater)
+    }
+
+    /// 解析版本号为数字数组
+    fn parse_version(version: &str) -> Vec<i32> {
+        let v = version.strip_suffix('e').unwrap_or(version);
+        v.split('.')
+            .filter_map(|s| s.parse::<i32>().ok())
+            .collect()
+    }
+
+    /// 比较两个版本号
+    fn compare_version(version: &str, ref_version: &[i32]) -> Option<std::cmp::Ordering> {
+        if version.is_empty() {
+            return Some(std::cmp::Ordering::Less);
+        }
+        let v = version.strip_suffix('e').unwrap_or(version);
+        let parts: Vec<i32> = v.split('.')
+            .filter_map(|s| s.parse::<i32>().ok())
+            .collect();
+
+        for i in 0..ref_version.len().min(parts.len()) {
+            if parts[i] > ref_version[i] {
+                return Some(std::cmp::Ordering::Greater);
+            } else if parts[i] < ref_version[i] {
+                return Some(std::cmp::Ordering::Less);
+            }
+        }
+
+        if parts.len() < ref_version.len() {
+            Some(std::cmp::Ordering::Less)
+        } else if parts.len() > ref_version.len() {
+            Some(std::cmp::Ordering::Greater)
+        } else {
+            Some(std::cmp::Ordering::Equal)
+        }
     }
 }
 

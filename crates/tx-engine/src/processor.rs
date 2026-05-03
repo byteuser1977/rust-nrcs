@@ -11,7 +11,7 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use serde_json;
 
 use blockchain_types::*;
@@ -1210,7 +1210,7 @@ impl DatabaseTransactionProcessor {
         };
         self.asset_history_repo.insert(&history_record).await?;
 
-        info!("Asset issued: id={} owner={} quantity={} decimals={} height={}",
+        debug!("Asset issued: id={} owner={} quantity={} decimals={} height={}",
               asset_id, sender_id, quantity, decimals, current_height);
 
         Ok(())
@@ -1309,7 +1309,7 @@ impl DatabaseTransactionProcessor {
             self.asset_history_repo.insert(&recipient_history).await?;
         }
 
-        info!("Asset transferred: asset_id={} from={} to={} quantity={}",
+        debug!("Asset transferred: asset_id={} from={} to={} quantity={}",
               asset_id, sender_id, recipient_id, quantity);
 
         Ok(())
@@ -1348,7 +1348,7 @@ impl DatabaseTransactionProcessor {
 
         match self.ask_order_repo.insert(&ask_order).await {
             Ok(_) => {
-                info!("Placed ASK order {} for asset {}, qty={}, price={}",
+                debug!("Placed ASK order {} for asset {}, qty={}, price={}",
                     tx.id, asset_id, quantity, price_nqt);
 
                 // Java: senderAccount.addToUnconfirmedAssetBalanceQNT(event, assetId, -quantityQNT);
@@ -1400,7 +1400,7 @@ impl DatabaseTransactionProcessor {
 
         match self.bid_order_repo.insert(&bid_order).await {
             Ok(_) => {
-                info!("Placed BID order {} for asset {}, qty={}, price={}",
+                debug!("Placed BID order {} for asset {}, qty={}, price={}",
                     tx.id, asset_id, quantity, price_nqt);
 
                 // 减少unconfirmed NRCS余额（预扣购买金额）
@@ -1439,7 +1439,7 @@ impl DatabaseTransactionProcessor {
                 // 删除order记录
                 self.ask_order_repo.delete(order.db_id).await?;
 
-                info!("Cancelled ASK order {} for account {}", order_id, sender_id);
+                debug!("Cancelled ASK order {} for account {}", order_id, sender_id);
 
                 // Java: senderAccount.addToUnconfirmedAssetBalanceQNT(event, assetId, quantityQNT);
                 // Restore unconfirmed asset balance
@@ -1479,7 +1479,7 @@ impl DatabaseTransactionProcessor {
                 // 删除order记录
                 self.bid_order_repo.delete(order.db_id).await?;
 
-                info!("Cancelled BID order {} for account {}", order_id, sender_id);
+                debug!("Cancelled BID order {} for account {}", order_id, sender_id);
 
                 // 恢复unconfirmed NRCS余额
                 self.account_repo.add_to_unconfirmed_balance(sender_id, total_cost, self.current_height()).await?;
@@ -1565,6 +1565,24 @@ impl DatabaseTransactionProcessor {
 
                     self.trade_repo.insert(&trade).await?;
 
+                    // Java: Transfer asset from seller to buyer
+                    // sellerAccount.addToAssetBalanceQNT(assetId, -quantity)
+                    self.account_asset_repo.decrease_quantity(ask.account_id, asset_id, trade_quantity).await?;
+                    // Unconfirmed was already deducted during ask order placement Phase 1
+
+                    // buyerAccount.addToAssetAndUnconfirmedAssetBalanceQNT(assetId, +quantity)
+                    self.account_repo.get_or_create(bid.account_id).await?;
+                    self.account_asset_repo.increase_quantity(bid.account_id, asset_id, trade_quantity).await?;
+                    self.account_asset_repo.add_to_unconfirmed_quantity(bid.account_id, asset_id, trade_quantity).await?;
+
+                    // Java: Transfer NRCS from buyer to seller (buyer pays price * quantity)
+                    let total_nqt = trade_price.checked_mul(trade_quantity)
+                        .ok_or_else(|| ProcessorError::Validation("trade price*quantity overflow".to_string()))?;
+                    // Buyer pays: confirmed balance decreases (unconfirmed was pre-deducted in bid order Phase 1)
+                    self.account_repo.add_to_balance(bid.account_id, -total_nqt, current_height).await?;
+                    // Seller receives: both confirmed and unconfirmed balance increase
+                    self.account_repo.add_to_balance_and_unconfirmed(ask.account_id, total_nqt, current_height).await?;
+
                     // 更新ask order剩余数量
                     let new_ask_qty = ask.quantity - trade_quantity;
                     if new_ask_qty > 0 {
@@ -1583,7 +1601,7 @@ impl DatabaseTransactionProcessor {
                         self.bid_order_repo.delete(bid.db_id).await?;
                     }
 
-                    info!("Trade matched: asset={} qty={} price={} seller={} buyer={}",
+                    debug!("Trade matched: asset={} qty={} price={} seller={} buyer={}",
                           asset_id, trade_quantity, trade_price, ask.account_id, bid.account_id);
 
                     // 如果当前ask已完全成交，跳出内层循环处理下一个ask
@@ -1635,7 +1653,7 @@ impl DatabaseTransactionProcessor {
         // 获取所有资产持有者并分配红利
         match self.account_asset_repo.find_by_asset(asset_id).await {
             Ok(holders) => {
-                info!("Paying dividend on asset {} to {} holders (total={} NQT, excluded sender shares={})",
+                debug!("Paying dividend on asset {} to {} holders (total={} NQT, excluded sender shares={})",
                     asset_id, holders.len(), total_dividend_amount, sender_shares);
 
                 for holder in holders {
@@ -1669,7 +1687,7 @@ impl DatabaseTransactionProcessor {
                     }
                 }
 
-                info!("Dividend payment completed for asset {}", asset_id);
+                debug!("Dividend payment completed for asset {}", asset_id);
 
                 // ✅ 修复：添加资产分红记录到 asset_dividend 表
                 // NRCS Java: Dividend.save(dividend) 会插入一条记录
@@ -1754,7 +1772,7 @@ impl DatabaseTransactionProcessor {
             };
             self.asset_history_repo.insert(&history_record).await?;
 
-            info!("Deleted {} of asset {} from account {} (tx:{})", delete_quantity, asset_id, sender_id, tx.id);
+            debug!("Deleted {} of asset {} from account {} (tx:{})", delete_quantity, asset_id, sender_id, tx.id);
         } else {
             warn!("Invalid asset delete parameters in transaction {}", tx.id);
         }
@@ -1798,7 +1816,7 @@ impl DatabaseTransactionProcessor {
             };
             self.asset_history_repo.insert(&history_record).await?;
 
-            info!("Increased asset {} by {} for account {}", asset_id, increase_quantity, sender_id);
+            debug!("Increased asset {} by {} for account {}", asset_id, increase_quantity, sender_id);
         } else {
             warn!("Invalid asset increase parameters in transaction {}", tx.id);
         }
@@ -1831,7 +1849,7 @@ impl DatabaseTransactionProcessor {
             };
 
             self.asset_property_repo.insert(&prop_model).await?;
-            info!("Set property '{}'='{}' on asset {}", property_name, property_value, asset_id);
+            debug!("Set property '{}'='{}' on asset {}", property_name, property_value, asset_id);
         }
 
         Ok(())
@@ -1848,7 +1866,7 @@ impl DatabaseTransactionProcessor {
         if !property_name.is_empty() && asset_id > 0 {
             // TODO: 实现delete方法
             debug!("Deleting property '{}' from asset {}", property_name, asset_id);
-            info!("AssetProperty deletion not yet fully implemented");
+            debug!("AssetProperty deletion not yet fully implemented");
         }
 
         Ok(())
@@ -1879,7 +1897,7 @@ impl DatabaseTransactionProcessor {
             };
 
             self.asset_property_repo.insert(&prop_model).await?;
-            info!("Set long-value property '{}'={} on asset {}", property_name, long_value, asset_id);
+            debug!("Set long-value property '{}'={} on asset {}", property_name, long_value, asset_id);
         }
 
         Ok(())
@@ -2038,7 +2056,7 @@ impl DatabaseTransactionProcessor {
 
         match self.currency_repo.insert(&currency_model).await {
             Ok(_) => {
-                info!("Issued currency '{}' (ID={}) with initial supply {}", name, currency_id, initial_supply);
+                debug!("Issued currency '{}' (ID={}) with initial supply {}", name, currency_id, initial_supply);
 
                 // Java: senderAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, currencyId, initialSupply);
                 if initial_supply > 0 {
@@ -2085,7 +2103,7 @@ impl DatabaseTransactionProcessor {
             // 增加currency的reserve（P1优化：使用真正的CurrencyRepository方法）
             self.currency_repo.increase_reserve(currency_id, amount_per_unit).await?;
 
-            info!("Increased reserve for currency {} by {} NQT/unit", currency_id, amount_per_unit);
+            debug!("Increased reserve for currency {} by {} NQT/unit", currency_id, amount_per_unit);
         } else {
             warn!("Invalid reserve increase parameters in transaction {}", tx.id);
         }
@@ -2134,7 +2152,7 @@ impl DatabaseTransactionProcessor {
             // 增加NRCS余额
             self.account_repo.add_to_balance(sender_id, nrcs_received, self.current_height()).await?;
 
-            info!("Claimed {} units from currency {}, received {} NQT (reserve ratio: {}/{})",
+            debug!("Claimed {} units from currency {}, received {} NQT (reserve ratio: {}/{})",
                   units_to_claim, currency_id, nrcs_received, reserve_supply, current_supply);
         } else {
             warn!("Invalid reserve claim parameters in transaction {}", tx.id);
@@ -2164,7 +2182,7 @@ impl DatabaseTransactionProcessor {
             // Java: CurrencyExchangeOffer.publishOffer(transaction, attachment);
             // Store the exchange offer - for now we'll use the exchange_request table
             // In a full implementation, this would create a separate exchange_offer record
-            info!("Published exchange offer for currency {} by account {}: buy_rate={}, sell_rate={}, buy_limit={}, sell_limit={}, expiration={}",
+            debug!("Published exchange offer for currency {} by account {}: buy_rate={}, sell_rate={}, buy_limit={}, sell_limit={}, expiration={}",
                   currency_id, sender_id, buy_rate, sell_rate, total_buy_limit, total_sell_limit, expiration_height);
 
             // TODO: Create proper exchange_offer table and model
@@ -2207,7 +2225,7 @@ impl DatabaseTransactionProcessor {
 
             match self.exchange_request_repo.insert(&request_model).await {
                 Ok(_) => {
-                    info!("Created exchange buy request: {} units of currency {} at rate {}",
+                    debug!("Created exchange buy request: {} units of currency {} at rate {}",
                         units, currency_id, rate);
                     // Note: NRCS deduction is handled by base apply() method via tx.amount
                     // No additional deduction needed here
@@ -2255,7 +2273,7 @@ impl DatabaseTransactionProcessor {
 
             match self.exchange_request_repo.insert(&request_model).await {
                 Ok(_) => {
-                    info!("Created exchange sell request: {} units of currency {} at rate {}",
+                    debug!("Created exchange sell request: {} units of currency {} at rate {}",
                         units, currency_id, rate);
                     // Java: senderAccount.addToCurrencyUnconfirmedUnits(event, txId, currencyId, -units);
                     // Deduct from unconfirmed currency units (not confirmed)
@@ -2299,7 +2317,7 @@ impl DatabaseTransactionProcessor {
 
             match self.currency_mint_repo.insert(&mint_model).await {
                 Ok(_) => {
-                    info!("Minted {} units of currency {} for account {}", minted_units, currency_id, sender_id);
+                    debug!("Minted {} units of currency {} for account {}", minted_units, currency_id, sender_id);
 
                     // 更新货币余额和未确认余额
                     // Java: senderAccount.addToCurrencyAndUnconfirmedCurrencyUnits(event, currencyId, units)
@@ -2335,7 +2353,7 @@ impl DatabaseTransactionProcessor {
                 Ok(Some(currency)) if currency.account_id == sender_id => {
                     // 标记为deleted或实际删除
                     self.currency_repo.delete_currency(currency_id).await?;
-                    info!("Deleted currency {} by owner account {}", currency_id, sender_id);
+                    debug!("Deleted currency {} by owner account {}", currency_id, sender_id);
                 }
                 Ok(Some(_)) => {
                     warn!("Cannot delete currency owned by another account");
@@ -2398,7 +2416,7 @@ impl DatabaseTransactionProcessor {
 
             match self.currency_transfer_repo.insert(&transfer_model).await {
                 Ok(_) => {
-                    info!("Transferred {} of currency {} from {} to {}",
+                    debug!("Transferred {} of currency {} from {} to {}",
                         units, currency_id, sender_id, recipient_id);
                 }
                 Err(e) => {
@@ -2771,7 +2789,7 @@ impl DatabaseTransactionProcessor {
                         Ok(None) => {
                             // 插入新alias
                             self.alias_repo.insert(&alias_model).await?;
-                            info!("Created new alias '{}' for account {}", alias_name, sender_id);
+                            debug!("Created new alias '{}' for account {}", alias_name, sender_id);
                         }
                         Err(e) => {
                             warn!("Error checking alias existence: {}", e);
@@ -2804,7 +2822,7 @@ impl DatabaseTransactionProcessor {
                             };
 
                             self.alias_offer_repo.insert(&offer_model).await?;
-                            info!("Alias '{}' put up for sale at price {} NQT", alias_name, price_nqt);
+                            debug!("Alias '{}' put up for sale at price {} NQT", alias_name, price_nqt);
                         }
                         Ok(None) => {
                             warn!("Cannot sell non-existent alias '{}'", alias_name);
@@ -2834,7 +2852,7 @@ impl DatabaseTransactionProcessor {
                                 // 更新alias所有者
                                 alias.account_id = sender_id;
                                 // 这里需要调用update，暂时跳过（需扩展trait）
-                                info!("Alias '{}' ownership transferred to account {}", alias_name, sender_id);
+                                debug!("Alias '{}' ownership transferred to account {}", alias_name, sender_id);
 
                                 // ✅ 修复：更新ALIAS_OFFER的buyer_id并删除offer
                                 if let Ok(Some(mut offer)) = self.alias_offer_repo.find_by_alias(alias.id).await {
@@ -2845,7 +2863,7 @@ impl DatabaseTransactionProcessor {
                                     if let Err(e) = self.alias_offer_repo.delete(offer.db_id).await {
                                         warn!("Failed to delete alias offer for '{}': {}", alias_name, e);
                                     } else {
-                                        info!("Removed alias offer for '{}' (purchased by {})", alias_name, sender_id);
+                                        debug!("Removed alias offer for '{}' (purchased by {})", alias_name, sender_id);
                                     }
                                 }
                             } else {
@@ -2876,7 +2894,7 @@ impl DatabaseTransactionProcessor {
                             // 验证删除权限：只有owner可以删除
                             if alias.account_id == sender_id {
                                 // self.alias_repo.delete(alias.db_id).await?;
-                                info!("Alias '{}' deleted by owner account {}", alias_name, sender_id);
+                                debug!("Alias '{}' deleted by owner account {}", alias_name, sender_id);
                             } else {
                                 warn!("Account {} cannot delete alias owned by {}",
                                     sender_id, alias.account_id);
@@ -2963,7 +2981,7 @@ impl DatabaseTransactionProcessor {
 
                     match self.poll_repo.insert(&poll_model).await {
                         Ok(_) => {
-                            info!("Created poll '{}' (ID={}) for account {}", poll_name, tx.id, sender_id);
+                            debug!("Created poll '{}' (ID={}) for account {}", poll_name, tx.id, sender_id);
 
                             // 初始化POLL_RESULT（每个选项初始weight=0）
                             // TODO: 解析options数组并创建对应的PollResultModel
@@ -3007,7 +3025,7 @@ impl DatabaseTransactionProcessor {
 
                             match self.vote_repo.insert(&vote_model).await {
                                 Ok(_) => {
-                                    info!("Account {} voted on poll {} (tx={})", sender_id, poll_id, tx.id);
+                                    debug!("Account {} voted on poll {} (tx={})", sender_id, poll_id, tx.id);
 
                                     // ✅ 修复：更新POLL_RESULT的投票权重
                                     // Java: PollResult.addWeight(voterBalance)
@@ -3068,14 +3086,14 @@ impl DatabaseTransactionProcessor {
                             if let Err(e) = self.hub_repo.insert(&hub_model).await {
                                 warn!("Failed to update HUB for account {}: {}", sender_id, e);
                             } else {
-                                info!("HUB updated for account {}", sender_id);
+                                debug!("HUB updated for account {}", sender_id);
                             }
                         }
                         Ok(None) => {
                             if let Err(e) = self.hub_repo.insert(&hub_model).await {
                                 warn!("Failed to insert HUB for account {}: {}", sender_id, e);
                             } else {
-                                info!("HUB created for account {} with uris={}", sender_id, uris);
+                                debug!("HUB created for account {} with uris={}", sender_id, uris);
                             }
                         }
                         Err(e) => {
@@ -3400,7 +3418,7 @@ impl DatabaseTransactionProcessor {
 
                     match self.tagged_data_repo.insert(&tagged_data_model).await {
                         Ok(_) => {
-                            info!("Uploaded tagged data '{}' for account {}", name, sender_id);
+                            debug!("Uploaded tagged data '{}' for account {}", name, sender_id);
 
                             // ✅ 新增：插入TAG记录（如果有的话）
                             // Java: Tag.addTags(taggedDataId, tags)
@@ -3427,7 +3445,7 @@ impl DatabaseTransactionProcessor {
                                         }
                                     }
 
-                                    info!("Inserted {} tags for tagged data '{}'", tags_array.len(), name);
+                                    debug!("Inserted {} tags for tagged data '{}'", tags_array.len(), name);
                                 } else if let Some(tags_str) = tags_json.as_str() {
                                     // 如果tags是逗号分隔的字符串
                                     for (index, tag) in tags_str.split(',').enumerate() {
@@ -3449,7 +3467,7 @@ impl DatabaseTransactionProcessor {
                                         }
                                     }
 
-                                    info!("Inserted {} tags for tagged data '{}'", tags_str.split(',').count(), name);
+                                    debug!("Inserted {} tags for tagged data '{}'", tags_str.split(',').count(), name);
                                 }
                             }
                         }
@@ -3608,7 +3626,7 @@ impl DatabaseTransactionProcessor {
 
                     match self.contract_ref_repo.insert(&contract_ref_model).await {
                         Ok(_) => {
-                            info!("Set contract reference '{}' on account {} (tx={})",
+                            debug!("Set contract reference '{}' on account {} (tx={})",
                                 ref_name, sender_id, tx.id);
                         }
                         Err(e) => {
@@ -3632,7 +3650,7 @@ impl DatabaseTransactionProcessor {
                 if !ref_name.is_empty() && recipient_id != 0 {
                     debug!("Deleting contract reference '{}' from account {} (tx={})",
                         ref_name, recipient_id, tx.id);
-                    info!("ContractReference deletion not yet fully implemented (stub)");
+                    debug!("ContractReference deletion not yet fully implemented (stub)");
                     // TODO: 调用contract_ref_repo.delete_by_account_and_name(recipient_id, &ref_name)
                 } else {
                     warn!("Invalid parameters for CONTRACT_REFERENCE_DELETE in tx {}", tx.id);
@@ -4011,7 +4029,7 @@ impl DatabaseTransactionProcessor {
                         }
                     }
 
-                    info!("SHUFFLING_RECIPIENTS: added {} participants to shuffling {}", 
+                    debug!("SHUFFLING_RECIPIENTS: added {} participants to shuffling {}", 
                           participant_count, shuffling_id);
                 }
             }
@@ -4095,7 +4113,7 @@ impl DatabaseTransactionProcessor {
                 };
 
                 self.coin_order_fxt_repo.insert(&order_model).await?;
-                info!("COIN_ORDER_FXT inserted: tx={} account={} chain={} exchange={}",
+                debug!("COIN_ORDER_FXT inserted: tx={} account={} chain={} exchange={}",
                     tx.id, sender_id, chain_id, exchange_id);
             }
 
@@ -4128,7 +4146,7 @@ impl DatabaseTransactionProcessor {
                 };
 
                 self.coin_trade_fxt_repo.insert(&trade_model).await?;
-                info!("COIN_TRADE_FXT inserted: tx={} account={} chain={} exchange={}",
+                debug!("COIN_TRADE_FXT inserted: tx={} account={} chain={} exchange={}",
                     tx.id, sender_id, chain_id, exchange_id);
             }
 

@@ -112,13 +112,11 @@ impl ConnectionDaemon {
     async fn connect_to_new_peers(peers: &Arc<Peers>, _config: &P2PConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let now = current_timestamp();
 
-        // 获取可连接的节点列表
         let all_peers = peers.get_known_peers().await;
         
-        // 先过滤出可连接的节点（不能在 filter 中使用 await）
         let mut connectable = Vec::new();
         for peer in all_peers {
-            if peers.is_blacklisted_addr(&peer.address).await {
+            if peers.is_peer_blacklisted(&peer).await {
                 continue;
             }
             if peer.announced_address.is_none() {
@@ -127,7 +125,7 @@ impl ConnectionDaemon {
             if peer.state == PeerState::Connected {
                 continue;
             }
-            if now - peer.last_updated <= 600 {
+            if now - peer.last_connect_attempt <= 600 {
                 continue;
             }
             connectable.push(peer);
@@ -185,29 +183,31 @@ impl ConnectionDaemon {
     /// Connect to a single peer（完整实现）
     ///
     /// 对应 Java: Peers.connectPeer(Peer peer)
+    /// 连接前先解除黑名单（与 Java 一致）
     async fn connect_peer(peers: &Arc<Peers>, peer: &Peer) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use crate::error::ErrorCode;
 
-        // 1. 黑名单检查
-        if peers.is_blacklisted_addr(&peer.address).await {
-            return Err("Peer is blacklisted".into());
-        }
-
-        // 2. 检查离线模式
+        // 1. 检查离线模式
         let config = P2PConfig::default();
         if config.offline_mode {
             debug!("[ConnectionDaemon] Offline mode, skipping connection to {}", peer.address);
             return Ok(());
         }
 
-        // 3. 获取可变引用并调用 Peer.connect()
+        // 2. 获取可变引用
         if let Some(peer_ref) = peers.get_peer(&peer.address).await {
             let mut p = peer_ref.lock().await;
+
+            // 3. 连接前先解除黑名单（对应 Java: peer.unBlacklist()）
+            if p.is_blacklisted() {
+                p.un_blacklist();
+                debug!("[ConnectionDaemon] Unblacklisted peer {} before connecting", peer.address);
+            }
 
             // 4. 调用完整的连接握手流程
             match p.connect(&config).await {
                 Ok(response) => {
-                    info!("[ConnectionDaemon] Successfully connected to {}: app={}, ver={}",
+                    debug!("[ConnectionDaemon] Successfully connected to {}: app={}, ver={}",
                           peer.address,
                           p.application.as_deref().unwrap_or("?"),
                           p.version.as_deref().unwrap_or("?"));
@@ -311,7 +311,7 @@ impl ConnectionDaemon {
             }
 
             if pruned_count > 0 {
-                info!("[ConnectionDaemon] Pruned {} old peers", pruned_count);
+                debug!("[ConnectionDaemon] Pruned {} old peers", pruned_count);
             }
         }
 
@@ -340,11 +340,11 @@ impl ConnectionDaemon {
                 Ok(addr) => {
                     // 检查是否已存在
                     if !peers.contains_peer(&addr).await {
-                        // 检查是否在黑名单中
-                        if peers.is_blacklisted_addr(&addr).await {
-                            debug!("[ConnectionDaemon] Well-known peer {} is blacklisted, skipping", addr);
-                            continue;
-                        }
+                    // 检查是否在黑名单中
+                    if peers.is_blacklisted_addr(&addr).await {
+                        debug!("[ConnectionDaemon] Well-known peer {} is blacklisted, skipping", addr);
+                        continue;
+                    }
 
                         // 创建并注册新节点
                         let mut new_peer = Peer::new(addr, false); // outbound connection

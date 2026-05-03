@@ -41,7 +41,7 @@ impl WebsocketServer {
 
         loop {
             let (stream, addr) = listener.accept().await?;
-            info!("New connection from: {}", addr);
+            debug!("New connection from: {}", addr);
 
             let peers = Arc::clone(&self.peers);
             let handler = Arc::clone(&self.handler);
@@ -75,7 +75,7 @@ impl WebsocketServer {
         // 注册新连接
         peers.add_connection(addr).await;
         let peer_count = peers.connection_count().await;
-        info!("Connection established. Active: {}", peer_count);
+        debug!("Connection established. Active: {}", peer_count);
 
         let codec = FrameCodec;
 
@@ -150,7 +150,7 @@ impl WebsocketServer {
                     }
                 }
                 Some(Ok(Message::Close(_))) => {
-                    info!("Connection closed by client: {}", addr);
+                    debug!("Connection closed by client: {}", addr);
                     break;
                 }
                 Some(Ok(Message::Ping(p))) => {
@@ -167,7 +167,7 @@ impl WebsocketServer {
                     break;
                 }
                 None => {
-                    info!("Connection ended: {}", addr);
+                    debug!("Connection ended: {}", addr);
                     break;
                 }
             }
@@ -176,7 +176,7 @@ impl WebsocketServer {
         // 清理连接
         peers.remove_connection(&addr).await;
         let count = peers.connection_count().await;
-        info!("Connection removed. Active: {}", count);
+        debug!("Connection removed. Active: {}", count);
 
         Ok(())
     }
@@ -192,17 +192,17 @@ impl WebsocketClient {
         peers: Arc<Peers>,
         _handler: Arc<Handler>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        info!("[CLIENT] Attempting to connect to {} via WebSocket", addr);
+        debug!("[CLIENT] Attempting to connect to {} via WebSocket", addr);
 
         let url = format!("ws://{}/nrcs", addr);
-        info!("[CLIENT] Connecting to WebSocket URL: {}", url);
+        debug!("[CLIENT] Connecting to WebSocket URL: {}", url);
         // 10 秒连接超时
         let ws_stream = match tokio::time::timeout(
             tokio::time::Duration::from_secs(10),
             tokio_tungstenite::connect_async(&url),
         ).await {
             Ok(Ok((ws_stream, _))) => {
-                info!("[CLIENT] WebSocket connected to {}", addr);
+                debug!("[CLIENT] WebSocket connected to {}", addr);
                 ws_stream
             }
             Ok(Err(e)) => {
@@ -287,7 +287,7 @@ impl WebsocketClient {
                 Ok(resp) => {
                     debug!("[CLIENT] Received PeerResponse: {:?}", resp);
                     if resp.error.is_none() {
-                        info!("Handshake successful with {}", addr);
+                        debug!("Handshake successful with {}", addr);
                         let mut p = crate::peer::Peer::new(addr, false);
                         p.set_state(crate::peer::PeerState::Connected);
                         peers.register_peer(p).await;
@@ -308,7 +308,7 @@ impl WebsocketClient {
         addr: SocketAddr,
         request: PeerRequest,
     ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
-        info!("[CLIENT] Sending {:?} request to {} via HTTP", request.request_type, addr);
+        debug!("[CLIENT] Sending {:?} request to {} via HTTP", request.request_type, addr);
 
         let client = Client::new();
         let url = format!("http://{}/nrcs", addr);
@@ -374,7 +374,7 @@ impl WebsocketClient {
             Ok(Ok(Some(body))) => {
                 if let Ok(resp) = serde_json::from_slice::<PeerResponse>(&body) {
                     if resp.error.is_none() {
-                        info!("HTTP handshake succeeded with {}", addr);
+                        debug!("HTTP handshake succeeded with {}", addr);
                         let mut p = crate::peer::Peer::new(addr, false);
                         p.set_state(crate::peer::PeerState::Connected);
                         peers.register_peer(p).await;

@@ -124,25 +124,22 @@ impl DiscoveryDaemon {
                             .and_then(|v| v.as_str());
 
                         if let Some(addr_str) = addr_str {
-                            // 解析地址（支持 "host:port" 格式）
                             if let Ok(addr) = addr_str.parse::<std::net::SocketAddr>() {
-                                // 检查是否已知
                                 if !peers.contains_peer(&addr).await {
-                                    // 检查黑名单
-                                    if !peers.is_blacklisted_addr(&addr).await {
-                                        let mut new_peer = Peer::new(addr, false);
-                                        // 设置公告地址
-                                        new_peer.set_announced_address(addr_str.to_string());
-                                        peers.register_peer(new_peer).await;
-                                        added += 1;
+                                    if peers.is_blacklisted_addr(&addr).await {
+                                        continue;
                                     }
+                                    let mut new_peer = Peer::new(addr, false);
+                                    new_peer.set_announced_address(addr_str.to_string());
+                                    peers.register_peer(new_peer).await;
+                                    added += 1;
                                 }
                             }
                         }
                     }
 
                     if added > 0 {
-                        info!("[DiscoveryDaemon] Discovered {} new peers from {}", added, peer.address);
+                        debug!("[DiscoveryDaemon] Discovered {} new peers from {}", added, peer.address);
                     } else {
                         debug!("[DiscoveryDaemon] No new peers from {}", peer.address);
                     }
@@ -171,8 +168,7 @@ impl DiscoveryDaemon {
         let mut shareable = Vec::new();
 
         for peer in all_peers {
-            // 条件：非黑名单、有公告地址、允许共享地址、已连接或最近活跃
-            if peers.is_blacklisted_addr(&peer.address).await {
+            if peers.is_peer_blacklisted(&peer).await {
                 continue;
             }
             if peer.announced_address.is_none() {
@@ -276,7 +272,7 @@ impl DiscoveryDaemon {
         }
 
         if saved_count > 0 {
-            info!("[DiscoveryDaemon] Saved {} peers to database", saved_count);
+            debug!("[DiscoveryDaemon] Saved {} peers to database", saved_count);
         }
 
         debug!("[DiscoveryDaemon] Peer persistence completed ({} total, {} saved)",

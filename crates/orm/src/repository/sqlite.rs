@@ -1186,7 +1186,7 @@ impl AccountAssetRepository for SqliteAccountAssetRepository {
     }
 
     async fn increase_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE account_asset
             SET quantity = quantity + ?, latest = 1
@@ -1199,6 +1199,23 @@ impl AccountAssetRepository for SqliteAccountAssetRepository {
         .execute(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
+
+        if result.rows_affected() == 0 && delta != 0 {
+            let current_height: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(height), 0) FROM block")
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
+            sqlx::query(
+                "INSERT INTO account_asset (account_id, asset_id, quantity, unconfirmed_quantity, height, latest) VALUES (?, ?, ?, 0, ?, 1)"
+            )
+            .bind(account_id)
+            .bind(asset_id)
+            .bind(delta)
+            .bind(current_height)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        }
         Ok(())
     }
 

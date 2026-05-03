@@ -135,6 +135,37 @@ impl Peer {
         }
     }
 
+    /// 设置版本号（含版本检查）
+    ///
+    /// 对应 NRCS Java: Peer.setVersion(String version)
+    /// 当 application 与本节点相同且版本过旧时，自动标记为旧版本
+    pub fn set_version(&mut self, version: Option<String>, application: Option<&str>, config: &crate::config::P2PConfig) {
+        if let Some(ref v) = version {
+            if v.len() > config.max_version_length {
+                debug!("Invalid version length: {} for peer {}", v.len(), self.address);
+                return;
+            }
+        }
+
+        let version_changed = version.as_ref() != self.version.as_ref();
+        self.version = version;
+        self.is_old_version = false;
+
+        if application.map(|a| a == config.application).unwrap_or(false) {
+            if let Some(ref v) = self.version {
+                if config.is_old_version(v) {
+                    self.is_old_version = true;
+                    if version_changed {
+                        debug!("Blacklisting {} version {}", self.address, v);
+                    }
+                    self.blacklisting_cause = Some(format!("Old version: {}", v));
+                    self.last_inbound_request = 0;
+                    self.state = PeerState::NonConnected;
+                }
+            }
+        }
+    }
+
     /// 停用节点
     /// 
     /// 对应 NRCS Java: Peer.deactivate()
@@ -174,8 +205,11 @@ impl Peer {
     }
 
     /// 检查是否在黑名单中
+    ///
+    /// 对应 Java: Peer.isBlacklisted() - 检查 blacklistingTime 和 isOldVersion
+    /// 注意: knownBlacklistedPeers 检查由 Peers.is_peer_blacklisted() 完成
     pub fn is_blacklisted(&self) -> bool {
-        self.blacklisting_time > 0
+        self.blacklisting_time > 0 || self.is_old_version
     }
 
     /// 发送请求到远程节点（WebSocket 优先 + HTTP 回退）
@@ -350,9 +384,14 @@ impl Peer {
         // 5. 更新 Peer 属性
         self.update_from_getinfo_response(&response, config);
 
-        // 6. 设置为已连接状态
-        self.state = PeerState::Connected;
-        self.last_updated = current_timestamp();
+        // 6. 检查版本并设置连接状态
+        // 对应 Java: Peer.connect() 中的版本检查逻辑
+        if !self.is_old_version {
+            self.state = PeerState::Connected;
+            self.last_updated = current_timestamp();
+        } else if !self.is_blacklisted() {
+            self.blacklist(format!("Old version: {}", self.version.as_deref().unwrap_or("unknown")));
+        }
 
         Ok(response)
     }
@@ -363,7 +402,7 @@ impl Peer {
     fn update_from_getinfo_response(
         &mut self,
         response: &serde_json::Value,
-        _config: &crate::config::P2PConfig,
+        config: &crate::config::P2PConfig,
     ) {
         // services
         if let Some(services) = response.get("services").and_then(|v| v.as_i64()) {
@@ -371,13 +410,13 @@ impl Peer {
         }
 
         // application
-        if let Some(app) = response.get("application").and_then(|v| v.as_str()) {
-            self.application = Some(app.to_string());
-        }
+        let app = response.get("application").and_then(|v| v.as_str()).map(|s| s.to_string());
 
-        // version
-        if let Some(ver) = response.get("version").and_then(|v| v.as_str()) {
-            self.version = Some(ver.to_string());
+        // version（使用 set_version 进行版本检查）
+        let ver = response.get("version").and_then(|v| v.as_str()).map(|s| s.to_string());
+        self.set_version(ver, app.as_deref(), config);
+        if app.is_some() {
+            self.application = app;
         }
 
         // platform
@@ -395,7 +434,7 @@ impl Peer {
         if let Some(new_addr) = response.get("announcedAddress").or_else(|| response.get("announced_address"))
             .and_then(|v| v.as_str())
         {
-            if self.announced_address.as_deref() != Some(new_addr) && !_config.ignore_announced_address {
+            if self.announced_address.as_deref() != Some(new_addr) && !config.ignore_announced_address {
                 self.set_announced_address(new_addr.to_string());
             }
         }
@@ -565,8 +604,9 @@ pub struct Peers {
     known_peers: Arc<RwLock<HashMap<SocketAddr, Arc<Mutex<Peer>>>>>,
     /// 活跃的 WebSocket/TCP 连接
     active_connections: Arc<Mutex<ActiveConnections>>,
-    /// 黑名单
-    blacklist: Arc<RwLock<HashSet<SocketAddr>>>,
+    /// 已知黑名单节点地址（对应 Java: Peers.knownBlacklistedPeers）
+    /// 使用 String 存储主机地址（host 或 announcedAddress），与 Java 一致
+    known_blacklisted_peers: Arc<RwLock<HashSet<String>>>,
     /// 自己节点的信息
     my_peer_info: Arc<RwLock<Peer>>,
 }
@@ -576,7 +616,7 @@ impl Peers {
         Self {
             known_peers: Arc::new(RwLock::new(HashMap::new())),
             active_connections: Arc::new(Mutex::new(ActiveConnections::new())),
-            blacklist: Arc::new(RwLock::new(HashSet::new())),
+            known_blacklisted_peers: Arc::new(RwLock::new(HashSet::new())),
             my_peer_info: Arc::new(RwLock::new(my_peer_info)),
         }
     }
@@ -702,28 +742,96 @@ impl Peers {
         }).clone()
     }
 
-    /// 检查是否在黑名单中
+    /// 检查节点是否在黑名单中（完整检查，对应 Java: Peer.isBlacklisted()）
+    ///
+    /// 检查条件：
+    /// 1. Peer.blacklisting_time > 0（运行时动态黑名单）
+    /// 2. Peer.is_old_version（版本过旧）
+    /// 3. host 在 known_blacklisted_peers 中
+    /// 4. announcedAddress 在 known_blacklisted_peers 中
+    pub async fn is_peer_blacklisted(&self, peer: &Peer) -> bool {
+        if peer.is_blacklisted() {
+            return true;
+        }
+
+        let known_bl = self.known_blacklisted_peers.read().await;
+        let host = peer.address.to_string();
+        if known_bl.contains(&host) {
+            return true;
+        }
+        if let Some(ref announced) = peer.announced_address {
+            if known_bl.contains(announced) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// 检查地址是否在黑名单中（通过字符串地址）
+    ///
+    /// 对应 Java: Peer.isBlacklisted() 中对 host 的检查
     pub async fn is_blacklisted(&self, addr: &str) -> bool {
-        let blacklist = self.blacklist.read().await;
-        // 尝试解析地址
+        let known_bl = self.known_blacklisted_peers.read().await;
+        if known_bl.contains(addr) {
+            return true;
+        }
+        drop(known_bl);
+
         if let Ok(socket_addr) = addr.parse::<SocketAddr>() {
-            blacklist.contains(&socket_addr)
+            self.is_blacklisted_addr(&socket_addr).await
         } else {
             false
         }
     }
 
     /// 检查 SocketAddr 是否在黑名单中
+    ///
+    /// 检查 Peer 级别黑名单 + known_blacklisted_peers
     pub async fn is_blacklisted_addr(&self, addr: &SocketAddr) -> bool {
-        let blacklist = self.blacklist.read().await;
-        blacklist.contains(addr)
+        let known_bl = self.known_blacklisted_peers.read().await;
+        if known_bl.contains(&addr.to_string()) {
+            return true;
+        }
+        drop(known_bl);
+
+        let known = self.known_peers.read().await;
+        if let Some(peer_ref) = known.get(addr) {
+            let peer = peer_ref.lock().await;
+            return peer.is_blacklisted();
+        }
+
+        false
     }
 
-    /// 添加到黑名单
-    pub async fn blacklist(&self, addr: SocketAddr) {
-        let mut blacklist = self.blacklist.write().await;
-        blacklist.insert(addr);
-        warn!("Peer blacklisted: {}", addr);
+    /// 添加已知黑名单节点（对应 Java: Peers.knownBlacklistedPeers）
+    ///
+    /// 这些节点是永久黑名单，不会自动解除
+    pub async fn add_known_blacklisted(&self, addr_str: String) {
+        let mut known_bl = self.known_blacklisted_peers.write().await;
+        known_bl.insert(addr_str);
+    }
+
+    /// 移除已知黑名单节点
+    pub async fn remove_known_blacklisted(&self, addr_str: &str) {
+        let mut known_bl = self.known_blacklisted_peers.write().await;
+        known_bl.remove(addr_str);
+    }
+
+    /// 检查地址是否在已知黑名单中
+    pub async fn is_known_blacklisted(&self, addr_str: &str) -> bool {
+        let known_bl = self.known_blacklisted_peers.read().await;
+        known_bl.contains(addr_str)
+    }
+
+    /// 获取已知黑名单节点数量
+    pub async fn known_blacklisted_count(&self) -> usize {
+        self.known_blacklisted_peers.read().await.len()
+    }
+
+    /// 获取已知黑名单节点列表
+    pub async fn known_blacklisted_peers_list(&self) -> Vec<String> {
+        self.known_blacklisted_peers.read().await.iter().cloned().collect()
     }
 
     /// Check if a peer address is already known
@@ -745,7 +853,7 @@ impl Peers {
         
         for p in known.values() {
             let peer = p.lock().await;
-            if peer.state == state && self.blacklist.read().await.contains(&peer.address) {
+            if peer.state == state && self.is_peer_blacklisted(&peer).await {
                 continue;
             }
             if peer.state == state {
@@ -760,12 +868,11 @@ impl Peers {
     /// 对应 NRCS Java: Peers.getPublicPeers(PeerState state, boolean applyPullThreshold)
     pub async fn get_public_peers(&self, state: PeerState) -> Vec<Peer> {
         let known = self.known_peers.read().await;
-        let blacklist = self.blacklist.read().await;
         
         let mut public_peers = Vec::new();
         for p in known.values() {
             let peer = p.lock().await;
-            if !blacklist.contains(&peer.address) 
+            if !self.is_peer_blacklisted(&peer).await
                 && peer.state == state 
                 && peer.announced_address.is_some() {
                 public_peers.push(peer.clone());

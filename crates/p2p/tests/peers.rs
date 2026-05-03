@@ -137,10 +137,11 @@ async fn test_peers_blacklist() {
     let new_addr: SocketAddr = "192.168.1.1:16974".parse().unwrap();
     
     // Create peer
-    let _ = peers.find_or_create_peer(new_addr, false).await;
-    
-    // Add to blacklist
-    peers.blacklist(new_addr).await;
+    let peer_ref = peers.find_or_create_peer(new_addr, false).await;
+    {
+        let mut p = peer_ref.lock().await;
+        p.blacklist("Test reason".to_string());
+    }
     
     assert!(peers.is_blacklisted_addr(&new_addr).await);
 }
@@ -205,41 +206,150 @@ async fn test_peers_get_any_peer() {
 // ---------- BlacklistManager Tests ----------
 
 #[tokio::test]
-async fn test_blacklist_manager() {
+async fn test_blacklist_manager_persist_load() {
     use p2p::BlacklistManager;
     
-    let manager = BlacklistManager::new();
     let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
-    
-    // Not blacklisted initially
-    assert!(!manager.is_blacklisted(&addr).await);
-    
-    // Add to blacklist
-    manager.add_to_blacklist(addr, "Test".to_string(), Some(3600), false).await;
-    assert!(manager.is_blacklisted(&addr).await);
-    
-    // Remove from blacklist
-    manager.remove_from_blacklist(&addr).await;
-    assert!(!manager.is_blacklisted(&addr).await);
+    let my_peer = Peer::new(addr, false);
+    let peers = Peers::new(my_peer);
+
+    peers.add_known_blacklisted("192.168.1.1:9000".to_string()).await;
+
+    let tmp_dir = std::env::temp_dir();
+    let path = tmp_dir.join("nrcs_test_blacklist_peers.json");
+    let path_str = path.to_str().unwrap();
+
+    BlacklistManager::persist_blacklist(&peers, path_str).await.unwrap();
+
+    let my_peer2 = Peer::new("127.0.0.1:8081".parse().unwrap(), false);
+    let peers2 = Peers::new(my_peer2);
+    BlacklistManager::load_blacklist(&peers2, path_str).await.unwrap();
+
+    assert!(peers2.is_known_blacklisted("192.168.1.1:9000").await);
+
+    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]
-async fn test_blacklist_manager_whitelist() {
-    use p2p::BlacklistManager;
+async fn test_peers_known_blacklisted() {
+    let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let my_peer = Peer::new(addr, false);
+    let peers = Peers::new(my_peer);
+
+    // Not blacklisted initially
+    assert!(!peers.is_known_blacklisted("192.168.1.1:9000").await);
+
+    // Add to known blacklisted
+    peers.add_known_blacklisted("192.168.1.1:9000".to_string()).await;
+    assert!(peers.is_known_blacklisted("192.168.1.1:9000").await);
+
+    // Check via is_blacklisted (string address)
+    assert!(peers.is_blacklisted("192.168.1.1:9000").await);
+
+    // Remove from known blacklisted
+    peers.remove_known_blacklisted("192.168.1.1:9000").await;
+    assert!(!peers.is_known_blacklisted("192.168.1.1:9000").await);
+}
+
+#[tokio::test]
+async fn test_peers_is_peer_blacklisted() {
+    let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let my_peer = Peer::new(addr, false);
+    let peers = Peers::new(my_peer);
+
+    let new_addr: SocketAddr = "192.168.1.1:16974".parse().unwrap();
+    let peer_ref = peers.find_or_create_peer(new_addr, false).await;
+
+    // Not blacklisted initially
+    {
+        let p = peer_ref.lock().await;
+        assert!(!peers.is_peer_blacklisted(&p).await);
+    }
+
+    // Blacklist via Peer.blacklist()
+    {
+        let mut p = peer_ref.lock().await;
+        p.blacklist("Test".to_string());
+    }
+
+    // Now blacklisted
+    {
+        let p = peer_ref.lock().await;
+        assert!(peers.is_peer_blacklisted(&p).await);
+    }
+
+    // Also check via known_blacklisted_peers
+    peers.add_known_blacklisted("192.168.1.2:16974".to_string()).await;
+    let mut peer2 = Peer::new("192.168.1.2:16974".parse().unwrap(), false);
+    peer2.announced_address = Some("192.168.1.2:16974".to_string());
+    peers.register_peer(peer2).await;
+
+    let all_peers = peers.get_known_peers().await;
+    let peer2_data = all_peers.iter().find(|p| p.address.to_string() == "192.168.1.2:16974").unwrap();
+    assert!(peers.is_peer_blacklisted(peer2_data).await);
+}
+
+#[tokio::test]
+async fn test_peer_is_blacklisted_with_old_version() {
+    let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let mut peer = Peer::new(addr, false);
     
-    let manager = BlacklistManager::new();
-    let account_id = 12345u64;
+    assert!(!peer.is_blacklisted());
     
-    // Not whitelisted initially
-    assert!(!manager.is_whitelisted(account_id).await);
+    peer.is_old_version = true;
+    assert!(peer.is_blacklisted());
     
-    // Add to whitelist
-    manager.add_to_whitelist(account_id, true).await;
-    assert!(manager.is_whitelisted(account_id).await);
+    peer.is_old_version = false;
+    assert!(!peer.is_blacklisted());
+}
+
+#[tokio::test]
+async fn test_peer_set_version() {
+    use p2p::P2PConfig;
     
-    // Remove from whitelist
-    manager.remove_from_whitelist(account_id).await;
-    assert!(!manager.is_whitelisted(account_id).await);
+    let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+    let mut peer = Peer::new(addr, false);
+    let config = P2PConfig::default();
+    
+    // Set version with matching application
+    peer.set_version(Some("0.5.0".to_string()), Some("NRCS"), &config);
+    assert!(peer.is_old_version);
+    assert!(peer.is_blacklisted());
+    
+    // Set version with non-matching application (no version check)
+    peer.is_old_version = false;
+    peer.blacklisting_time = 0;
+    peer.blacklisting_cause = None;
+    peer.set_version(Some("0.5.0".to_string()), Some("OtherApp"), &config);
+    assert!(!peer.is_old_version);
+    
+    // Set current version
+    peer.set_version(Some("2.1.0".to_string()), Some("NRCS"), &config);
+    assert!(!peer.is_old_version);
+}
+
+#[tokio::test]
+async fn test_config_version_comparison() {
+    use p2p::P2PConfig;
+    
+    let config = P2PConfig::default();
+    
+    // Old versions
+    assert!(config.is_old_version("0.5.0"));
+    assert!(config.is_old_version("0.9.9"));
+    
+    // Current/newer versions
+    assert!(!config.is_old_version("1.0.0"));
+    assert!(!config.is_old_version("2.0.0"));
+    assert!(!config.is_old_version("2.1.0"));
+    
+    // New versions
+    assert!(config.is_new_version("3.0.0"));
+    assert!(!config.is_new_version("2.1.0"));
+    assert!(!config.is_new_version("1.0.0"));
+    
+    // Version with 'e' suffix
+    assert!(!config.is_old_version("1.0.0e"));
 }
 
 // ---------- P2PConfig Tests ----------

@@ -170,7 +170,7 @@ impl TransactionDaemon {
             success_count += 1;
         }
 
-        info!("[Transaction] Broadcasted {} transactions to {} peers",
+        debug!("[Transaction] Broadcasted {} transactions to {} peers",
               transactions.len(), success_count);
 
         Ok(())
@@ -188,7 +188,7 @@ impl TransactionDaemon {
         let refs: Vec<&Value> = transactions.iter().collect();
         Self::broadcast_transactions(&self.peers, &self.config, &refs).await?;
 
-        info!("[Transaction] Force broadcasted {} transactions", transactions.len());
+        debug!("[Transaction] Force broadcasted {} transactions", transactions.len());
 
         Ok(transactions.len())
     }

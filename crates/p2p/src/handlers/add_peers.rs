@@ -2,7 +2,7 @@ use crate::{peer::Peers, protocol::PeerRequest};
 use serde_json;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 const MAX_KNOWN_PEERS: usize = 2000;
 
@@ -90,7 +90,6 @@ impl AddPeersHandler {
 
             // 检查黑名单
             if peers.is_blacklisted(&addr.to_string()).await {
-                warn!("Peer {} is blacklisted, skipping", addr);
                 blacklisted_count += 1;
                 continue;
             }
@@ -160,7 +159,7 @@ impl AddPeersHandler {
             added_count += 1;
         }
 
-        info!("AddPeers: added {}, duplicate {}, blacklisted {}, invalid {}", added_count, duplicate_count, blacklisted_count, invalid_count);
+        debug!("AddPeers: added {}, duplicate {}, blacklisted {}, invalid {}", added_count, duplicate_count, blacklisted_count, invalid_count);
 
         // 返回统计信息
         let mut response = serde_json::Map::new();
@@ -252,8 +251,7 @@ mod tests {
     async fn test_add_peers_blacklist() {
         let my_peer = Peer::new("127.0.0.1:8080".parse().unwrap(), false);
         let peers = Arc::new(crate::peer::Peers::new(my_peer));
-        let addr: SocketAddr = "192.168.1.100:9000".parse().unwrap();
-        peers.blacklist(addr).await;
+        peers.add_known_blacklisted("192.168.1.100:9000".to_string()).await;
 
         let handler = AddPeersHandler::new(Arc::clone(&peers));
 

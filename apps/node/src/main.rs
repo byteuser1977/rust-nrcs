@@ -12,7 +12,7 @@ use serde::Deserialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::time::Duration;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use p2p::{
@@ -86,12 +86,16 @@ impl DatabaseType {
 }
 
 /// 节点配置结构（与 TOML 映射）
+fn default_log_level() -> String { "info".to_string() }
+
 #[derive(Debug, Clone, serde::Deserialize)]
 struct NodeConfig {
     p2p: P2PConfig,
     api: APIConfig,
     websocket: WsAppConfig,
     database: DatabaseConfig,
+    #[serde(default = "default_log_level")]
+    log_level: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -169,22 +173,22 @@ impl NodeConfig {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // 初始化日志系统
-    let filter = EnvFilter::from_default_env()
-        .add_directive("nrcs_node=debug".parse()?)
-        .add_directive("p2p=debug".parse()?);
+    let cfg = NodeConfig::load().context("Failed to load configuration")?;
+
+    let filter = if std::env::var("RUST_LOG").is_ok() {
+        EnvFilter::from_default_env()
+    } else {
+        EnvFilter::new(&cfg.log_level)
+    };
     tracing_subscriber::registry()
         .with(filter)
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     info!("Starting NRCS Node...");
-
-    // 加载配置
-    let cfg = NodeConfig::load().context("Failed to load configuration")?;
     info!(
-        "Config loaded: p2p={}, api={}:{}",
-        cfg.p2p.listen_addr, cfg.api.host, cfg.api.port
+        "Config loaded: p2p={}, api={}:{}, log_level={}",
+        cfg.p2p.listen_addr, cfg.api.host, cfg.api.port, cfg.log_level
     );
 
     // 初始化数据库
@@ -547,24 +551,24 @@ async fn start_node(
         info!("[BOOTSTRAP] Loaded {} bootstrap nodes", bootstrap_addrs.len());
 
         tokio::spawn(async move {
-            info!("[BOOTSTRAP_TASK] Starting in 2s...");
+            debug!("[BOOTSTRAP_TASK] Starting in 2s...");
             tokio::time::sleep(Duration::from_secs(2)).await;
-            info!("[BOOTSTRAP_TASK] Starting connections");
+            debug!("[BOOTSTRAP_TASK] Starting connections");
 
             for addr_res in bootstrap_addrs {
                 match addr_res {
                     Ok(addr) => {
-                        info!("[BOOTSTRAP] Connecting to {}...", addr);
+                        debug!("[BOOTSTRAP] Connecting to {}...", addr);
                         if let Err(e) = websocket::WebsocketClient::connect(addr, peers_clone.clone(), handler_clone.clone()).await {
                             error!("[BOOTSTRAP] Failed to connect to {}: {}", addr, e);
                         } else {
-                            info!("[BOOTSTRAP] connect() returned OK for {}", addr);
+                            debug!("[BOOTSTRAP] connect() returned OK for {}", addr);
                         }
                     }
                     Err(e) => warn!("[BOOTSTRAP] Invalid address: {}", e),
                 }
             }
-            info!("[BOOTSTRAP_TASK] All connections attempted");
+            debug!("[BOOTSTRAP_TASK] All connections attempted");
         });
     }
 
