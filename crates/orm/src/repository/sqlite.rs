@@ -6487,6 +6487,62 @@ impl CurrencyFounderRepository for SqliteCurrencyFounderRepository {
     }
 }
 
+// Currency Supply Repository
+pub struct SqliteCurrencySupplyRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteCurrencySupplyRepository {
+    pub fn new(pool: SqlitePool) -> Self { Self { pool } }
+}
+
+#[async_trait]
+impl Repository<CurrencySupplyModel> for SqliteCurrencySupplyRepository {
+    async fn insert(&self, m: &CurrencySupplyModel) -> RepositoryResult<()> {
+        sqlx::query("INSERT INTO currency_supply (id, current_supply, current_reserve_per_unit_nqt, height, latest) VALUES (?, ?, ?, ?, ?)")
+            .bind(m.id).bind(m.current_supply).bind(m.current_reserve_per_unit_nqt).bind(m.height).bind(m.latest)
+            .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<CurrencySupplyModel>> {
+        sqlx::query_as::<_, CurrencySupplyModel>("SELECT * FROM currency_supply WHERE db_id = ?").bind(id)
+            .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn update(&self, m: &CurrencySupplyModel) -> RepositoryResult<()> {
+        sqlx::query("UPDATE currency_supply SET id=?, current_supply=?, current_reserve_per_unit_nqt=?, height=?, latest=? WHERE db_id=?")
+            .bind(m.id).bind(m.current_supply).bind(m.current_reserve_per_unit_nqt).bind(m.height).bind(m.latest).bind(m.db_id)
+            .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn delete(&self, id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM currency_supply WHERE db_id=?").bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<CurrencySupplyModel>> {
+        let (lim, off) = (limit.unwrap_or(100), offset.unwrap_or(0));
+        sqlx::query_as::<_, CurrencySupplyModel>("SELECT * FROM currency_supply ORDER BY height DESC LIMIT ? OFFSET ?")
+            .bind(lim).bind(off).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (c,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM currency_supply").fetch_one(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(c)
+    }
+}
+
+#[async_trait]
+impl CurrencySupplyRepository for SqliteCurrencySupplyRepository {
+    async fn find_by_currency_id(&self, currency_id: i64) -> RepositoryResult<Option<CurrencySupplyModel>> {
+        sqlx::query_as::<_, CurrencySupplyModel>("SELECT * FROM currency_supply WHERE id = ? AND latest = 1")
+            .bind(currency_id).fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+
+    async fn soft_delete_by_currency(&self, currency_id: i64) -> RepositoryResult<()> {
+        sqlx::query("UPDATE currency_supply SET latest = 0 WHERE id = ? AND latest = 1")
+            .bind(currency_id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+}
+
 // Prunable Message Repository
 pub struct SqlitePrunableMessageRepository {
     pool: SqlitePool,

@@ -5,6 +5,7 @@
 use orm::repository::*;
 use orm::models::*;
 use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 async fn setup() -> (SqlitePool, SqliteAccountRepository) {
     let pool = SqlitePool::connect("sqlite::memory:").await.expect("pool failed");
@@ -16,6 +17,18 @@ async fn setup() -> (SqlitePool, SqliteAccountRepository) {
         }
     }
     let repo = SqliteAccountRepository::new(pool.clone());
+    (pool, repo)
+}
+
+async fn setup_pg() -> (PgPool, PgAccountRepository) {
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://nrcs_user:password@localhost:5432/nrcs_db".to_string());
+    let pool = PgPool::connect(&database_url).await.expect("pg pool failed");
+    let tables = ["account", "public_key"];
+    for table in &tables {
+        let _ = sqlx::query(&format!("TRUNCATE TABLE {} CASCADE", table)).execute(&pool).await;
+    }
+    let repo = PgAccountRepository::new(pool.clone());
     (pool, repo)
 }
 
@@ -92,4 +105,52 @@ async fn test_multiple_accounts() {
 
     let acc5 = repo.find_by_account_id(5).await.expect("find failed").unwrap();
     assert_eq!(acc5.balance, 500);
+}
+
+// ==================== PostgreSQL Tests ====================
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_insert_and_find_by_account_id() {
+    let (_pool, repo) = setup_pg().await;
+    let account = make_account(12345, 1000 * 100_000_000, 0);
+    repo.insert(&account).await.expect("insert failed");
+
+    let found = repo.find_by_account_id(12345).await.expect("find failed");
+    assert!(found.is_some());
+    let a = found.unwrap();
+    assert_eq!(a.id, 12345);
+    assert_eq!(a.balance, 1000 * 100_000_000);
+}
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_count() {
+    let (_pool, repo) = setup_pg().await;
+    assert_eq!(repo.count().await.expect("count failed"), 0);
+    repo.insert(&make_account(1, 100, 0)).await.expect("insert failed");
+    assert_eq!(repo.count().await.expect("count failed"), 1);
+}
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_update_balance() {
+    let (_pool, repo) = setup_pg().await;
+    repo.insert(&make_account(12345, 1000, 0)).await.expect("insert failed");
+    repo.update_balance(12345, 2000, 1500, 1).await.expect("update_balance failed");
+
+    let found = repo.find_by_account_id(12345).await.expect("find failed").unwrap();
+    assert_eq!(found.balance, 2000);
+    assert_eq!(found.unconfirmed_balance, 1500);
+}
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_find_all() {
+    let (_pool, repo) = setup_pg().await;
+    repo.insert(&make_account(1, 100, 0)).await.expect("insert failed");
+    repo.insert(&make_account(2, 200, 0)).await.expect("insert failed");
+
+    let all = repo.find_all(None, None).await.expect("find_all failed");
+    assert_eq!(all.len(), 2);
 }

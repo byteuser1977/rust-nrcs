@@ -256,27 +256,32 @@ pub fn build_attachment_bytes_from_json(
     // Java 源码 (PrunablePlainMessage.java:106-108): buffer.put(getHash())
     // getBytes() 始终包含 PrunablePlainMessage 字节（用于 payload_hash 计算）
     // 但 getFullSize() 在 pruned 时排除该附录（用于 payload length 检查）
-    // attachment_bytes 包含完整字节以保证 payload_hash 匹配
+    //
+    // 仅当 message 数据被真正裁剪时（有 messageHash 但无 message）才构建 PPM 附录。
+    // 若 message 数据完整存在，则不应额外构建 PPM，否则 get_bytes() 会多出 PPM 字节，
+    // 导致 payload_hash 不匹配，区块被拒绝。
+    let ppm_has_message = att_map.get("message")
+        .and_then(|v| v.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    let ppm_is_pruned = !ppm_has_message;
+
     let ppm_hash = att_map.get("messageHash")
         .and_then(|v| v.as_str())
         .and_then(|s| hex::decode(s).ok());
 
     if let Some(hash_bytes) = ppm_hash {
-        let ppm_version = get_appendix_version("version.PrunablePlainMessage", att_map);
-        let before = result.len();
-        put_version_and_data(&mut result, ppm_version, |buf| {
-            put_bytes(buf, &hash_bytes);
-        });
-        // 记录被裁剪数据（仅 hash 无实际消息内容）的字节数
-        let ppm_has_message = att_map.get("message")
-            .and_then(|v| v.as_str())
-            .map(|s| !s.is_empty())
-            .unwrap_or(false);
-        if !ppm_has_message {
+        if ppm_is_pruned {
+            let ppm_version = get_appendix_version("version.PrunablePlainMessage", att_map);
+            let before = result.len();
+            put_version_and_data(&mut result, ppm_version, |buf| {
+                put_bytes(buf, &hash_bytes);
+            });
             let data_len = (result.len() - before) as u32;
             *pruned_bytes += data_len;
         }
-    } else if att_map.get("version.PrunablePlainMessage").is_some() {
+        // 如果 message 数据完整存在，PPM 无需构建（get_bytes 中已有 message 附录）
+    } else if att_map.get("version.PrunablePlainMessage").is_some() && ppm_is_pruned {
         let ppm_version = get_appendix_version("version.PrunablePlainMessage", att_map);
         put_version_and_data(&mut result, ppm_version, |buf| {
             put_bytes(buf, &[0u8; 32]);
@@ -501,9 +506,16 @@ pub fn detect_appendix_flags(
         || att_map.get("phased").is_some()
         || att_map.get("phasingFinishHeight").is_some();
 
-    // PrunablePlainMessage: 检测 messageHash 或 version.PrunablePlainMessage
-    has_prunable_message = att_map.get("messageHash").is_some()
-        || att_map.get("version.PrunablePlainMessage").is_some();
+    // PrunablePlainMessage: 仅当 message 数据被真正裁剪时才为 true
+    // 即：有 messageHash 但 message 缺失（对应 Java IPrunable && !hasPrunableData()）
+    // 若 message 和 messageHash 同时存在，说明数据完整未被裁剪
+    let has_message_data = att_map.get("message")
+        .and_then(|v| v.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+    has_prunable_message = !has_message_data
+        && (att_map.get("messageHash").is_some()
+            || att_map.get("version.PrunablePlainMessage").is_some());
 
     // PrunableEncryptedMessage: 检测 encryptedMessageHash 或 version.PrunableEncryptedMessage
     has_prunable_encrypted_message = att_map.get("encryptedMessageHash").is_some()

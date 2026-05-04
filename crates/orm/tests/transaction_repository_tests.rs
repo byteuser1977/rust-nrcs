@@ -5,6 +5,8 @@
 use orm::repository::*;
 use orm::models::*;
 use sqlx::SqlitePool;
+use sqlx::PgPool;
+use blockchain_types::constants::INITIAL_BASE_TARGET;
 
 async fn setup() -> (SqlitePool, SqliteTransactionRepository, SqliteBlockRepository) {
     let pool = SqlitePool::connect("sqlite::memory:").await.expect("pool failed");
@@ -30,6 +32,41 @@ async fn setup() -> (SqlitePool, SqliteTransactionRepository, SqliteBlockReposit
         previous_block_hash: None,
         cumulative_difficulty: vec![0u8; 1],
         base_target: 1000,
+        next_block_id: None,
+        height: 0,
+        generation_signature: vec![0u8; 64],
+        block_signature: vec![0u8; 64],
+        payload_hash: vec![0u8; 32],
+        generator_id: 1,
+    }).await.expect("block insert failed");
+
+    (pool, tx_repo, block_repo)
+}
+
+async fn setup_pg() -> (PgPool, PgTransactionRepository, PgBlockRepository) {
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://nrcs_user:password@localhost:5432/nrcs_db".to_string());
+    let pool = PgPool::connect(&database_url).await.expect("pg pool failed");
+    let tables = ["transaction", "block", "account", "public_key"];
+    for table in &tables {
+        let _ = sqlx::query(&format!("TRUNCATE TABLE {} CASCADE", table)).execute(&pool).await;
+    }
+
+    let tx_repo = PgTransactionRepository::new(pool.clone());
+    let block_repo = PgBlockRepository::new(pool.clone());
+
+    block_repo.insert(&BlockModel {
+        db_id: 0,
+        id: 100,
+        version: 3,
+        timestamp: 0,
+        previous_block_id: None,
+        total_amount: 0,
+        total_fee: 0,
+        payload_length: 0,
+        previous_block_hash: None,
+        cumulative_difficulty: vec![0u8; 1],
+        base_target: INITIAL_BASE_TARGET as i64,
         next_block_id: None,
         height: 0,
         generation_signature: vec![0u8; 64],
@@ -118,4 +155,39 @@ async fn test_multiple_transactions() {
 
     let by_sender = repo.find_by_sender(1, 100).await.expect("find failed");
     assert_eq!(by_sender.len(), 5);
+}
+
+// ==================== PostgreSQL Tests ====================
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_insert_and_find_by_sender() {
+    let (_pool, repo, _) = setup_pg().await;
+    let tx = make_transaction(1001, 111, 222, 1000, 10, 0);
+    repo.insert(&tx).await.expect("insert failed");
+
+    let found = repo.find_by_sender(111, 100).await.expect("find_by_sender failed");
+    assert!(!found.is_empty());
+    assert_eq!(found[0].id, 1001);
+}
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_insert_and_find_by_recipient() {
+    let (_pool, repo, _) = setup_pg().await;
+    let tx = make_transaction(1001, 111, 222, 1000, 10, 0);
+    repo.insert(&tx).await.expect("insert failed");
+
+    let found = repo.find_by_recipient(222, 100).await.expect("find_by_recipient failed");
+    assert!(!found.is_empty());
+    assert_eq!(found[0].recipient_id, Some(222));
+}
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_count() {
+    let (_pool, repo, _) = setup_pg().await;
+    assert_eq!(repo.count().await.expect("count failed"), 0);
+    repo.insert(&make_transaction(1, 1, 2, 100, 10, 0)).await.expect("insert failed");
+    assert_eq!(repo.count().await.expect("count failed"), 1);
 }

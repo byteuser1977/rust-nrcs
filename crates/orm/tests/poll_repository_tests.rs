@@ -5,6 +5,7 @@
 use orm::repository::*;
 use orm::models::*;
 use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 async fn setup() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:").await.expect("pool failed");
@@ -14,6 +15,17 @@ async fn setup() -> SqlitePool {
         if !trimmed.is_empty() && !trimmed.starts_with("--") {
             let _ = sqlx::query(trimmed).execute(&pool).await;
         }
+    }
+    pool
+}
+
+async fn setup_pg() -> PgPool {
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://nrcs_user:password@localhost:5432/nrcs_db".to_string());
+    let pool = PgPool::connect(&database_url).await.expect("pg pool failed");
+    let tables = ["poll", "vote", "poll_result", "account", "public_key"];
+    for table in &tables {
+        let _ = sqlx::query(&format!("TRUNCATE TABLE {} CASCADE", table)).execute(&pool).await;
     }
     pool
 }
@@ -132,4 +144,41 @@ async fn test_vote_count() {
     assert_eq!(repo.count().await.expect("count failed"), 0);
     repo.insert(&make_vote(1, 1, 1, vec![1], 0)).await.expect("insert failed");
     assert_eq!(repo.count().await.expect("count failed"), 1);
+}
+
+// ==================== PostgreSQL Tests ====================
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_poll_insert_and_find_by_id() {
+    let pool = setup_pg().await;
+    let repo = PgPollRepository::new(pool.clone());
+    let poll = make_poll(1001, 111, "TestPoll", "[\"Yes\",\"No\"]", 1000, 0, 100);
+    repo.insert(&poll).await.expect("insert failed");
+
+    let found = repo.find_by_poll_id(1001).await.expect("find failed");
+    assert!(found.is_some());
+    assert_eq!(found.unwrap().name, "TestPoll");
+}
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_poll_count() {
+    let pool = setup_pg().await;
+    let repo = PgPollRepository::new(pool.clone());
+    assert_eq!(repo.count().await.expect("count failed"), 0);
+    repo.insert(&make_poll(1, 1, "P", "[\"A\"]", 100, 0, 0)).await.expect("insert failed");
+    assert_eq!(repo.count().await.expect("count failed"), 1);
+}
+
+#[tokio::test]
+#[ignore]
+async fn pg_test_vote_insert_and_find_by_poll() {
+    let pool = setup_pg().await;
+    let repo = PgVoteRepository::new(pool.clone());
+    repo.insert(&make_vote(1, 1001, 111, vec![1, 0], 100)).await.expect("insert failed");
+    repo.insert(&make_vote(2, 1001, 222, vec![0, 1], 101)).await.expect("insert failed");
+
+    let votes = repo.find_by_poll(1001, 100).await.expect("find failed");
+    assert_eq!(votes.len(), 2);
 }

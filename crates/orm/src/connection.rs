@@ -76,8 +76,11 @@ impl DatabaseConfig {
 /// ```rust,no_run
 /// use orm::connection::{DatabaseConfig, create_pool};
 ///
+/// # async fn example() -> anyhow::Result<()> {
 /// let config = DatabaseConfig::from_url("sqlite://./test.db?mode=rwc");
 /// let pool = create_pool(&config).await?;
+/// # Ok(())
+/// # }
 /// ```
 pub async fn create_pool(config: &DatabaseConfig) -> anyhow::Result<AnyPool> {
     info!("Creating {} database pool: {}", config.db_type, config.url);

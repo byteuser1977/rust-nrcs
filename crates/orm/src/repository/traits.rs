@@ -414,6 +414,13 @@ pub trait CurrencyFounderRepository: Repository<CurrencyFounderModel> {
     async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<CurrencyFounderModel>>;
 }
 
+/// Currency Supply Repository (CURRENCY_SUPPLY表)
+#[async_trait]
+pub trait CurrencySupplyRepository: Repository<CurrencySupplyModel> {
+    async fn find_by_currency_id(&self, currency_id: i64) -> RepositoryResult<Option<CurrencySupplyModel>>;
+    async fn soft_delete_by_currency(&self, currency_id: i64) -> RepositoryResult<()>;
+}
+
 /// Prunable Message Repository (PRUNABLE_MESSAGE表)
 #[async_trait]
 pub trait PrunableMessageRepository: Repository<PrunableMessageModel> {

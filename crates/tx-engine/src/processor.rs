@@ -58,7 +58,7 @@ use orm::{
     PhasingPollHashedSecretRepository, PhasingPollResultRepository,
     PhasingPollVoterRepository, PhasingPollLinkedTransactionRepository,
     // P2: Auxiliary tables
-    HubRepository, CurrencyFounderRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
+    HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
     // P2: Referenced Transaction
     ReferencedTransactionRepository,
 };
@@ -380,6 +380,7 @@ pub struct DatabaseTransactionProcessor {
     // 新增：P2辅助表（Hub/CurrencyFounder/PrunableMessage/PurchaseFeedback）
     hub_repo: Arc<dyn HubRepository>,
     currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
+    currency_supply_repo: Arc<dyn CurrencySupplyRepository>,
     prunable_message_repo: Arc<dyn PrunableMessageRepository>,
     purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
 
@@ -460,6 +461,7 @@ impl DatabaseTransactionProcessor {
         // 新增：P2辅助表（Hub/CurrencyFounder/PrunableMessage/PurchaseFeedback）
         hub_repo: Arc<dyn HubRepository>,
         currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
+        currency_supply_repo: Arc<dyn CurrencySupplyRepository>,
         prunable_message_repo: Arc<dyn PrunableMessageRepository>,
         purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
         // 新增：Referenced Transaction（P2修复）
@@ -526,6 +528,7 @@ impl DatabaseTransactionProcessor {
             // 新增：P2辅助表（Hub/CurrencyFounder/PrunableMessage/PurchaseFeedback）
             hub_repo,
             currency_founder_repo,
+            currency_supply_repo,
             prunable_message_repo,
             purchase_feedback_repo,
             // 新增：Referenced Transaction（P2修复）
@@ -886,7 +889,7 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         if let Some(ref_hash) = &tx.referenced_transaction_full_hash {
             let ref_tx_id = self.parse_long_field(tx, "referencedTransactionId").unwrap_or(0);
 
-            if ref_tx_id > 0 || !ref_hash.0.iter().all(|&b| b == 0) {
+            if ref_tx_id != 0 || !ref_hash.0.iter().all(|&b| b == 0) {
                 let ref_model = orm::models::ReferencedTransactionModel {
                     db_id: 0,
                     transaction_id: tx.id as i64,
@@ -1733,7 +1736,7 @@ impl DatabaseTransactionProcessor {
         let asset_id = self.parse_long_field(tx, "asset").unwrap_or(tx.id as i64);
         let delete_quantity = self.parse_long_field(tx, "quantityQQT").unwrap_or(tx.amount as i64);
 
-        if delete_quantity > 0 && asset_id > 0 {
+        if delete_quantity > 0 && asset_id != 0 {
             // Java: Asset.deleteAsset(transaction, attachment);
             // Update the asset's total quantity in the asset table
             self.asset_repo.decrease_quantity(asset_id, delete_quantity).await?;
@@ -1787,7 +1790,7 @@ impl DatabaseTransactionProcessor {
         let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
         let increase_quantity = self.parse_long_field(tx, "quantityQQT").unwrap_or(tx.amount as i64);
 
-        if increase_quantity > 0 && asset_id > 0 {
+        if increase_quantity > 0 && asset_id != 0 {
             // Java: Asset.increaseAsset(transaction, attachment);
             // Update the asset's total quantity in the asset table
             self.asset_repo.increase_quantity(asset_id, increase_quantity).await?;
@@ -1833,7 +1836,7 @@ impl DatabaseTransactionProcessor {
         let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
         let property_value = self.parse_string_field(tx, "value").unwrap_or_default();
 
-        if !property_name.is_empty() && asset_id > 0 {
+        if !property_name.is_empty() && asset_id != 0 {
             let prop_model = AssetPropertyModel {
                 db_id: 0,
                 id: tx.id as i64,
@@ -1860,7 +1863,7 @@ impl DatabaseTransactionProcessor {
         let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
         let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
 
-        if !property_name.is_empty() && asset_id > 0 {
+        if !property_name.is_empty() && asset_id != 0 {
             // TODO: 实现delete方法
             debug!("Deleting property '{}' from asset {}", property_name, asset_id);
             debug!("AssetProperty deletion not yet fully implemented");
@@ -1881,7 +1884,7 @@ impl DatabaseTransactionProcessor {
         let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
         let long_value = self.parse_long_field(tx, "value").unwrap_or(0);
 
-        if !property_name.is_empty() && asset_id > 0 {
+        if !property_name.is_empty() && asset_id != 0 {
             let prop_model = AssetPropertyModel {
                 db_id: 0,
                 id: tx.id as i64,
@@ -2076,6 +2079,21 @@ impl DatabaseTransactionProcessor {
                 } else {
                     debug!("CURRENCY_FOUNDER inserted: currency={} account={} amount={}", currency_id, sender_id, initial_supply);
                 }
+
+                // Insert CURRENCY_SUPPLY record with initial supply
+                let supply_model = orm::models::CurrencySupplyModel {
+                    db_id: 0,
+                    id: currency_id,
+                    current_supply: initial_supply,
+                    current_reserve_per_unit_nqt: 0,
+                    height: current_height,
+                    latest: true,
+                };
+                if let Err(e) = self.currency_supply_repo.insert(&supply_model).await {
+                    warn!("Failed to insert CURRENCY_SUPPLY for currency {}: {}", currency_id, e);
+                } else {
+                    debug!("CURRENCY_SUPPLY inserted: currency={} supply={}", currency_id, initial_supply);
+                }
             }
             Err(e) => {
                 warn!("Failed to issue currency '{}': {}", name, e);
@@ -2096,7 +2114,7 @@ impl DatabaseTransactionProcessor {
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
         let amount_per_unit = self.parse_long_field(tx, "amountPerUnitNQT").unwrap_or(0);
 
-        if currency_id > 0 && amount_per_unit > 0 {
+        if currency_id != 0 && amount_per_unit > 0 {
             // 增加currency的reserve（P1优化：使用真正的CurrencyRepository方法）
             self.currency_repo.increase_reserve(currency_id, amount_per_unit).await?;
 
@@ -2119,7 +2137,7 @@ impl DatabaseTransactionProcessor {
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
         let units_to_claim = self.parse_long_field(tx, "units").unwrap_or(0);
 
-        if currency_id > 0 && units_to_claim > 0 {
+        if currency_id != 0 && units_to_claim > 0 {
             // Java: nrcsReceived = Convert.unitsToNQT(unitsToClaim * currency.getReserveSupply() / currency.getCurrentSupply());
             // Calculate NRCS received based on reserve ratio
             let currency = self.currency_repo.find_by_id(currency_id).await?
@@ -2166,7 +2184,7 @@ impl DatabaseTransactionProcessor {
         let sender_id = tx.sender_id as i64;
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
 
-        if currency_id > 0 {
+        if currency_id != 0 {
             // Parse offer details from attachment
             let buy_rate = self.parse_long_field(tx, "buyRate").unwrap_or(0);
             let sell_rate = self.parse_long_field(tx, "sellRate").unwrap_or(0);
@@ -2209,7 +2227,7 @@ impl DatabaseTransactionProcessor {
         }
         let units = self.parse_long_field(tx, "units").unwrap_or(0);
 
-        if currency_id > 0 && units > 0 && rate > 0 {
+        if currency_id != 0 && units > 0 && rate > 0 {
             // 创建EXCHANGE_REQUEST记录
             let request_model = ExchangeRequestModel {
                 db_id: 0,
@@ -2257,7 +2275,7 @@ impl DatabaseTransactionProcessor {
         let rate = self.parse_long_field(tx, "rateNQT").unwrap_or(0);  // Java: MonetarySystemExchange.rateNQT
         let units = self.parse_long_field(tx, "units").unwrap_or(0);
 
-        if currency_id > 0 && units > 0 && rate > 0 {
+        if currency_id != 0 && units > 0 && rate > 0 {
             // 创建EXCHANGE_REQUEST记录
             let request_model = ExchangeRequestModel {
                 db_id: 0,
@@ -2304,7 +2322,7 @@ impl DatabaseTransactionProcessor {
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
         let minted_units = self.parse_long_field(tx, "units").unwrap_or(0);
 
-        if currency_id > 0 && minted_units > 0 {
+        if currency_id != 0 && minted_units > 0 {
             // 创建CURRENCY_MINT记录
             let mint_model = CurrencyMintModel {
                 db_id: 0,
@@ -2326,6 +2344,20 @@ impl DatabaseTransactionProcessor {
 
                     // 更新currency的总supply（P1优化：使用真正的CurrencyRepository方法）
                     self.currency_repo.increase_supply(currency_id, minted_units).await?;
+
+                    // Update CURRENCY_SUPPLY: soft-delete old + insert new
+                    if let Ok(Some(current)) = self.currency_supply_repo.find_by_currency_id(currency_id).await {
+                        let _ = self.currency_supply_repo.soft_delete_by_currency(currency_id).await;
+                        let new_supply = orm::models::CurrencySupplyModel {
+                            db_id: 0,
+                            id: currency_id,
+                            current_supply: current.current_supply + minted_units,
+                            current_reserve_per_unit_nqt: current.current_reserve_per_unit_nqt,
+                            height: current_height,
+                            latest: true,
+                        };
+                        let _ = self.currency_supply_repo.insert(&new_supply).await;
+                    }
                 }
                 Err(e) => {
                     warn!("Failed to mint currency {}: {}", currency_id, e);
@@ -2347,7 +2379,7 @@ impl DatabaseTransactionProcessor {
         let sender_id = tx.sender_id as i64;
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
 
-        if currency_id > 0 {
+        if currency_id != 0 {
             // 验证发送者是currency的创建者
             match self.currency_repo.find_by_id(currency_id).await {
                 Ok(Some(currency)) if currency.account_id == sender_id => {
@@ -2390,7 +2422,7 @@ impl DatabaseTransactionProcessor {
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
         let units = self.parse_long_field(tx, "units").unwrap_or(tx.amount as i64);
 
-        if units > 0 && currency_id > 0 {
+        if units > 0 && currency_id != 0 {
             // Java: senderAccount.addToCurrencyUnits(event, txId, currencyId, -units);
             self.account_currency_repo.update_units(sender_id, currency_id, -units).await?;
 
@@ -2736,7 +2768,7 @@ impl DatabaseTransactionProcessor {
                         db_id: 0,
                         id: tx.id as i64,
                         sender_id,
-                        recipient_id: if recipient_id > 0 { Some(recipient_id) } else { None },
+                        recipient_id: if recipient_id != 0 { Some(recipient_id) } else { None },
                         message: message.map(|m| m.into_bytes()),
                         message_is_text,
                         is_compressed,
@@ -3009,7 +3041,7 @@ impl DatabaseTransactionProcessor {
 
                 let poll_id = self.parse_long_field(tx, "pollId").unwrap_or(0);
 
-                if poll_id > 0 {
+                if poll_id != 0 {
                     // 验证poll是否存在
                     match self.poll_repo.find_by_id(poll_id).await {
                         Ok(Some(_poll)) => {
@@ -3110,7 +3142,7 @@ impl DatabaseTransactionProcessor {
                 // Reference: PhasingVoteCastingAttachment.java
                 let phased_tx_id = self.parse_long_field(tx, "phasedTransactionId").unwrap_or(0);
 
-                if phased_tx_id > 0 {
+                if phased_tx_id != 0 {
                     // Verify the phasing poll exists
                     match self.phasing_poll_repo.find_by_poll_id(phased_tx_id).await {
                         Ok(Some(_poll)) => {
@@ -3296,7 +3328,7 @@ impl DatabaseTransactionProcessor {
                 let period = self.parse_long_field(tx, "period").map(|p| p as i32).unwrap_or(0);
                 let recipient_id = tx.recipient_id.unwrap_or(0) as i64;
 
-                if period > 0 && recipient_id > 0 {
+                if period > 0 && recipient_id != 0 {
                     let current_height = self.get_current_height();
                     let leasing_height_from = current_height + 1;
                     let leasing_height_to = current_height + period;
@@ -3501,7 +3533,8 @@ impl DatabaseTransactionProcessor {
 
                 if tagged_data_id != 0 {
                     // 验证tagged data是否存在且属于当前用户
-                    match self.tagged_data_repo.find_by_id(tagged_data_id).await {
+                    // 使用 find_by_data_id 按 id 列（交易ID）查询，而非 find_by_id（查 db_id 自增主键）
+                    match self.tagged_data_repo.find_by_data_id(tagged_data_id).await {
                         Ok(Some(existing)) if existing.account_id == sender_id => {
                             let extend_model = orm::models::TaggedDataExtendModel {
                                 db_id: 0,
@@ -3541,7 +3574,8 @@ impl DatabaseTransactionProcessor {
                     .unwrap_or(0);
 
                 if tagged_data_id != 0 {
-                    match self.tagged_data_repo.find_by_id(tagged_data_id).await {
+                    // 使用 find_by_data_id 按 id 列（交易ID）查询
+                    match self.tagged_data_repo.find_by_data_id(tagged_data_id).await {
                         Ok(Some(_existing)) => {
                             let timestamp_model = orm::models::TaggedTimestampModel::new(
                                 tx.id as i64,
@@ -3718,7 +3752,7 @@ impl DatabaseTransactionProcessor {
 
             1 => { // DGS_DELISTING
                 let goods_id = self.parse_long_field(tx, "goodsId").unwrap_or(0);
-                if goods_id > 0 {
+                if goods_id != 0 {
                     self.goods_repo.set_delisted(goods_id, true).await
                         .map_err(|e| ProcessorError::Validation(format!("Failed to delist goods: {}", e)))?;
 
@@ -3730,7 +3764,7 @@ impl DatabaseTransactionProcessor {
                 let goods_id = self.parse_long_field(tx, "goodsId").unwrap_or(0);
                 let new_price = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
 
-                if goods_id > 0 && new_price >= 0 {
+                if goods_id != 0 && new_price >= 0 {
                     self.goods_repo.update_price(goods_id, new_price).await
                         .map_err(|e| ProcessorError::Validation(format!("Failed to update goods price: {}", e)))?;
 
@@ -3762,7 +3796,7 @@ impl DatabaseTransactionProcessor {
                 let price_nqt = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
                 let delivery_deadline = self.parse_long_field(tx, "deliveryDeadlineTimestamp").unwrap_or(0);
 
-                if goods_id > 0 && quantity > 0 && price_nqt > 0 {
+                if goods_id != 0 && quantity > 0 && price_nqt > 0 {
                     // Java: DigitalGoodsPurchase.purchase()
                     let total_cost = (price_nqt as u64).checked_mul(quantity as u64)
                         .ok_or_else(|| ProcessorError::Validation("purchase cost overflow".to_string()))?;
@@ -3815,7 +3849,7 @@ impl DatabaseTransactionProcessor {
                 let goods = self.parse_bytes_field(tx, "goods");
                 let goods_nonce = self.parse_bytes_field(tx, "goodsNonce");
 
-                if purchase_id > 0 {
+                if purchase_id != 0 {
                     // Java: DigitalGoodsPurchase.delivery()
                     self.purchase_repo.set_delivered(purchase_id, &goods.unwrap_or_default(), &goods_nonce.unwrap_or_default()).await
                         .map_err(|e| ProcessorError::Validation(format!("Failed to mark purchase as delivered: {}", e)))?;
@@ -3830,7 +3864,7 @@ impl DatabaseTransactionProcessor {
                 let is_public = self.parse_bool_field(tx, "publicFeedback").unwrap_or(false);
                 let feedback_nonce = self.parse_bytes_field(tx, "feedbackNonce").unwrap_or_default();
 
-                if purchase_id > 0 {
+                if purchase_id != 0 {
                     // Java: DigitalGoodsPurchase.feedback()
                     if is_public {
                         let _feedback_model = orm::PurchasePublicFeedbackModel {
@@ -3868,7 +3902,7 @@ impl DatabaseTransactionProcessor {
                 let note = self.parse_bytes_field(tx, "note");
                 let note_nonce = self.parse_bytes_field(tx, "noteNonce");
 
-                if purchase_id > 0 && refund_amount > 0 {
+                if purchase_id != 0 && refund_amount > 0 {
                     // Java: DigitalGoodsPurchase.refund()
                     self.purchase_repo.set_refund(purchase_id, refund_amount, &note.unwrap_or_default(), &note_nonce.unwrap_or_default()).await
                         .map_err(|e| ProcessorError::Validation(format!("Failed to set refund: {}", e)))?;
@@ -3943,7 +3977,7 @@ impl DatabaseTransactionProcessor {
                 // Java: Shuffling.processShuffling(shufflingId)
                 let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(tx.id as i64);
 
-                if shuffling_id > 0 {
+                if shuffling_id != 0 {
                     // Update shuffling stage to PROCESSING
                     self.shuffling_repo.update_stage(shuffling_id, 1).await
                         .map_err(|e| ProcessorError::Validation(format!("Failed to update shuffling stage: {}", e)))?;
@@ -3978,7 +4012,7 @@ impl DatabaseTransactionProcessor {
                 // Java: Shuffling.verifyShuffling(shufflingId)
                 let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(0);
 
-                if shuffling_id > 0 {
+                if shuffling_id != 0 {
                     // Update shuffling stage to VERIFIED
                     self.shuffling_repo.update_stage(shuffling_id, 2).await
                         .map_err(|e| ProcessorError::Validation(format!("Failed to update shuffling stage: {}", e)))?;
@@ -3991,7 +4025,7 @@ impl DatabaseTransactionProcessor {
                 // Java: Shuffling.cancelShuffling(shufflingId)
                 let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(0);
 
-                if shuffling_id > 0 {
+                if shuffling_id != 0 {
                     // Update shuffling stage to CANCELLED
                     self.shuffling_repo.update_stage(shuffling_id, 3).await
                         .map_err(|e| ProcessorError::Validation(format!("Failed to update shuffling stage: {}", e)))?;
@@ -4010,7 +4044,7 @@ impl DatabaseTransactionProcessor {
                 // Java: Shuffling.addRecipients(shufflingId, recipientPublicKeys)
                 let shuffling_id = self.parse_long_field(tx, "shufflingId").unwrap_or(0);
 
-                if shuffling_id > 0 {
+                if shuffling_id != 0 {
                     // Parse recipient public keys from attachment
                     let recipient_public_keys = self.parse_string_field(tx, "recipientPublicKeys").unwrap_or_default();
 

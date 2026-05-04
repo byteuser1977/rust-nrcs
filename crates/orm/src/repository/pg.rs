@@ -252,11 +252,7 @@ impl ShufflingParticipantRepository for PgShufflingParticipantRepository {
 #[async_trait]
 impl BlockRepository for PgBlockRepository {
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block WHERE height = $1",
-            height
-        )
+        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height = $1").bind(height)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -264,11 +260,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_by_id_column(&self, id: i64) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block WHERE id = $1",
-            id
-        )
+        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE id = $1").bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -276,11 +268,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_by_hash(&self, hash: &[u8]) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block WHERE payload_hash = $1 OR generation_signature = $1",
-            hash
-        )
+        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE payload_hash = $1 OR generation_signature = $1").bind(hash)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -288,10 +276,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_latest(&self) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block ORDER BY height DESC LIMIT 1"
-        )
+        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block ORDER BY height DESC LIMIT 1")
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -299,12 +284,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_range(&self, start_height: i32, end_height: i32) -> RepositoryResult<Vec<BlockModel>> {
-        let records = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block WHERE height BETWEEN $1 AND $2 ORDER BY height ASC",
-            start_height,
-            end_height
-        )
+        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height BETWEEN $1 AND $2 ORDER BY height ASC").bind(start_height).bind(end_height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -312,11 +292,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_by_generator(&self, generator_id: i64) -> RepositoryResult<Vec<BlockModel>> {
-        let records = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block WHERE generator_id = $1 ORDER BY height DESC",
-            generator_id
-        )
+        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE generator_id = $1 ORDER BY height DESC").bind(generator_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -324,10 +300,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn get_height(&self) -> RepositoryResult<i32> {
-        let record = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block ORDER BY height DESC LIMIT 1"
-        )
+        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block ORDER BY height DESC LIMIT 1")
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -335,11 +308,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn get_block_id_at_height(&self, height: i32) -> RepositoryResult<Option<i64>> {
-        let record = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block WHERE height = $1",
-            height
-        )
+        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height = $1").bind(height)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -364,12 +333,7 @@ impl BlockRepository for PgBlockRepository {
         }
         let height = block.unwrap().height;
         
-        let records = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block WHERE height > $1 ORDER BY height ASC LIMIT $2",
-            height,
-            limit as i64
-        )
+        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height > $1 ORDER BY height ASC LIMIT $2").bind(height).bind(limit as i64)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -410,11 +374,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_blocks_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>> {
-        let records = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block WHERE height > $1 ORDER BY height ASC",
-            height
-        )
+        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height > $1 ORDER BY height ASC").bind(height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -527,11 +487,7 @@ impl Repository<BlockModel> for PgBlockRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block WHERE db_id = $1",
-            db_id
-        )
+        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE db_id = $1").bind(db_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -585,12 +541,7 @@ impl Repository<BlockModel> for PgBlockRepository {
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<BlockModel>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let records = sqlx::query_as!(
-            BlockModel,
-            "SELECT * FROM block ORDER BY height DESC LIMIT $1 OFFSET $2",
-            limit,
-            offset
-        )
+        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block ORDER BY height DESC LIMIT $1 OFFSET $2").bind(limit).bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1921,11 +1872,7 @@ impl PgAccountRepository {
 #[async_trait]
 impl AccountRepository for PgAccountRepository {
     async fn find_by_account_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>> {
-        let record = sqlx::query_as!(
-            AccountModel,
-            "SELECT * FROM account WHERE id = $1 AND latest = TRUE LIMIT 1",
-            id
-        )
+        let record = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE id = $1 AND latest = TRUE LIMIT 1").bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1933,11 +1880,7 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AccountModel>> {
-        let records = sqlx::query_as!(
-            AccountModel,
-            "SELECT * FROM account WHERE height = $1 AND latest = TRUE",
-            height
-        )
+        let records = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE height = $1 AND latest = TRUE").bind(height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1949,10 +1892,7 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn find_by_address(&self, _address: &str) -> RepositoryResult<Option<AccountModel>> {
-        let record = sqlx::query_as!(
-            AccountModel,
-            "SELECT * FROM account WHERE latest = TRUE ORDER BY height DESC LIMIT 1"
-        )
+        let record = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE latest = TRUE ORDER BY height DESC LIMIT 1")
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2201,11 +2141,7 @@ impl Repository<AccountModel> for PgAccountRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountModel>> {
-        let record = sqlx::query_as!(
-            AccountModel,
-            "SELECT * FROM account WHERE db_id = $1",
-            db_id
-        )
+        let record = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE db_id = $1").bind(db_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2242,12 +2178,7 @@ impl Repository<AccountModel> for PgAccountRepository {
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountModel>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let records = sqlx::query_as!(
-            AccountModel,
-            "SELECT * FROM account WHERE latest = TRUE ORDER BY id LIMIT $1 OFFSET $2",
-            limit,
-            offset
-        )
+        let records = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE latest = TRUE ORDER BY id LIMIT $1 OFFSET $2").bind(limit).bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2276,11 +2207,7 @@ impl PgAccountAssetRepository {
 #[async_trait]
 impl AccountAssetRepository for PgAccountAssetRepository {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
-        let records = sqlx::query_as!(
-            AccountAssetModel,
-            "SELECT * FROM account_asset WHERE account_id = $1 AND latest = TRUE",
-            account_id
-        )
+        let records = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE account_id = $1 AND latest = TRUE").bind(account_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2288,11 +2215,7 @@ impl AccountAssetRepository for PgAccountAssetRepository {
     }
 
     async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
-        let records = sqlx::query_as!(
-            AccountAssetModel,
-            "SELECT * FROM account_asset WHERE asset_id = $1 AND latest = TRUE",
-            asset_id
-        )
+        let records = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE asset_id = $1 AND latest = TRUE").bind(asset_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2300,12 +2223,7 @@ impl AccountAssetRepository for PgAccountAssetRepository {
     }
 
     async fn find_by_account_and_asset(&self, account_id: i64, asset_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
-        let record = sqlx::query_as!(
-            AccountAssetModel,
-            "SELECT * FROM account_asset WHERE account_id = $1 AND asset_id = $2 AND latest = TRUE LIMIT 1",
-            account_id,
-            asset_id
-        )
+        let record = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE account_id = $1 AND asset_id = $2 AND latest = TRUE LIMIT 1").bind(account_id).bind(asset_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2444,11 +2362,7 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
-        let record = sqlx::query_as!(
-            AccountAssetModel,
-            "SELECT * FROM account_asset WHERE db_id = $1",
-            db_id
-        )
+        let record = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE db_id = $1").bind(db_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2481,12 +2395,7 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountAssetModel>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let records = sqlx::query_as!(
-            AccountAssetModel,
-            "SELECT * FROM account_asset WHERE latest = TRUE ORDER BY db_id LIMIT $1 OFFSET $2",
-            limit,
-            offset
-        )
+        let records = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE latest = TRUE ORDER BY db_id LIMIT $1 OFFSET $2").bind(limit).bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2515,11 +2424,7 @@ impl PgAssetRepository {
 #[async_trait]
 impl AssetRepository for PgAssetRepository {
     async fn find_by_asset_id(&self, id: i64) -> RepositoryResult<Option<AssetModel>> {
-        let record = sqlx::query_as!(
-            AssetModel,
-            "SELECT * FROM asset WHERE id = $1 AND latest = TRUE LIMIT 1",
-            id
-        )
+        let record = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE id = $1 AND latest = TRUE LIMIT 1").bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2527,11 +2432,7 @@ impl AssetRepository for PgAssetRepository {
     }
 
     async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>> {
-        let records = sqlx::query_as!(
-            AssetModel,
-            "SELECT * FROM asset WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC",
-            owner_id
-        )
+        let records = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC").bind(owner_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2539,11 +2440,7 @@ impl AssetRepository for PgAssetRepository {
     }
 
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AssetModel>> {
-        let records = sqlx::query_as!(
-            AssetModel,
-            "SELECT * FROM asset WHERE height = $1 AND latest = TRUE",
-            height
-        )
+        let records = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE height = $1 AND latest = TRUE").bind(height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2551,11 +2448,7 @@ impl AssetRepository for PgAssetRepository {
     }
 
     async fn find_tradable(&self, limit: i64) -> RepositoryResult<Vec<AssetModel>> {
-        let records = sqlx::query_as!(
-            AssetModel,
-            "SELECT * FROM asset WHERE latest = TRUE ORDER BY height DESC LIMIT $1",
-            limit
-        )
+        let records = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE latest = TRUE ORDER BY height DESC LIMIT $1").bind(limit)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2623,11 +2516,7 @@ impl Repository<AssetModel> for PgAssetRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetModel>> {
-        let record = sqlx::query_as!(
-            AssetModel,
-            "SELECT * FROM asset WHERE db_id = $1",
-            db_id
-        )
+        let record = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE db_id = $1").bind(db_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2645,12 +2534,7 @@ impl Repository<AssetModel> for PgAssetRepository {
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AssetModel>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let records = sqlx::query_as!(
-            AssetModel,
-            "SELECT * FROM asset WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2",
-            limit,
-            offset
-        )
+        let records = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2").bind(limit).bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;

@@ -1,11 +1,14 @@
-//! 内存数据库辅助
+//! 数据库测试辅助
 //!
-//! 参照 Java NRCS 的 AbstractBlockchainTest，提供 SQLite 内存数据库创建和 Schema 初始化。
-//! 使用项目中的 migration SQL 文件初始化全量 Schema。
+//! 参照 Java NRCS 的 AbstractBlockchainTest，提供 SQLite 内存数据库和 PostgreSQL 测试数据库创建和 Schema 初始化。
+//! SQLite 使用内存数据库，PostgreSQL 连接真实数据库实例。
 
 use sqlx::SqlitePool;
+use sqlx::PgPool;
 use orm::repository::*;
 use orm::models::*;
+
+const DEFAULT_PG_URL: &str = "postgres://nrcs_user:password@localhost:5432/nrcs_db";
 
 pub struct TestRepositories {
     pub pool: SqlitePool,
@@ -22,6 +25,23 @@ pub struct TestRepositories {
     pub account_property_repo: SqliteAccountPropertyRepository,
     pub account_control_phasing_repo: SqliteAccountControlPhasingRepository,
     pub public_key_repo: SqlitePublicKeyRepository,
+}
+
+pub struct PgTestRepositories {
+    pub pool: PgPool,
+    pub block_repo: PgBlockRepository,
+    pub account_repo: PgAccountRepository,
+    pub transaction_repo: PgTransactionRepository,
+    pub account_ledger_repo: PgAccountLedgerRepository,
+    pub account_guaranteed_balance_repo: PgAccountGuaranteedBalanceRepository,
+    pub account_asset_repo: PgAccountAssetRepository,
+    pub asset_repo: PgAssetRepository,
+    pub alias_repo: PgAliasRepository,
+    pub account_info_repo: PgAccountInfoRepository,
+    pub account_lease_repo: PgAccountLeaseRepository,
+    pub account_property_repo: PgAccountPropertyRepository,
+    pub account_control_phasing_repo: PgAccountControlPhasingRepository,
+    pub public_key_repo: PgPublicKeyRepository,
 }
 
 pub async fn setup_test_db() -> TestRepositories {
@@ -65,6 +85,79 @@ pub async fn setup_core_db() -> (SqlitePool, SqliteBlockRepository, SqliteAccoun
     (pool, repos.block_repo, repos.account_repo, repos.transaction_repo)
 }
 
+pub async fn setup_test_pg_db() -> PgTestRepositories {
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_PG_URL.to_string());
+
+    let pool = PgPool::connect(&database_url)
+        .await
+        .expect("Failed to connect to PostgreSQL");
+
+    cleanup_pg_tables(&pool).await;
+
+    let schema_sql = include_str!("../../../migrations/postgres/0.sql");
+    for statement in schema_sql.split(';') {
+        let trimmed = statement.trim();
+        if !trimmed.is_empty() && !trimmed.starts_with("--") && !trimmed.starts_with("/*") {
+            if let Err(e) = sqlx::query(trimmed).execute(&pool).await {
+                if !e.to_string().contains("already exists") {
+                    eprintln!("PG schema warning: {} - {}", trimmed.chars().take(80).collect::<String>(), e);
+                }
+            }
+        }
+    }
+
+    PgTestRepositories {
+        block_repo: PgBlockRepository::new(pool.clone()),
+        account_repo: PgAccountRepository::new(pool.clone()),
+        transaction_repo: PgTransactionRepository::new(pool.clone()),
+        account_ledger_repo: PgAccountLedgerRepository::new(pool.clone()),
+        account_guaranteed_balance_repo: PgAccountGuaranteedBalanceRepository::new(pool.clone()),
+        account_asset_repo: PgAccountAssetRepository::new(pool.clone()),
+        asset_repo: PgAssetRepository::new(pool.clone()),
+        alias_repo: PgAliasRepository::new(pool.clone()),
+        account_info_repo: PgAccountInfoRepository::new(pool.clone()),
+        account_lease_repo: PgAccountLeaseRepository::new(pool.clone()),
+        account_property_repo: PgAccountPropertyRepository::new(pool.clone()),
+        account_control_phasing_repo: PgAccountControlPhasingRepository::new(pool.clone()),
+        public_key_repo: PgPublicKeyRepository::new(pool.clone()),
+        pool,
+    }
+}
+
+pub async fn setup_core_pg_db() -> (PgPool, PgBlockRepository, PgAccountRepository, PgTransactionRepository) {
+    let repos = setup_test_pg_db().await;
+    let pool = repos.pool.clone();
+    (pool, repos.block_repo, repos.account_repo, repos.transaction_repo)
+}
+
+async fn cleanup_pg_tables(pool: &PgPool) {
+    let tables = [
+        "block", "transaction", "account", "public_key",
+        "account_asset", "account_ledger", "account_guaranteed_balance",
+        "alias", "alias_offer", "asset", "asset_transfer",
+        "account_info", "account_lease", "account_property",
+        "account_control_phasing", "account_currency",
+        "ask_order", "bid_order", "trade",
+        "poll", "vote", "poll_result",
+        "tagged_data", "tagged_data_tag", "tagged_data_extend", "tagged_timestamp",
+        "purchase", "purchase_feedback", "goods",
+        "currency", "currency_founder", "currency_mint", "currency_transfer",
+        "shuffling", "shuffling_data", "shuffling_participant",
+        "phasing_poll", "phasing_vote", "phasing_poll_result",
+        "phasing_poll_voter", "phasing_poll_linked_transaction", "phasing_poll_hashed_secret",
+        "account_control_phasing", "contract_reference",
+        "asset_property", "asset_history", "asset_delete", "asset_dividend",
+        "exchange_request", "hub",
+        "coin_order_fxt", "coin_trade_fxt",
+        "prunable_message", "referenced_transaction",
+    ];
+
+    for table in &tables {
+        let sql = format!("TRUNCATE TABLE {} CASCADE", table);
+        let _ = sqlx::query(&sql).execute(pool).await;
+    }
+}
+
 pub async fn insert_test_account(
     account_repo: &SqliteAccountRepository,
     account_id: i64,
@@ -85,8 +178,57 @@ pub async fn insert_test_account(
     account_repo.insert(&model).await
 }
 
+pub async fn insert_test_account_pg(
+    account_repo: &PgAccountRepository,
+    account_id: i64,
+    balance: i64,
+    height: i32,
+) -> RepositoryResult<()> {
+    let model = AccountModel {
+        db_id: 0,
+        id: account_id,
+        balance,
+        unconfirmed_balance: balance,
+        forged_balance: 0,
+        active_lessee_id: None,
+        has_control_phasing: false,
+        height,
+        latest: true,
+    };
+    account_repo.insert(&model).await
+}
+
 pub async fn insert_test_block(
     block_repo: &SqliteBlockRepository,
+    id: i64,
+    height: i32,
+    timestamp: i32,
+    generator_id: i64,
+) -> RepositoryResult<()> {
+    let model = BlockModel {
+        db_id: 0,
+        id,
+        version: 3,
+        timestamp,
+        previous_block_id: None,
+        total_amount: 0,
+        total_fee: 0,
+        payload_length: 0,
+        previous_block_hash: None,
+        cumulative_difficulty: vec![0u8; 1],
+        base_target: blockchain_types::constants::INITIAL_BASE_TARGET as i64,
+        next_block_id: None,
+        height,
+        generation_signature: vec![0u8; 64],
+        block_signature: vec![0u8; 64],
+        payload_hash: vec![0u8; 32],
+        generator_id,
+    };
+    block_repo.insert(&model).await
+}
+
+pub async fn insert_test_block_pg(
+    block_repo: &PgBlockRepository,
     id: i64,
     height: i32,
     timestamp: i32,

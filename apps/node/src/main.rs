@@ -63,7 +63,7 @@ use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransfer
          PhasingPollHashedSecretRepository, PhasingPollResultRepository,
          PhasingPollVoterRepository, PhasingPollLinkedTransactionRepository,
          // P2: Auxiliary tables
-         HubRepository, CurrencyFounderRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
+         HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
          ReferencedTransactionRepository};
 use orm::repository::sqlite::SqliteAccountGuaranteedBalanceRepository;
 
@@ -307,6 +307,7 @@ async fn main() -> Result<()> {
                 Arc::new(orm::PgPhasingPollLinkedTransactionRepository::new(pg_pool.clone()));
             let hub_repo: Arc<dyn HubRepository> = Arc::new(orm::PgHubRepository::new(pg_pool.clone()));
             let currency_founder_repo: Arc<dyn CurrencyFounderRepository> = Arc::new(orm::PgCurrencyFounderRepository::new(pg_pool.clone()));
+            let currency_supply_repo: Arc<dyn CurrencySupplyRepository> = Arc::new(orm::PgCurrencySupplyRepository::new(pg_pool.clone()));
             let prunable_message_repo: Arc<dyn PrunableMessageRepository> = Arc::new(orm::PgPrunableMessageRepository::new(pg_pool.clone()));
             let purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository> = Arc::new(orm::PgPurchaseFeedbackRepository::new(pg_pool.clone()));
             let referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository> =
@@ -337,10 +338,10 @@ async fn main() -> Result<()> {
                 account_lease_repo,
                 coin_order_fxt_repo, coin_trade_fxt_repo,
                 phasing_poll_hashed_secret_repo, phasing_poll_result_repo, phasing_poll_voter_repo, phasing_poll_linked_transaction_repo,
-                hub_repo, currency_founder_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
+                hub_repo, currency_founder_repo, currency_supply_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
             ).await
             */
-            
+
             return Err(anyhow::anyhow!("PostgreSQL is temporarily disabled. Please use SQLite."));
         }
         DatabaseType::SQLite => {
@@ -456,6 +457,7 @@ async fn main() -> Result<()> {
             // ✅ 新增（P2修复）：辅助表6张
             let hub_repo: Arc<dyn HubRepository> = Arc::new(orm::SqliteHubRepository::new(pool.clone()));
             let currency_founder_repo: Arc<dyn CurrencyFounderRepository> = Arc::new(orm::SqliteCurrencyFounderRepository::new(pool.clone()));
+            let currency_supply_repo: Arc<dyn CurrencySupplyRepository> = Arc::new(orm::SqliteCurrencySupplyRepository::new(pool.clone()));
             let prunable_message_repo: Arc<dyn PrunableMessageRepository> = Arc::new(orm::SqlitePrunableMessageRepository::new(pool.clone()));
             let purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository> = Arc::new(orm::SqlitePurchaseFeedbackRepository::new(pool.clone()));
             let referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository> =
@@ -488,7 +490,7 @@ async fn main() -> Result<()> {
                 // ✅ 新增：13个Repository
                 coin_order_fxt_repo, coin_trade_fxt_repo,
                 phasing_poll_hashed_secret_repo, phasing_poll_result_repo, phasing_poll_voter_repo, phasing_poll_linked_transaction_repo,
-                hub_repo, currency_founder_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
+                hub_repo, currency_founder_repo, currency_supply_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
             ).await
         }
     }
@@ -561,6 +563,7 @@ async fn start_node(
     // ✅ 新增（P2修复）：辅助表6张
     hub_repo: Arc<dyn HubRepository>,
     currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
+    currency_supply_repo: Arc<dyn CurrencySupplyRepository>,
     prunable_message_repo: Arc<dyn PrunableMessageRepository>,
     purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
     referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository>,
@@ -620,9 +623,10 @@ async fn start_node(
         // CoinExchange订单和交易（P0修复）(2个)
         coin_order_fxt_repo,
         coin_trade_fxt_repo,
-        // P2辅助表（Hub/CurrencyFounder/PrunableMessage/PurchaseFeedback/ReferencedTransaction）(5个)
+        // P2辅助表（Hub/CurrencyFounder/CurrencySupply/PrunableMessage/PurchaseFeedback/ReferencedTransaction）(6个)
         hub_repo,
         currency_founder_repo,
+        currency_supply_repo,
         prunable_message_repo,
         purchase_feedback_repo,
         referenced_transaction_repo,
