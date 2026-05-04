@@ -114,7 +114,7 @@ impl BlockRewardApplicator {
                     account_id: generator_id as i64,
                     event_type: 1, // BLOCK_GENERATED
                     event_id: block.id.unwrap_or(0) as i64,
-                    holding_type: 1, // NRCS_BALANCE
+                    holding_type: 1, // UNCONFIRMED_NRCS_BALANCE (区块奖励先进入未确认余额)
                     holding_id: None,
                     change: net_fee,
                     balance: balance_after,

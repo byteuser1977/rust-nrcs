@@ -11,15 +11,17 @@ NRCS 区块链节点 Rust 实现，从 Java 版本重构，完全兼容 NRCS Jav
 - **双数据库引擎** 支持 SQLite（开发）和 PostgreSQL（生产），通过 ORM 抽象层统一访问
 - **P2P 硬编码 SQL 已迁移至 ORM**，切换数据库引擎时上层模块无需改动
 
-### 近期优化（2026-05-04）
+### 近期优化（2026-05-05）
 
 | 优化项 | 说明 |
 |--------|------|
+| **PostgreSQL 测试全量通过** | 32 个 PostgreSQL 集成测试全部通过，ORM 双引擎均已生产就绪 |
+| **PostgreSQL 标识符修复** | 修复 pg.rs 中表名/列名大小写引用问题，迁移脚本标识符加引号 |
+| **Node PostgreSQL 分支启用** | 取消注释 PostgreSQL 分支，支持直接使用 PostgreSQL 启动节点 |
 | **日志系统重构** | info 日志精简（~90 处降级为 debug）、tracing 配置化（RUST_LOG / config / 默认三级优先级）、SQL 查询日志降为 debug |
 | **ORM 事务感知方法** | 新增 `insert_tx`/`update_next_block_id_tx`/`delete_by_db_id_tx` 等事务版本方法，p2p crate 不再直接依赖 sqlx |
 | **数据库无关类型** | `DbPool`（AnyPool）/ `DbTransaction` 类型别名，屏蔽底层数据库差异 |
 | **常量化** | 硬编码值统一使用 `BLOCK_VERSION`、`ONE_NRCS` 等常量 |
-| **运行时修复** | PRUNABLE_MESSAGE 表 INSERT 列名错误修复 |
 
 ## 项目结构
 
@@ -41,7 +43,7 @@ rust-nrcs/
 │   │   ├── repository/      # Repository 接口和实现
 │   │   │   ├── traits.rs    # Repository Trait 定义（含事务感知方法）
 │   │   │   ├── sqlite.rs    # SQLite 实现（50+ Repository）
-│   │   │   └── pg.rs        # PostgreSQL 实现（待启用）
+│   │   │   └── pg.rs        # PostgreSQL 实现（已启用）
 │   │   ├── connection.rs    # 连接管理（DbPool/DbTransaction 类型别名）
 │   │   ├── transaction.rs   # DatabaseTransaction 封装
 │   │   └── migrations/      # 数据库迁移脚本
@@ -61,7 +63,8 @@ rust-nrcs/
 ### 环境要求
 
 - Rust 1.70+
-- SQLite 3.x（当前默认数据库）
+- SQLite 3.x（开发环境默认数据库）
+- PostgreSQL 14+（生产环境推荐数据库）
 - Cargo
 
 ### 编译
@@ -83,7 +86,10 @@ cargo build -p nrcs-node --release
 # 启动 NRCS 节点（默认 SQLite，info 日志级别）
 cargo run -p nrcs-node
 
-# 使用自定义配置
+# 使用 PostgreSQL 启动节点
+DATABASE_URL="postgres://nrcs_user:password@localhost:5432/nrcs_db" cargo run -p nrcs-node
+
+# 使用自定义配置（config/local.toml 已配置 PostgreSQL）
 cargo run -p nrcs-node -- --config config/local.toml
 
 # 调试模式（输出所有 debug 日志，包括 SQL 查询和区块同步细节）
@@ -105,6 +111,10 @@ cargo test --lib
 # 运行特定模块
 cargo test -p tx-engine
 cargo test -p blockchain-types
+
+# 运行 PostgreSQL 集成测试（需先启动 PostgreSQL 并创建数据库）
+DATABASE_URL="postgres://nrcs_user:password@localhost:5432/nrcs_db" \
+  cargo test -p orm --features postgres -- --ignored --test-threads=1
 ```
 
 ### 代码质量检查
@@ -258,7 +268,7 @@ max_connections = 10
 | P2P 网络 | ✅ 完成 | WebSocket 通信，已迁移至 ORM |
 | 区块同步（42张表） | ✅ 完成 | 完整数据同步 |
 | 账户管理 | ✅ 完成 | 含保证余额 |
-| ORM 数据库层 | ✅ 完成 | SQLite 生产就绪，PG 待启用 |
+| ORM 数据库层 | ✅ 完成 | SQLite + PostgreSQL 双引擎生产就绪 |
 | 日志系统 | ✅ 完成 | 三级配置、info 精简 |
 
 ### 代码质量指标
@@ -277,10 +287,11 @@ max_connections = 10
 | contract | 1 | 100% |
 | crypto | 26 | 100% |
 | http-api | 23 | 100% |
-| orm | 18 | 100% |
+| orm (SQLite) | 18 | 100% |
+| orm (PostgreSQL) | 32 | 100% |
 | p2p | 12 | 100% |
 | tx-engine | 101 | 100% |
-| **总计** | **~270** | **100%** |
+| **总计** | **~300** | **100%** |
 
 ## 性能
 
@@ -322,6 +333,20 @@ cargo fmt && cargo clippy -- -D warnings && cargo test --lib
 
 ## 更新日志
 
+### v2.6.0 (2026-05-05)
+
+#### 新功能
+- **PostgreSQL 测试全量通过**: 32 个 PostgreSQL 集成测试全部通过，覆盖 8 个 Repository 测试文件
+- **Node PostgreSQL 分支启用**: 取消注释 PostgreSQL 分支，支持直接使用 PostgreSQL 启动节点
+- **config/local.toml 更新**: 默认连接字符串切换为 PostgreSQL
+
+#### 修复
+- **PostgreSQL 标识符大小写**: 修复 pg.rs 中所有表名和列名的大小写引用问题（如 `block` → `"BLOCK"`、`timestamp` → `"TIMESTAMP"`）
+- **迁移脚本标识符**: 修复 migrations/postgres/0.sql 中 TIMESTAMP、索引、外键约束的标识符引用
+- **ASK_ORDER/BID_ORDER INSERT**: 补充缺失的 TRANSACTION_INDEX、TRANSACTION_HEIGHT、CREATION_HEIGHT 列
+- **测试文件表名**: 修复所有测试文件中 setup_pg() 函数的表名大小写问题
+- **Clippy 警告**: 修复 3 处 needless_borrows_for_generic_args 警告
+
 ### v2.5.1 (2026-05-04)
 
 #### 新功能
@@ -334,9 +359,6 @@ cargo fmt && cargo clippy -- -D warnings && cargo test --lib
 #### 修复
 - **PRUNABLE_MESSAGE INSERT**: 修正列名（`block_transaction_height` → 正确的 11 列）
 - **日志噪音**: 区块接受日志改为每 5000 高度输出一次 info
-
-#### 待完成
-- PostgreSQL 驱动: pg.rs 中 `sqlx::query_as!` 宏需替换为运行时版本后可启用
 
 ---
 

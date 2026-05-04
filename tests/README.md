@@ -2,8 +2,8 @@
 
 NRCS Rust 实现的完整测试套件，用于验证 42 张数据库表交易同步、核心功能正确性以及与 Java NRCS 的兼容性。
 
-**最后更新**: 2026-05-03  
-**测试通过率**: **276/276 (100%)** ✅
+**最后更新**: 2026-05-05  
+**测试通过率**: **308/308 (100%)** ✅
 
 ## 🎯 测试概览
 
@@ -13,7 +13,8 @@ NRCS Rust 实现的完整测试套件，用于验证 42 张数据库表交易同
 |------|--------|--------|------|
 | blockchain-types | 80 | 100% | ✅ |
 | tx-engine | 101 | 100% | ✅ |
-| orm | 18 | 100% | ✅ （含 Genesis 4个）|
+| orm (SQLite) | 18 | 100% | ✅ （含 Genesis 4个）|
+| orm (PostgreSQL) | 32 | 100% | ✅ （8 个 Repository 测试文件）|
 | http-api | 23 | 100% | ✅ |
 | crypto | 26 | 100% | ✅ |
 | p2p | 12 | 100% | ✅ |
@@ -21,7 +22,7 @@ NRCS Rust 实现的完整测试套件，用于验证 42 张数据库表交易同
 | account | 3 | 100% | ✅ |
 | contract | 1 | 100% | ✅ |
 | 集成测试 | 7 | 100% | ✅ |
-| **总计** | **276** | **100%** | ✅ |
+| **总计** | **308** | **100%** | ✅ |
 
 ### 42 张数据库表验证
 
@@ -79,8 +80,29 @@ cargo test -p blockchain-types      # 核心类型测试（80个）
 cargo test -p tx-engine             # 交易引擎测试（101个）
 cargo test -p orm --lib genesis     # Genesis 区块创建测试（4个）
 
+# 运行 PostgreSQL 集成测试（需先启动 PostgreSQL）
+DATABASE_URL="postgres://nrcs_user:password@localhost:5432/nrcs_db" \
+  cargo test -p orm --features postgres -- --ignored --test-threads=1
+
 # 完整质量检查流程
 cargo fmt && cargo clippy -- -D warnings && cargo test
+```
+
+### PostgreSQL 测试环境配置
+
+```bash
+# 1. 创建 PostgreSQL 用户和数据库
+sudo -u postgres psql -c "CREATE USER nrcs_user WITH PASSWORD 'password';"
+sudo -u postgres psql -c "CREATE DATABASE nrcs_db OWNER nrcs_user;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE nrcs_db TO nrcs_user;"
+
+# 2. 执行迁移脚本
+PGPASSWORD=password psql -U nrcs_user -h localhost -d nrcs_db \
+  -f crates/orm/migrations/postgres/0.sql
+
+# 3. 运行 PostgreSQL 测试（32个）
+DATABASE_URL="postgres://nrcs_user:password@localhost:5432/nrcs_db" \
+  cargo test -p orm --features postgres -- --ignored --test-threads=1
 ```
 
 ### 方式二：运行集成测试
@@ -317,10 +339,11 @@ cd \path\to\rust-nrcs\tests\scripts
 
 每次提交前应确保：
 
-- [ ] `cargo test` 全部通过（276 tests）
+- [ ] `cargo test` 全部通过（308 tests）
 - [ ] `cargo clippy -- -D warnings` 零警告
 - [ ] `cargo fmt` 代码格式化正确
 - [ ] Genesis 测试通过（`cargo test -p orm --lib genesis`）
+- [ ] PostgreSQL 集成测试通过（`DATABASE_URL="postgres://..." cargo test -p orm --features postgres -- --ignored`）
 - [ ] 至少运行一次集成测试（`./tests/integration/run_all.sh`）
 
 ## 🐛 故障排查
@@ -556,4 +579,4 @@ exit 0
 
 **NRCS 测试套件** - 确保 42 张表交易同步的正确性和可靠性 ✅
 
-*最后更新: 2026-05-03 | 测试总数: 276 | 通过率: 100%*
+*最后更新: 2026-05-05 | 测试总数: 308 | 通过率: 100%*

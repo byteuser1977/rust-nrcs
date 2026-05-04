@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PostgreSQL integration tests: 32 tests covering 8 Repository test files (account, block, transaction, asset, alias, poll, currency, order)
+- PostgreSQL identifier quoting in pg.rs: all table and column names properly quoted with uppercase (e.g., `"BLOCK"`, `"TIMESTAMP"`)
+- PostgreSQL migration script identifier quoting: TIMESTAMP columns, index definitions, and foreign key constraints
+- Node PostgreSQL branch enabled: uncommented PostgreSQL code path in main.rs
+- config/local.toml updated to use PostgreSQL connection by default
+
+### Fixed
+
+- PostgreSQL identifier case sensitivity: fixed all table/column names in pg.rs SQL queries (e.g., `block` → `"BLOCK"`, `timestamp` → `"TIMESTAMP"`)
+- ASK_ORDER/BID_ORDER INSERT: added missing TRANSACTION_INDEX, TRANSACTION_HEIGHT, CREATION_HEIGHT columns
+- Test file table names: fixed setup_pg() function table name casing (e.g., `"asset"` → `"ASSET"`)
+- Clippy warnings: fixed 3 needless_borrows_for_generic_args warnings in pg.rs
+
+### Changed
+
+- ORM dual-engine status: both SQLite and PostgreSQL are now production-ready
+- Total test count increased from ~276 to ~308 (added 32 PostgreSQL integration tests)
+
 - Initial release of NRCS Rust backend
   - Full blockchain node implementation in Rust
   - PoS consensus engine

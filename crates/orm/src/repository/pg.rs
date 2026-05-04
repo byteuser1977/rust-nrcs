@@ -4,6 +4,7 @@ use sqlx::PgPool;
 use crate::models::*;
 use crate::connection::DbTransaction;
 use super::traits::*;
+use super::peer::PeerRepository;
 use super::public_key::PublicKeyRepository;
 use blockchain_types::account_ext::AccountPublicKey;
 use blockchain_types::{AccountId, Height};
@@ -3137,15 +3138,18 @@ impl Repository<AskOrderModel> for PgAskOrderRepository {
     async fn insert(&self, order: &AskOrderModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO "ASK_ORDER" ("ID", "ACCOUNT_ID", "ASSET_ID", "PRICE", "QUANTITY", "HEIGHT", "LATEST")
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO "ASK_ORDER" ("ID", "ACCOUNT_ID", "ASSET_ID", "PRICE", "TRANSACTION_INDEX", "TRANSACTION_HEIGHT", "QUANTITY", "CREATION_HEIGHT", "HEIGHT", "LATEST")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(order.id)
         .bind(order.account_id)
         .bind(order.asset_id)
         .bind(order.price)
+        .bind(order.transaction_index)
+        .bind(order.transaction_height)
         .bind(order.quantity)
+        .bind(order.creation_height)
         .bind(order.height)
         .bind(order.latest)
         .execute(&self.pool)
@@ -3271,15 +3275,18 @@ impl Repository<BidOrderModel> for PgBidOrderRepository {
     async fn insert(&self, order: &BidOrderModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO "BID_ORDER" ("ID", "ACCOUNT_ID", "ASSET_ID", "PRICE", "QUANTITY", "HEIGHT", "LATEST")
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO "BID_ORDER" ("ID", "ACCOUNT_ID", "ASSET_ID", "PRICE", "TRANSACTION_INDEX", "TRANSACTION_HEIGHT", "QUANTITY", "CREATION_HEIGHT", "HEIGHT", "LATEST")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
         .bind(order.id)
         .bind(order.account_id)
         .bind(order.asset_id)
         .bind(order.price)
+        .bind(order.transaction_index)
+        .bind(order.transaction_height)
         .bind(order.quantity)
+        .bind(order.creation_height)
         .bind(order.height)
         .bind(order.latest)
         .execute(&self.pool)
@@ -6124,7 +6131,7 @@ impl Repository<PollResultModel> for PgPollResultRepository {
             "#,
         )
         .bind(model.poll_id)
-        .bind(&model.result)
+        .bind(model.result)
         .bind(model.weight)
         .bind(model.height)
         .execute(&self.pool)
@@ -6153,7 +6160,7 @@ impl Repository<PollResultModel> for PgPollResultRepository {
             "#,
         )
         .bind(model.poll_id)
-        .bind(&model.result)
+        .bind(model.result)
         .bind(model.height)
         .bind(model.db_id)
         .execute(&self.pool)
@@ -6210,7 +6217,7 @@ impl PollResultRepository for PgPollResultRepository {
             r#"SELECT * FROM "POLL_RESULT" WHERE "POLL_ID" = $1 AND "RESULT" = $2"#
         )
         .bind(model.poll_id)
-        .bind(&model.result)
+        .bind(model.result)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -6706,5 +6713,178 @@ impl TaggedDataExtendRepository for PgTaggedDataExtendRepository {
         .await
         .map_err(RepositoryError::DbError)?;
         Ok(records)
+    }
+}
+
+// ============================================================================
+// CurrencySupplyRepository (PostgreSQL)
+// ============================================================================
+
+pub struct PgCurrencySupplyRepository {
+    pool: PgPool,
+}
+
+impl PgCurrencySupplyRepository {
+    pub fn new(pool: PgPool) -> Self { Self { pool } }
+}
+
+#[async_trait]
+impl Repository<CurrencySupplyModel> for PgCurrencySupplyRepository {
+    async fn insert(&self, m: &CurrencySupplyModel) -> RepositoryResult<()> {
+        sqlx::query(r#"INSERT INTO "CURRENCY_SUPPLY" ("ID", "CURRENT_SUPPLY", "CURRENT_RESERVE_PER_UNIT_NQT", "HEIGHT", "LATEST") VALUES ($1, $2, $3, $4, $5)"#)
+            .bind(m.id).bind(m.current_supply).bind(m.current_reserve_per_unit_nqt).bind(m.height).bind(m.latest)
+            .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<CurrencySupplyModel>> {
+        sqlx::query_as::<_, CurrencySupplyModel>(r#"SELECT * FROM "CURRENCY_SUPPLY" WHERE "DB_ID" = $1"#).bind(id)
+            .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn update(&self, m: &CurrencySupplyModel) -> RepositoryResult<()> {
+        sqlx::query(r#"UPDATE "CURRENCY_SUPPLY" SET "ID"=$1, "CURRENT_SUPPLY"=$2, "CURRENT_RESERVE_PER_UNIT_NQT"=$3, "HEIGHT"=$4, "LATEST"=$5 WHERE "DB_ID"=$6"#)
+            .bind(m.id).bind(m.current_supply).bind(m.current_reserve_per_unit_nqt).bind(m.height).bind(m.latest).bind(m.db_id)
+            .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn delete(&self, id: i64) -> RepositoryResult<()> {
+        sqlx::query(r#"DELETE FROM "CURRENCY_SUPPLY" WHERE "DB_ID"=$1"#).bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<CurrencySupplyModel>> {
+        let lim = limit.unwrap_or(100);
+        let off = offset.unwrap_or(0);
+        sqlx::query_as::<_, CurrencySupplyModel>(r#"SELECT * FROM "CURRENCY_SUPPLY" ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#)
+            .bind(lim).bind(off).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (c,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM "CURRENCY_SUPPLY""#).fetch_one(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(c)
+    }
+}
+
+#[async_trait]
+impl CurrencySupplyRepository for PgCurrencySupplyRepository {
+    async fn find_by_currency_id(&self, currency_id: i64) -> RepositoryResult<Option<CurrencySupplyModel>> {
+        sqlx::query_as::<_, CurrencySupplyModel>(r#"SELECT * FROM "CURRENCY_SUPPLY" WHERE "ID" = $1 AND "LATEST" = true"#)
+            .bind(currency_id).fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+
+    async fn soft_delete_by_currency(&self, currency_id: i64) -> RepositoryResult<()> {
+        sqlx::query(r#"UPDATE "CURRENCY_SUPPLY" SET "LATEST" = false WHERE "ID" = $1 AND "LATEST" = true"#)
+            .bind(currency_id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+}
+
+// ============================================================================
+// ExchangeRepository (PostgreSQL)
+// ============================================================================
+
+pub struct PgExchangeRepository {
+    pool: PgPool,
+}
+
+impl PgExchangeRepository {
+    pub fn new(pool: PgPool) -> Self { Self { pool } }
+}
+
+#[async_trait]
+impl Repository<ExchangeModel> for PgExchangeRepository {
+    async fn insert(&self, m: &ExchangeModel) -> RepositoryResult<()> {
+        sqlx::query(r#"INSERT INTO "EXCHANGE" ("TRANSACTION_ID", "CURRENCY_ID", "BLOCK_ID", "OFFER_ID", "SELLER_ID", "BUYER_ID", "UNITS", "RATE", "TIMESTAMP", "HEIGHT") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"#)
+            .bind(m.transaction_id).bind(m.currency_id).bind(m.block_id).bind(m.offer_id)
+            .bind(m.seller_id).bind(m.buyer_id).bind(m.units).bind(m.rate)
+            .bind(m.timestamp).bind(m.height)
+            .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<ExchangeModel>> {
+        sqlx::query_as::<_, ExchangeModel>(r#"SELECT * FROM "EXCHANGE" WHERE "DB_ID" = $1"#).bind(id)
+            .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn update(&self, _m: &ExchangeModel) -> RepositoryResult<()> {
+        Ok(())
+    }
+    async fn delete(&self, id: i64) -> RepositoryResult<()> {
+        sqlx::query(r#"DELETE FROM "EXCHANGE" WHERE "DB_ID"=$1"#).bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<ExchangeModel>> {
+        let lim = limit.unwrap_or(100);
+        let off = offset.unwrap_or(0);
+        sqlx::query_as::<_, ExchangeModel>(r#"SELECT * FROM "EXCHANGE" ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#)
+            .bind(lim).bind(off).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (c,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM "EXCHANGE""#).fetch_one(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(c)
+    }
+}
+
+#[async_trait]
+impl ExchangeRepository for PgExchangeRepository {
+    async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<ExchangeModel>> {
+        sqlx::query_as::<_, ExchangeModel>(r#"SELECT * FROM "EXCHANGE" WHERE "CURRENCY_ID" = $1 ORDER BY "HEIGHT" DESC"#)
+            .bind(currency_id).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn find_by_offer(&self, transaction_id: i64, offer_id: i64) -> RepositoryResult<Option<ExchangeModel>> {
+        sqlx::query_as::<_, ExchangeModel>(r#"SELECT * FROM "EXCHANGE" WHERE "TRANSACTION_ID" = $1 AND "OFFER_ID" = $2"#)
+            .bind(transaction_id).bind(offer_id).fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+}
+
+// ============================================================================
+// PrunableMessageRepository trait impl (PostgreSQL)
+// ============================================================================
+
+#[async_trait]
+impl PrunableMessageRepository for PgPrunableMessageRepository {
+    async fn find_by_transaction(&self, transaction_id: i64) -> RepositoryResult<Option<PrunableMessageModel>> {
+        sqlx::query_as::<_, PrunableMessageModel>(r#"SELECT * FROM "PRUNABLE_MESSAGE" WHERE "TRANSACTION_ID" = $1 LIMIT 1"#)
+            .bind(transaction_id).fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+}
+
+// ============================================================================
+// PeerRepository (PostgreSQL)
+// ============================================================================
+
+pub struct PgPeerRepository {
+    pool: PgPool,
+}
+
+impl PgPeerRepository {
+    pub fn new(pool: PgPool) -> Self { Self { pool } }
+}
+
+#[async_trait]
+impl PeerRepository for PgPeerRepository {
+    async fn upsert(&self, peer: &PeerModel) -> RepositoryResult<()> {
+        sqlx::query(r#"INSERT INTO "PEER" ("ADDRESS", "LAST_UPDATED", "SERVICES") VALUES ($1, $2, $3) ON CONFLICT ("ADDRESS") DO UPDATE SET "LAST_UPDATED" = $2, "SERVICES" = $3"#)
+            .bind(&peer.address).bind(peer.last_updated).bind(peer.services)
+            .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<PeerModel>> {
+        sqlx::query_as::<_, PeerModel>(r#"SELECT * FROM "PEER" WHERE "ADDRESS" = $1"#)
+            .bind(address).fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn find_all(&self, limit: Option<i64>) -> RepositoryResult<Vec<PeerModel>> {
+        let lim = limit.unwrap_or(1000);
+        sqlx::query_as::<_, PeerModel>(r#"SELECT * FROM "PEER" ORDER BY "LAST_UPDATED" DESC LIMIT $1"#)
+            .bind(lim).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn delete_by_address(&self, address: &str) -> RepositoryResult<()> {
+        sqlx::query(r#"DELETE FROM "PEER" WHERE "ADDRESS" = $1"#).bind(address).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (c,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM "PEER""#).fetch_one(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(c)
+    }
+    async fn cleanup_old_peers(&self, threshold: i64) -> RepositoryResult<u64> {
+        let result = sqlx::query(r#"DELETE FROM "PEER" WHERE "LAST_UPDATED" < $1 OR "LAST_UPDATED" IS NULL"#)
+            .bind(threshold).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(result.rows_affected())
     }
 }

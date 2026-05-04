@@ -173,6 +173,48 @@ mod ledger_holding {
     pub const CURRENCY_BALANCE: i16 = 6;
 }
 
+// Transaction subtypes for Messaging type (TransactionType::Messaging)
+#[allow(dead_code)]
+mod messaging_subtype {
+    pub const ARBITRARY_MESSAGE: u8 = 0;
+    pub const ALIAS_ASSIGNMENT: u8 = 1;
+    pub const POLL_CREATION: u8 = 2;
+    pub const VOTE_CASTING: u8 = 3;
+    pub const HUB_ANNOUNCEMENT: u8 = 4;
+    pub const ACCOUNT_INFO: u8 = 5;
+    pub const ALIAS_SELL: u8 = 6;
+    pub const ALIAS_BUY: u8 = 7;
+    pub const ALIAS_DELETE: u8 = 8;
+    pub const PHASING_VOTE_CASTING: u8 = 9;
+    pub const ACCOUNT_PROPERTY: u8 = 10;
+    pub const ACCOUNT_LONG_VALUE_PROPERTY: u8 = 11;
+    pub const ACCOUNT_PROPERTY_DELETE: u8 = 12;
+}
+
+// Transaction subtypes for Voting type (TransactionType::Voting)
+#[allow(dead_code)]
+mod voting_subtype {
+    pub const POLL_CREATION: u8 = 0;
+    pub const VOTE_CASTING: u8 = 1;
+    pub const PHASING_VOTE_CASTING: u8 = 2;
+}
+
+// Transaction subtypes for Aliases type (TransactionType::Aliases)
+#[allow(dead_code)]
+mod aliases_subtype {
+    pub const ALIAS_ASSIGNMENT: u8 = 0;
+    pub const ALIAS_SELL: u8 = 1;
+    pub const ALIAS_BUY: u8 = 2;
+    pub const ALIAS_DELETE: u8 = 3;
+}
+
+// Transaction subtypes for AccountProperty type (TransactionType::AccountProperty)
+#[allow(dead_code)]
+mod account_property_subtype {
+    pub const SET: u8 = 10;
+    pub const DELETE: u8 = 11;
+}
+
 fn get_ledger_event(tx: &Transaction) -> i16 {
     match tx.type_id {
         TransactionType::Payment => ledger_event::ORDINARY_PAYMENT,
@@ -875,7 +917,7 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
                 let pk_model = blockchain_types::account_ext::AccountPublicKey {
                     account_id: sender_id as u64,
                     public_key: current_key,
-                    height: self.get_current_height(),
+                    height: self.get_current_height() as u32,
                 };
                 let _ = self.public_key_repo.insert(&pk_model).await;
             }
@@ -1359,7 +1401,7 @@ impl DatabaseTransactionProcessor {
             asset_id,
             price: price_nqt,
             quantity,
-            transaction_index: 0, // TODO: 从block获取
+            transaction_index: tx.transaction_index as i16,
             transaction_height: current_height,
             creation_height: current_height,
             height: current_height,
@@ -1411,7 +1453,7 @@ impl DatabaseTransactionProcessor {
             asset_id,
             price: price_nqt,
             quantity,
-            transaction_index: 0, // TODO: 从block获取
+            transaction_index: tx.transaction_index as i16,
             transaction_height: current_height,
             creation_height: current_height,
             height: current_height,
@@ -1722,7 +1764,7 @@ impl DatabaseTransactionProcessor {
                     amount: dividend_per_share,
                     dividend_height: current_height,
                     total_dividend: total_dividend_amount,
-                    num_accounts: dividend_recipient_count,
+                    num_accounts: dividend_recipient_count as i64,
                     timestamp: current_timestamp,
                     height: current_height,
                 };
@@ -1882,11 +1924,14 @@ impl DatabaseTransactionProcessor {
     async fn apply_asset_property_delete(&self, tx: &Transaction) -> ProcessorResult<()> {
         let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
         let property_name = self.parse_string_field(tx, "property").unwrap_or_default();
+        let sender_id = tx.sender_id as i64;
 
         if !property_name.is_empty() && asset_id != 0 {
-            // TODO: 实现delete方法
-            debug!("Deleting property '{}' from asset {}", property_name, asset_id);
-            debug!("AssetProperty deletion not yet fully implemented");
+            if let Err(e) = self.asset_property_repo.delete_by_asset_account_property(asset_id, sender_id, &property_name).await {
+                warn!("Failed to delete property '{}' from asset {}: {}", property_name, asset_id, e);
+            } else {
+                debug!("Deleted property '{}' from asset {}", property_name, asset_id);
+            }
         }
 
         Ok(())
@@ -2816,7 +2861,7 @@ impl DatabaseTransactionProcessor {
                 }
             }
 
-            1 => { // ALIAS_ASSIGNMENT
+            messaging_subtype::ALIAS_ASSIGNMENT => {
                 // Java: Alias.addOrUpdateAlias(transaction, attachment)
                 // Reference: MessagingAliasAssignment.java
                 //   attachment fields: { "alias": String, "uri": String }
@@ -2839,18 +2884,15 @@ impl DatabaseTransactionProcessor {
                         latest: true,
                     };
 
-                    // 检查是否已存在同名alias
+                    // Upsert: 检查是否已存在同名alias
                     match self.alias_repo.find_by_name(&alias_name.to_lowercase()).await {
                         Ok(Some(existing)) => {
-                            // 更新现有alias
                             let mut updated = alias_model;
                             updated.db_id = existing.db_id;
-                            // 注意：这里应该调用update方法，但当前trait可能没有
-                            // 暂时使用insert（实际应该upsert）
-                            debug!("Updating existing alias '{}' for transaction {}", alias_name, tx.id);
+                            self.alias_repo.update(&updated).await?;
+                            debug!("Updated existing alias '{}' for transaction {}", alias_name, tx.id);
                         }
                         Ok(None) => {
-                            // 插入新alias
                             self.alias_repo.insert(&alias_model).await?;
                             debug!("Created new alias '{}' for account {}", alias_name, sender_id);
                         }
@@ -2862,7 +2904,7 @@ impl DatabaseTransactionProcessor {
                 }
             }
 
-            6 => { // ALIAS_SELL
+            messaging_subtype::ALIAS_SELL => {
                 // Java: Alias.sellAlias(transaction, attachment)
                 // Reference: MessagingAliasSell.java
                 //   attachment fields: { "alias": String, "priceNQT": long }
@@ -2898,7 +2940,7 @@ impl DatabaseTransactionProcessor {
                 }
             }
 
-            7 => { // ALIAS_BUY
+            messaging_subtype::ALIAS_BUY => {
                 // Java: Alias.changeOwner(transaction.getSenderId(), aliasName)
                 // Reference: TransactionTypeAccount.ALIAS_BUY.applyAttachment()
                 //   - UPDATE ALIAS.owner_id = transaction.senderId
@@ -2914,8 +2956,11 @@ impl DatabaseTransactionProcessor {
                             if tx.amount > 0 {
                                 // 更新alias所有者
                                 alias.account_id = sender_id;
-                                // 这里需要调用update，暂时跳过（需扩展trait）
-                                debug!("Alias '{}' ownership transferred to account {}", alias_name, sender_id);
+                                if let Err(e) = self.alias_repo.update(&alias).await {
+                                    warn!("Failed to update alias owner '{}': {}", alias_name, e);
+                                } else {
+                                    debug!("Alias '{}' ownership transferred to account {}", alias_name, sender_id);
+                                }
 
                                 // ✅ 修复：更新ALIAS_OFFER的buyer_id并删除offer
                                 if let Ok(Some(mut offer)) = self.alias_offer_repo.find_by_alias(alias.id).await {
@@ -2944,7 +2989,7 @@ impl DatabaseTransactionProcessor {
                 }
             }
 
-            8 => { // ALIAS_DELETE
+            messaging_subtype::ALIAS_DELETE => {
                 // Java: Alias.deleteAlias(aliasName)
                 // Reference: TransactionTypeAccount.ALIAS_DELETE.applyAttachment()
                 //   - DELETE from ALIAS table (by name)
@@ -2956,8 +3001,11 @@ impl DatabaseTransactionProcessor {
                         Ok(Some(alias)) => {
                             // 验证删除权限：只有owner可以删除
                             if alias.account_id == sender_id {
-                                // self.alias_repo.delete(alias.db_id).await?;
-                                debug!("Alias '{}' deleted by owner account {}", alias_name, sender_id);
+                                if let Err(e) = self.alias_repo.delete(alias.db_id).await {
+                                    warn!("Failed to delete alias '{}': {}", alias_name, e);
+                                } else {
+                                    debug!("Alias '{}' deleted by owner account {}", alias_name, sender_id);
+                                }
                             } else {
                                 warn!("Account {} cannot delete alias owned by {}",
                                     sender_id, alias.account_id);
@@ -3038,7 +3086,7 @@ impl DatabaseTransactionProcessor {
                         voting_model,
                         min_balance,
                         min_balance_model,
-                        holding_id: None, // TODO: 从attachment解析
+                        holding_id: self.parse_long_field(tx, "holdingId"),
                         height: current_height,
                     };
 
@@ -3049,11 +3097,10 @@ impl DatabaseTransactionProcessor {
                             // 初始化POLL_RESULT（每个选项初始weight=0）
                             if !options_str.is_empty() {
                                 let options: Vec<&str> = options_str.split(',').collect();
-                                for (idx, _option) in options.iter().enumerate() {
+                                for (_idx, _option) in options.iter().enumerate() {
                                     let poll_result = orm::models::PollResultModel {
                                         db_id: 0,
                                         poll_id: tx.id as i64,
-                                        option: idx as i64,
                                         result: None,
                                         weight: 0,
                                         height: current_height,
@@ -3190,8 +3237,8 @@ impl DatabaseTransactionProcessor {
                 if phased_tx_id != 0 {
                     // Verify the phasing poll exists
                     match self.phasing_poll_repo.find_by_poll_id(phased_tx_id).await {
-                        Ok(Some(_poll)) => {
-                            // ✅ 新增：插入PHASING_VOTE记录
+                        Ok(Some(poll)) => {
+                            // 插入PHASING_VOTE记录
                             let vote_model = orm::models::PhasingVoteModel {
                                 db_id: 0,
                                 vote_id: tx.id as i64,
@@ -3202,7 +3249,7 @@ impl DatabaseTransactionProcessor {
                             self.phasing_vote_repo.insert(&vote_model).await
                                 .map_err(|e| ProcessorError::Validation(format!("PhasingVote insert failed: {}", e)))?;
 
-                            // ✅ 新增：插入PHASING_POLL_VOTER记录
+                            // 插入PHASING_POLL_VOTER记录
                             let voter_model = orm::models::PhasingPollVoterModel {
                                 db_id: 0,
                                 transaction_id: phased_tx_id,
@@ -3213,15 +3260,28 @@ impl DatabaseTransactionProcessor {
                                 warn!("Failed to insert PHASING_POLL_VOTER: {}", e);
                             }
 
-                            // ✅ 新增：更新PHASING_POLL_RESULT权重
-                            // 解析投票选项（简化处理，实际应从attachment解析）
+                            // 更新PHASING_POLL_RESULT并计算approval
                             if let Some(vote_bytes) = tx.attachment_json.as_ref().and_then(|v| v.get("vote")) {
                                 if let Some(vote_value) = vote_bytes.as_i64() {
+                                    // NRCS: 检查投票是否达到阈值 (VOTING_MODEL_ACCOUNT=0: each voter = 1 vote)
+                                    let approved = if poll.voting_model == 0 {
+                                        if let Some(quorum) = poll.quorum {
+                                            match self.phasing_poll_voter_repo.find_by_poll(phased_tx_id).await {
+                                                Ok(voters) => (voters.len() as i64) >= quorum,
+                                                _ => false,
+                                            }
+                                        } else {
+                                            false
+                                        }
+                                    } else {
+                                        false
+                                    };
+
                                     let result_model = orm::models::PhasingPollResultModel {
                                         db_id: 0,
                                         id: phased_tx_id,
                                         result: vote_value,
-                                        approved: false,
+                                        approved,
                                         height: self.get_current_height(),
                                     };
 
@@ -3475,6 +3535,21 @@ impl DatabaseTransactionProcessor {
                 let description = self.parse_string_field(tx, "description");
                 let data = self.parse_string_field(tx, "data");
 
+                // Parse tags from attachment JSON
+                let tags = tx.attachment_json.as_ref()
+                    .and_then(|v| v.get("tags"))
+                    .and_then(|t| t.as_array())
+                    .map(|arr| arr.iter()
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(","));
+
+                // Parse isText from attachment JSON (default true)
+                let is_text = tx.attachment_json.as_ref()
+                    .and_then(|v| v.get("isText"))
+                    .and_then(|b| b.as_bool())
+                    .unwrap_or(true);
+
                 // 对应 Java: TaggedData.add() 允许空名称（使用 transaction id 作为回退标识）
                 if name.is_empty() {
                     name = format!("TaggedData_{}", tx.id);
@@ -3488,11 +3563,11 @@ impl DatabaseTransactionProcessor {
                         account_id: sender_id,
                         name: name.clone(),
                         description,
-                        tags: None, // TODO: 从attachment解析tags数组
+                        tags,
                         parsed_tags: None,
-                        type_: self.parse_string_field(tx, "type"), // 使用type_字段
-                        data: data.unwrap_or_default().into_bytes(), // 转换为Vec<u8>
-                        is_text: true, // TODO: 从attachment解析
+                        type_: self.parse_string_field(tx, "type"),
+                        data: data.unwrap_or_default().into_bytes(),
+                        is_text,
                         filename: self.parse_string_field(tx, "filename"),
                         channel: self.parse_string_field(tx, "channel"),
                         block_timestamp: current_timestamp,
@@ -3777,7 +3852,6 @@ impl DatabaseTransactionProcessor {
                     let goods_price = if price_nqt == 0 { _price } else { price_nqt };
                     // Check if goods has image from attachment or prunable message
                     let has_image = tx.attachment_json.as_ref()
-                        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
                         .and_then(|v| {
                             v.get("goodsIsImage").and_then(|x| x.as_bool())
                                 .or_else(|| v.get("hasImage").and_then(|x| x.as_bool()))
@@ -4145,21 +4219,164 @@ impl DatabaseTransactionProcessor {
         Ok(())
     }
 
-    /// Aliases (Type 8) 交易处理（Stub）
+    /// Aliases (Type 8) 交易处理
+    ///
+    /// Reference: Java TransactionTypeAliases.java
     async fn apply_aliases_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
-        debug!("Aliases subtype {} processed (stub)", tx.subtype);
+        use orm::models::*;
+
+        let sender_id = tx.sender_id as i64;
+        let current_height = self.get_current_height();
+        let current_timestamp = self.get_current_timestamp();
+
+        match tx.subtype {
+            aliases_subtype::ALIAS_ASSIGNMENT => {
+                let alias_name = self.parse_string_field(tx, "alias").unwrap_or_default();
+                let alias_uri = self.parse_string_field(tx, "uri").unwrap_or_default();
+
+                if !alias_name.is_empty() {
+                    let alias_model = AliasModel {
+                        db_id: 0,
+                        id: tx.id as i64,
+                        account_id: sender_id,
+                        alias_name: alias_name.clone(),
+                        alias_name_lower: alias_name.to_lowercase(),
+                        alias_uri,
+                        timestamp: current_timestamp,
+                        height: current_height,
+                        latest: true,
+                    };
+
+                    self.alias_repo.insert(&alias_model).await?;
+                    debug!("ALIAS_ASSIGNMENT: '{}' -> account {}", alias_name, sender_id);
+                }
+            }
+
+            aliases_subtype::ALIAS_SELL => {
+                let alias_name = self.parse_string_field(tx, "alias").unwrap_or_default();
+                let price_nqt = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
+
+                if !alias_name.is_empty() {
+                    if let Ok(Some(alias)) = self.alias_repo.find_by_name(&alias_name.to_lowercase()).await {
+                        let offer_model = AliasOfferModel {
+                            db_id: 0,
+                            id: alias.id,
+                            price: price_nqt,
+                            buyer_id: None,
+                            height: current_height,
+                            latest: true,
+                        };
+                        self.alias_offer_repo.insert(&offer_model).await?;
+                        debug!("ALIAS_SELL: '{}' price={}", alias_name, price_nqt);
+                    }
+                }
+            }
+
+            aliases_subtype::ALIAS_BUY => {
+                let alias_name = self.parse_string_field(tx, "alias").unwrap_or_default();
+
+                if !alias_name.is_empty() {
+                    if let Ok(Some(alias)) = self.alias_repo.find_by_name(&alias_name.to_lowercase()).await {
+                        if let Ok(Some(offer)) = self.alias_offer_repo.find_by_alias(alias.id).await {
+                            let _ = self.alias_offer_repo.delete(offer.db_id).await;
+                        }
+                        debug!("ALIAS_BUY: '{}' -> account {}", alias_name, sender_id);
+                    }
+                }
+            }
+
+            aliases_subtype::ALIAS_DELETE => {
+                let alias_name = self.parse_string_field(tx, "alias").unwrap_or_default();
+
+                if !alias_name.is_empty() {
+                    if let Ok(Some(alias)) = self.alias_repo.find_by_name(&alias_name.to_lowercase()).await {
+                        if alias.account_id == sender_id {
+                            let _ = self.alias_repo.delete(alias.db_id).await;
+                            debug!("ALIAS_DELETE: '{}' deleted", alias_name);
+                        }
+                    }
+                }
+            }
+
+            _ => {
+                debug!("Aliases subtype {} unhandled", tx.subtype);
+            }
+        }
+
         Ok(())
     }
 
-    /// Voting (Type 9) 交易处理（Stub）
+    /// Voting (Type 9) 交易处理
+    ///
+    /// NRCS Java: Voting transaction subtypes map to Messaging subtypes:
+    ///   Voting 0 (POLL_CREATION)     → Messaging 2 (POLL_CREATION)
+    ///   Voting 1 (VOTE_CASTING)      → Messaging 3 (VOTE_CASTING)
+    ///   Voting 2 (PHASING_VOTE_CASTING) → Messaging 9 (PHASING_VOTE_CASTING)
+    /// 附件格式相同，委托给 apply_messaging_attachment 处理
     async fn apply_voting_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
-        debug!("Voting subtype {} processed (stub)", tx.subtype);
-        Ok(())
+        let mapped_subtype = match tx.subtype {
+            voting_subtype::POLL_CREATION => messaging_subtype::POLL_CREATION,
+            voting_subtype::VOTE_CASTING => messaging_subtype::VOTE_CASTING,
+            voting_subtype::PHASING_VOTE_CASTING => messaging_subtype::PHASING_VOTE_CASTING,
+            _ => {
+                debug!("Voting subtype {} unhandled", tx.subtype);
+                return Ok(());
+            }
+        };
+
+        let mut mapped_tx = tx.clone();
+        mapped_tx.subtype = mapped_subtype;
+        self.apply_messaging_attachment(&mapped_tx).await
     }
 
-    /// AccountProperty (Type 10) 交易处理（Stub）
+    /// AccountProperty (Type 10) 交易处理
+    ///
+    /// Reference: Java TransactionTypeAccount
+    ///   Subtype 10: ACCOUNT_PROPERTY -> Account.setProperty(transaction, attachment)
+    ///   Subtype 11: ACCOUNT_PROPERTY_DELETE -> Account.deleteProperty(transaction, attachment)
     async fn apply_account_property_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
-        debug!("AccountProperty subtype {} processed (stub)", tx.subtype);
+        let sender_id = tx.sender_id as i64;
+        let recipient_id = tx.recipient_id.map(|id| id as i64).unwrap_or(sender_id);
+        let current_height = self.get_current_height();
+
+        match tx.subtype {
+            account_property_subtype::SET => {
+                let property = self.parse_string_field(tx, "property").unwrap_or_default();
+                let value = self.parse_string_field(tx, "value");
+
+                if !property.is_empty() {
+                    let model = orm::models::AccountPropertyModel {
+                        db_id: 0,
+                        id: tx.id as i64,
+                        recipient_id,
+                        setter_id: Some(sender_id),
+                        property: property.clone(),
+                        value,
+                        height: current_height,
+                        latest: true,
+                    };
+
+                    self.account_property_repo.upsert(&model).await?;
+                    debug!("Set account property '{}' on account {} (tx={})", property, recipient_id, tx.id);
+                }
+            }
+
+            account_property_subtype::DELETE => {
+                let property = self.parse_string_field(tx, "property").unwrap_or_default();
+
+                if !property.is_empty() {
+                    if let Ok(Some(existing)) = self.account_property_repo.find_by_property(recipient_id, &property).await {
+                        let _ = self.account_property_repo.delete_by_id(existing.id).await;
+                        debug!("Deleted account property '{}' from account {} (tx={})", property, recipient_id, tx.id);
+                    }
+                }
+            }
+
+            _ => {
+                debug!("AccountProperty subtype {} unhandled", tx.subtype);
+            }
+        }
+
         Ok(())
     }
 
@@ -4211,7 +4428,7 @@ impl DatabaseTransactionProcessor {
                     creation_height: current_height,
                     height: current_height,
                     transaction_height: current_height,
-                    transaction_index: 0,
+                    transaction_index: tx.transaction_index as i16,
                     latest: true,
                 };
 
@@ -4725,7 +4942,6 @@ impl DatabaseTransactionProcessor {
 
         // Parse whitelist from attachment JSON
         let whitelist_size = tx.attachment_json.as_ref()
-            .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
             .and_then(|v| {
                 v.get("phasingWhitelist")
                     .or_else(|| v.get("whitelist"))
@@ -4736,7 +4952,6 @@ impl DatabaseTransactionProcessor {
 
         // Parse hashed_secret and algorithm from attachment
         let hashed_secret = tx.attachment_json.as_ref()
-            .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
             .and_then(|v| {
                 v.get("phasingHashedSecret")
                     .or_else(|| v.get("hashedSecret"))

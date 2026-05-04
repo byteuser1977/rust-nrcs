@@ -2,7 +2,7 @@
 
 NRCS 区块链的 Object-Relational Mapping 层，基于 SQLx 实现，支持 **42 张数据库表**的完整 CRUD 操作。
 
-## 🎯 核心特性（2026-05-03 更新）
+## 🎯 核心特性（2026-05-05 更新）
 
 ### ✅ 完整的 42 张数据库表支持
 
@@ -24,7 +24,7 @@ NRCS 区块链的 Object-Relational Mapping 层，基于 SQLx 实现，支持 **
 ### 🔧 双数据库引擎支持
 
 - ✅ **SQLite**: 50+ Repository 实现，适合开发和小规模部署
-- ✅ **PostgreSQL**: 52+ Repository 实现，适合生产环境和高并发
+- ✅ **PostgreSQL**: 52+ Repository 实现，适合生产环境和高并发（32 个集成测试全量通过）
 - ✅ 统一的 Trait 接口抽象，无缝切换
 
 ### 📊 已验证的功能
@@ -33,7 +33,8 @@ NRCS 区块链的 Object-Relational Mapping 层，基于 SQLx 实现，支持 **
 - ✅ 参数占位符语法正确（SQLite: `?`, PostgreSQL: `$n`）
 - ✅ 类型转换兼容 Java（u64 ↔ i64, Hash 序列化）
 - ✅ Genesis 区块创建和初始化完整
-- ✅ 18 个单元测试全部通过（含 4 个 Genesis 测试）
+- ✅ 18 个 SQLite 单元测试全部通过（含 4 个 Genesis 测试）
+- ✅ 32 个 PostgreSQL 集成测试全部通过（覆盖 8 个 Repository）
 
 ## 架构设计
 
@@ -112,7 +113,7 @@ pub struct PgBlockRepository { pool: PgPool }
 #[async_trait]
 impl BlockRepository for PgBlockRepository {
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Option<BlockModel>> {
-        sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height = $1")
+        sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM "BLOCK" WHERE "HEIGHT" = $1"#)
             .bind(height)
             .fetch_optional(&self.pool)
             .await
@@ -495,6 +496,8 @@ async fn bad_example(&self, id: i64) -> Option<BlockModel> {
 | 布尔类型 | `INTEGER` (0/1) | `BOOLEAN` |
 | 字符串拼接 | `||` 或 `concat()` | `||` 或 `concat()` |
 | JSON 支持 | 通过扩展 | 原生支持 |
+| 标识符大小写 | 不敏感，无需引号 | 未加引号折叠为小写，需用 `"NAME"` 引用 |
+| SQL 字符串 | 普通字符串 `"..."` | 原始字符串 `r#"..."#`（含引号标识符时） |
 
 ### 示例对比
 
@@ -503,10 +506,19 @@ async fn bad_example(&self, id: i64) -> Option<BlockModel> {
 INSERT INTO block (id, version, timestamp) VALUES (?, ?, ?)
 SELECT * FROM block WHERE height = ?
 
--- PostgreSQL
-INSERT INTO block (id, version, timestamp) VALUES ($1, $2, $3)
-SELECT * FROM block WHERE height = $1
+-- PostgreSQL（标识符需加引号，使用原始字符串）
+INSERT INTO "BLOCK" ("ID", "VERSION", "TIMESTAMP") VALUES ($1, $2, $3)
+SELECT * FROM "BLOCK" WHERE "HEIGHT" = $1
 ```
+
+### PostgreSQL 标识符引用规则
+
+PostgreSQL 对未加引号的标识符会折叠为小写，但我们的迁移脚本使用大写加引号的表名和列名（如 `"BLOCK"`、`"TIMESTAMP"`）。因此在 pg.rs 中的 SQL 查询必须：
+
+1. **表名加引号**: `FROM "BLOCK"` 而非 `FROM block`
+2. **列名加引号**: `WHERE "HEIGHT" = $1` 而非 `WHERE height = $1`
+3. **使用原始字符串**: `r#"SELECT * FROM "BLOCK""#` 而非 `"SELECT * FROM \"BLOCK\""`
+4. **SQL 关键字不加引号**: `ORDER BY`、`ASC`、`DESC` 等保持原样
 
 ## 性能优化建议
 
@@ -553,7 +565,7 @@ COMMIT;
 ### 运行测试
 
 ```bash
-# 所有 ORM 测试
+# 所有 ORM 测试（SQLite）
 cargo test -p orm
 
 # 仅单元测试
@@ -565,6 +577,27 @@ cargo test -p orm --lib genesis
 # 特定模型测试
 cargo test -p orm -- block_model
 cargo test -p orm -- transaction_model
+
+# PostgreSQL 集成测试（需先启动 PostgreSQL 并创建数据库）
+DATABASE_URL="postgres://nrcs_user:password@localhost:5432/nrcs_db" \
+  cargo test -p orm --features postgres -- --ignored --test-threads=1
+```
+
+### PostgreSQL 测试环境配置
+
+```bash
+# 1. 创建 PostgreSQL 用户和数据库
+sudo -u postgres psql -c "CREATE USER nrcs_user WITH PASSWORD 'password';"
+sudo -u postgres psql -c "CREATE DATABASE nrcs_db OWNER nrcs_user;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE nrcs_db TO nrcs_user;"
+
+# 2. 执行迁移脚本
+PGPASSWORD=password psql -U nrcs_user -h localhost -d nrcs_db \
+  -f crates/orm/migrations/postgres/0.sql
+
+# 3. 运行 PostgreSQL 测试
+DATABASE_URL="postgres://nrcs_user:password@localhost:5432/nrcs_db" \
+  cargo test -p orm --features postgres -- --ignored --test-threads=1
 ```
 
 ### 测试覆盖率
@@ -578,7 +611,8 @@ cargo test -p orm -- transaction_model
 | transaction | 2 | 90% | ✅ |
 | connection | 3 | 95% | ✅ |
 | peer | 1 | 85% | ✅ |
-| **总计** | **18** | **95%+** | ✅ |
+| **SQLite 集成** | **18** | **95%+** | ✅ |
+| **PostgreSQL 集成** | **32** | **95%+** | ✅ |
 
 ## 模块结构
 
@@ -724,6 +758,33 @@ max_connections = 20
 ```
 
 ## 更新日志
+
+### v2.6.0 (2026-05-05)
+
+#### ✨ 新功能
+
+- **PostgreSQL 集成测试全量通过**
+  - 32 个 PostgreSQL 集成测试覆盖 8 个 Repository 测试文件
+  - account_repository_tests: 5 个测试
+  - block_repository_tests: 10 个测试
+  - transaction_repository_tests: 3 个测试
+  - asset_repository_tests: 3 个测试
+  - alias_repository_tests: 3 个测试
+  - poll_repository_tests: 3 个测试
+  - currency_repository_tests: 3 个测试
+  - order_repository_tests: 4 个测试
+
+- **Node PostgreSQL 分支启用**
+  - 取消注释 main.rs 中 PostgreSQL 分支
+  - config/local.toml 默认切换为 PostgreSQL 连接
+
+#### 🐛 修复
+
+- **PostgreSQL 标识符大小写**: 修复 pg.rs 中所有表名和列名的大小写引用（如 `block` → `"BLOCK"`、`timestamp` → `"TIMESTAMP"`）
+- **迁移脚本标识符**: 修复 migrations/postgres/0.sql 中 TIMESTAMP 列、索引定义、外键约束的标识符引用
+- **ASK_ORDER/BID_ORDER INSERT**: 补充缺失的 TRANSACTION_INDEX、TRANSACTION_HEIGHT、CREATION_HEIGHT 列
+- **测试文件表名**: 修复所有测试文件中 setup_pg() 函数的表名大小写（如 `"asset"` → `"ASSET"`）
+- **Clippy 警告**: 修复 3 处 needless_borrows_for_generic_args 警告
 
 ### v2.5.0 (2026-05-03)
 

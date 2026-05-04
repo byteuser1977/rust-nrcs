@@ -281,7 +281,7 @@ impl DiscoveryDaemon {
             let model = PeerModel {
                 address: addr_str,
                 last_updated: Some(now),
-                services: Some(peer.services),
+                services: Some(peer.services as i64),
             };
             if repo.upsert(&model).await.is_ok() {
                 saved += 1;

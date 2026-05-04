@@ -221,7 +221,6 @@ async fn main() -> Result<()> {
     
     match db_type {
         DatabaseType::PostgreSQL => {
-            /*
             use sqlx::postgres::PgPoolOptions;
 
             let pg_pool = PgPoolOptions::new()
@@ -309,7 +308,7 @@ async fn main() -> Result<()> {
             let currency_founder_repo: Arc<dyn CurrencyFounderRepository> = Arc::new(orm::PgCurrencyFounderRepository::new(pg_pool.clone()));
             let currency_supply_repo: Arc<dyn CurrencySupplyRepository> = Arc::new(orm::PgCurrencySupplyRepository::new(pg_pool.clone()));
             let exchange_repo: Arc<dyn ExchangeRepository> = Arc::new(orm::PgExchangeRepository::new(pg_pool.clone()));
-            let peer_repo: Arc<dyn PeerRepository> = Arc::new(orm::SqlitePeerRepository::new(pool.clone()));
+            let peer_repo: Arc<dyn PeerRepository> = Arc::new(orm::PgPeerRepository::new(pg_pool.clone()));
             let prunable_message_repo: Arc<dyn PrunableMessageRepository> = Arc::new(orm::PgPrunableMessageRepository::new(pg_pool.clone()));
             let purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository> = Arc::new(orm::PgPurchaseFeedbackRepository::new(pg_pool.clone()));
             let referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository> =
@@ -342,9 +341,6 @@ async fn main() -> Result<()> {
                 phasing_poll_hashed_secret_repo, phasing_poll_result_repo, phasing_poll_voter_repo, phasing_poll_linked_transaction_repo,
                 hub_repo, currency_founder_repo, currency_supply_repo, exchange_repo, peer_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
             ).await
-            */
-
-            return Err(anyhow::anyhow!("PostgreSQL is temporarily disabled. Please use SQLite."));
         }
         DatabaseType::SQLite => {
             use sqlx::sqlite::SqliteConnectOptions;
@@ -634,6 +630,7 @@ async fn start_node(
         currency_founder_repo,
         currency_supply_repo,
         exchange_repo,
+        Arc::clone(&public_key_repo),
         prunable_message_repo,
         purchase_feedback_repo,
         referenced_transaction_repo,
@@ -644,8 +641,6 @@ async fn start_node(
         shuffling_repo,
         // Account Lease (1个)
         account_lease_repo,
-        // Public Key
-        Arc::clone(&public_key_repo),
     ));
 
     // 创建区块奖励应用器（含guaranteed_balance更新）
@@ -805,7 +800,7 @@ async fn start_node(
                 let model = orm::models::misc::PeerModel {
                     address: peer.address.to_string(),
                     last_updated: Some(now),
-                    services: Some(peer.services),
+                    services: Some(peer.services as i64),
                 };
                 if peer_repo_for_persist.upsert(&model).await.is_ok() {
                     saved += 1;
