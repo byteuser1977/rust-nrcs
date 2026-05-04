@@ -102,9 +102,9 @@ impl BlockchainVerifier {
                 );
                 warn!(
                     "  sender_public_key={}, full_hash={}, signature={}",
-                    hex::encode(&tx.sender_public_key.0),
-                    hex::encode(&tx.full_hash.0),
-                    hex::encode(&tx.signature.0),
+                    hex::encode(tx.sender_public_key.0),
+                    hex::encode(tx.full_hash.0),
+                    hex::encode(tx.signature.0),
                 );
                 warn!(
                     "  attachment_bytes ({}B): {}",
