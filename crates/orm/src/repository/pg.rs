@@ -6504,7 +6504,7 @@ impl PgCurrencyFounderRepository {
 #[async_trait]
 impl Repository<CurrencyFounderModel> for PgCurrencyFounderRepository {
     async fn insert(&self, m: &CurrencyFounderModel) -> RepositoryResult<()> {
-        sqlx::query("INSERT INTO currency_founder (currency_id, account_id, units, height) VALUES ($1, $2, $3, $4)")
+        sqlx::query("INSERT INTO currency_founder (currency_id, account_id, amount, height) VALUES ($1, $2, $3, $4)")
             .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
@@ -6514,7 +6514,7 @@ impl Repository<CurrencyFounderModel> for PgCurrencyFounderRepository {
             .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn update(&self, m: &CurrencyFounderModel) -> RepositoryResult<()> {
-        sqlx::query("UPDATE currency_founder SET currency_id=$1, account_id=$2, units=$3, height=$4 WHERE db_id=$5")
+        sqlx::query("UPDATE currency_founder SET currency_id=$1, account_id=$2, amount=$3, height=$4 WHERE db_id=$5")
             .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height).bind(m.db_id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())

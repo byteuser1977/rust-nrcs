@@ -6448,7 +6448,7 @@ impl SqliteCurrencyFounderRepository {
 #[async_trait]
 impl Repository<CurrencyFounderModel> for SqliteCurrencyFounderRepository {
     async fn insert(&self, m: &CurrencyFounderModel) -> RepositoryResult<()> {
-        sqlx::query("INSERT INTO currency_founder (currency_id, account_id, units, height) VALUES (?, ?, ?, ?)")
+        sqlx::query("INSERT INTO currency_founder (currency_id, account_id, amount, height) VALUES (?, ?, ?, ?)")
             .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
@@ -6458,7 +6458,7 @@ impl Repository<CurrencyFounderModel> for SqliteCurrencyFounderRepository {
             .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn update(&self, m: &CurrencyFounderModel) -> RepositoryResult<()> {
-        sqlx::query("UPDATE currency_founder SET currency_id=?, account_id=?, units=?, height=? WHERE db_id=?")
+        sqlx::query("UPDATE currency_founder SET currency_id=?, account_id=?, amount=?, height=? WHERE db_id=?")
             .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height).bind(m.db_id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())

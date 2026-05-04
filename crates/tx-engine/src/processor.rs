@@ -1114,39 +1114,33 @@ impl DatabaseTransactionProcessor {
                 .unwrap_or("")
                 .to_string();
 
-            // ✅ 修复：优先从 "quantity" 字符串字段解析
-            // NRCS Java: attachment.getQuantityQNT() 返回 long
-            // 注意：JSON中可能是字符串或数字格式
-            let quantity = att_json.get("quantity")
+            // 优先从 NRCS 标准字段 "quantityQNT" 解析（对应 Java attachment.getQuantityQNT()）
+            // 备选 "quantity"，最后 fallback 到 singleton 或 tx.amount
+            let quantity = att_json.get("quantityQNT")
                 .and_then(|v| {
-                    // 尝试作为字符串解析
                     v.as_str().and_then(|s| s.parse::<i64>().ok())
-                    .or_else(|| {
-                        // 尝试作为数字解析
-                        v.as_i64()
-                    })
+                    .or_else(|| v.as_i64())
                 })
-                // ✅ 备选方案：检查 "quantityQNT" 字段（NRCS 标准字段名）
                 .or_else(|| {
-                    att_json.get("quantityQNT")
+                    att_json.get("quantity")
                         .and_then(|v| {
                             v.as_str().and_then(|s| s.parse::<i64>().ok())
                             .or_else(|| v.as_i64())
                         })
                 })
-                // 最后备选：对于 singleton 资产，默认为 1
-                .unwrap_or({
+                .or_else(|| {
                     let is_singleton = att_json.get("isSingleton")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
-
                     if is_singleton {
-                        1i64  // Singleton 资产数量为 1
+                        Some(1i64)
                     } else {
-                        // ⚠️ 如果仍然无法确定，记录警告并尝试从其他字段推断
-                        warn!("Asset issuance: unable to parse quantity for asset={}, using fallback", asset_id);
-                        tx.amount.max(1) as i64  // 至少为 1
+                        None
                     }
+                })
+                .unwrap_or_else(|| {
+                    debug!("Asset issuance: no quantityQNT in attachment for asset={}, using amount={}", asset_id, tx.amount);
+                    tx.amount.max(1) as i64
                 });
 
             let decimals = att_json.get("decimals")
@@ -1626,9 +1620,12 @@ impl DatabaseTransactionProcessor {
         let current_height = self.get_current_height();
         let current_timestamp = self.get_current_timestamp();
 
-        // 解析attachment字段
+        // 解析attachment字段（对应 Java: ColoredCoinsDividendPayment）
+        // amountNQTPerQNT: 每股分红金额（NQT），字段名 qnt 是 NRCS 标准命名
         let asset_id = self.parse_long_field(tx, "asset").unwrap_or(0);
-        let dividend_per_share = self.parse_long_field(tx, "amountNQT").unwrap_or(0);
+        let dividend_per_share = self.parse_long_field(tx, "amountNQTPerQNT")
+            .or_else(|| self.parse_long_field(tx, "amountNQTPerShare"))
+            .unwrap_or(0);
 
         if dividend_per_share <= 0 || asset_id <= 0 {
             warn!("Invalid dividend parameters in transaction {}", tx.id);
@@ -3059,7 +3056,7 @@ impl DatabaseTransactionProcessor {
                         }
                     }
                 } else {
-                    warn!("Missing or invalid pollId in transaction {}", tx.id);
+                    debug!("Missing or invalid pollId in transaction {}", tx.id);
                 }
             }
 
@@ -3394,11 +3391,17 @@ impl DatabaseTransactionProcessor {
                 //     1. INSERT TAGGED_DATA table
                 //     2. INSERT multiple TAG records (one per tag)
 
-                let name = self.parse_string_field(tx, "name").unwrap_or_default();
+                let mut name = self.parse_string_field(tx, "name").unwrap_or_default();
                 let description = self.parse_string_field(tx, "description");
                 let data = self.parse_string_field(tx, "data");
 
-                if !name.is_empty() {
+                // 对应 Java: TaggedData.add() 允许空名称（使用 transaction id 作为回退标识）
+                if name.is_empty() {
+                    name = format!("TaggedData_{}", tx.id);
+                    debug!("Empty name in TAGGED_DATA_UPLOAD transaction {}, using default", tx.id);
+                }
+
+                {
                     let tagged_data_model = TaggedDataModel {
                         db_id: 0,
                         id: tx.id as i64,
@@ -3478,18 +3481,19 @@ impl DatabaseTransactionProcessor {
                             return Err(e.into());
                         }
                     }
-                } else {
-                    warn!("Empty name in TAGGED_DATA_UPLOAD transaction {}", tx.id);
                 }
             }
 
             1 => { // TAGGED_DATA_EXTEND
                 // Java: TaggedData.extend(transaction, attachment)
                 // Reference: TaggedDataExtendAttachment.java
-                //   attachment fields: { "taggedDataId": long, "data": String }
+                //   attachment fields: { "taggedData": long, "data": String }
                 //   DB operation: INSERT TAGGED_DATA_EXTEND table
+                //   注意: Java ParameterParser.getTaggedDataId 读取 "taggedData"
 
-                let tagged_data_id = self.parse_long_field(tx, "taggedDataId").unwrap_or(0);
+                let tagged_data_id = self.parse_long_field(tx, "taggedData")
+                    .or_else(|| self.parse_long_field(tx, "taggedDataId"))
+                    .unwrap_or(0);
                 let _extend_data = self.parse_string_field(tx, "data");
 
                 if tagged_data_id > 0 {
@@ -3529,7 +3533,9 @@ impl DatabaseTransactionProcessor {
                 //   attachment fields: { "taggedDataId": long }
                 //   DB operation: INSERT TAGGED_DATA_TIMESTAMP table
 
-                let tagged_data_id = self.parse_long_field(tx, "taggedDataId").unwrap_or(0);
+                let tagged_data_id = self.parse_long_field(tx, "taggedData")
+                    .or_else(|| self.parse_long_field(tx, "taggedDataId"))
+                    .unwrap_or(0);
 
                 if tagged_data_id > 0 {
                     match self.tagged_data_repo.find_by_id(tagged_data_id).await {
@@ -3574,8 +3580,8 @@ impl DatabaseTransactionProcessor {
     async fn apply_light_contract_attachment(&self, tx: &Transaction) -> ProcessorResult<()> {
         use orm::models::*;
 
-        let _sender_id = tx.sender_id as i64;
-        let recipient_id = tx.recipient_id.map(|id| id as i64).unwrap_or(0);
+        let sender_id = tx.sender_id as i64;
+        let _recipient_id = tx.recipient_id.map(|id| id as i64).unwrap_or(0);
         let current_height = self.get_current_height();
         let _current_timestamp = self.get_current_timestamp();
 
@@ -3647,11 +3653,12 @@ impl DatabaseTransactionProcessor {
                 //   attachment fields: { "name": String }
                 //   DB operation: DELETE from CONTRACT_REFERENCE table
 
+                // 对应 Java: ContractReferenceDelete - 操作 sender 而非 recipient
                 let ref_name = self.parse_string_field(tx, "name").unwrap_or_default();
 
-                if !ref_name.is_empty() && recipient_id != 0 {
+                if !ref_name.is_empty() {
                     debug!("Deleting contract reference '{}' from account {} (tx={})",
-                        ref_name, recipient_id, tx.id);
+                        ref_name, sender_id, tx.id);
                     debug!("ContractReference deletion not yet fully implemented (stub)");
                     // TODO: 调用contract_ref_repo.delete_by_account_and_name(recipient_id, &ref_name)
                 } else {
@@ -4182,7 +4189,19 @@ impl DatabaseTransactionProcessor {
                 Some(s)
             }
             Some(other) => {
-                warn!("Field '{}' in transaction {} has unexpected type: {:?}",
+                // 处理 Array 类型 (如 poll options) - 用逗号连接各元素
+                if let Some(arr) = other.as_array() {
+                    let parts: Vec<&str> = arr.iter()
+                        .filter_map(|v| v.as_str())
+                        .collect();
+                    let joined = parts.join(",");
+                    if !joined.is_empty() {
+                        debug!("Parsed array field '{}' as comma-separated string from transaction {}",
+                            field_name, tx.id);
+                        return Some(joined);
+                    }
+                }
+                debug!("Field '{}' in transaction {} has non-string type: {:?}",
                     field_name, tx.id, other);
                 None
             }
