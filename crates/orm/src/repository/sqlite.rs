@@ -6487,6 +6487,59 @@ impl CurrencyFounderRepository for SqliteCurrencyFounderRepository {
     }
 }
 
+// Exchange Repository
+pub struct SqliteExchangeRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteExchangeRepository {
+    pub fn new(pool: SqlitePool) -> Self { Self { pool } }
+}
+
+#[async_trait]
+impl Repository<ExchangeModel> for SqliteExchangeRepository {
+    async fn insert(&self, m: &ExchangeModel) -> RepositoryResult<()> {
+        sqlx::query("INSERT INTO exchange (transaction_id, currency_id, block_id, offer_id, seller_id, buyer_id, units, rate, timestamp, height) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            .bind(m.transaction_id).bind(m.currency_id).bind(m.block_id).bind(m.offer_id)
+            .bind(m.seller_id).bind(m.buyer_id).bind(m.units).bind(m.rate)
+            .bind(m.timestamp).bind(m.height)
+            .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<ExchangeModel>> {
+        sqlx::query_as::<_, ExchangeModel>("SELECT * FROM exchange WHERE db_id = ?").bind(id)
+            .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn update(&self, _m: &ExchangeModel) -> RepositoryResult<()> {
+        Ok(()) // EXCHANGE table has no update - records are immutable
+    }
+    async fn delete(&self, id: i64) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM exchange WHERE db_id=?").bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+    async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<ExchangeModel>> {
+        let (lim, off) = (limit.unwrap_or(100), offset.unwrap_or(0));
+        sqlx::query_as::<_, ExchangeModel>("SELECT * FROM exchange ORDER BY height DESC LIMIT ? OFFSET ?")
+            .bind(lim).bind(off).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn count(&self) -> RepositoryResult<i64> {
+        let (c,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM exchange").fetch_one(&self.pool).await.map_err(RepositoryError::DbError)?;
+        Ok(c)
+    }
+}
+
+#[async_trait]
+impl ExchangeRepository for SqliteExchangeRepository {
+    async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<ExchangeModel>> {
+        sqlx::query_as::<_, ExchangeModel>("SELECT * FROM exchange WHERE currency_id = ? ORDER BY height DESC")
+            .bind(currency_id).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+    async fn find_by_offer(&self, transaction_id: i64, offer_id: i64) -> RepositoryResult<Option<ExchangeModel>> {
+        sqlx::query_as::<_, ExchangeModel>("SELECT * FROM exchange WHERE transaction_id = ? AND offer_id = ?")
+            .bind(transaction_id).bind(offer_id).fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
+    }
+}
+
 // Currency Supply Repository
 pub struct SqliteCurrencySupplyRepository {
     pool: SqlitePool,

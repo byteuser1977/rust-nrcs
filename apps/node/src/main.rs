@@ -63,7 +63,7 @@ use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransfer
          PhasingPollHashedSecretRepository, PhasingPollResultRepository,
          PhasingPollVoterRepository, PhasingPollLinkedTransactionRepository,
          // P2: Auxiliary tables
-         HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
+         HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, ExchangeRepository, PeerRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
          ReferencedTransactionRepository};
 use orm::repository::sqlite::SqliteAccountGuaranteedBalanceRepository;
 
@@ -308,6 +308,8 @@ async fn main() -> Result<()> {
             let hub_repo: Arc<dyn HubRepository> = Arc::new(orm::PgHubRepository::new(pg_pool.clone()));
             let currency_founder_repo: Arc<dyn CurrencyFounderRepository> = Arc::new(orm::PgCurrencyFounderRepository::new(pg_pool.clone()));
             let currency_supply_repo: Arc<dyn CurrencySupplyRepository> = Arc::new(orm::PgCurrencySupplyRepository::new(pg_pool.clone()));
+            let exchange_repo: Arc<dyn ExchangeRepository> = Arc::new(orm::PgExchangeRepository::new(pg_pool.clone()));
+            let peer_repo: Arc<dyn PeerRepository> = Arc::new(orm::SqlitePeerRepository::new(pool.clone()));
             let prunable_message_repo: Arc<dyn PrunableMessageRepository> = Arc::new(orm::PgPrunableMessageRepository::new(pg_pool.clone()));
             let purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository> = Arc::new(orm::PgPurchaseFeedbackRepository::new(pg_pool.clone()));
             let referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository> =
@@ -338,7 +340,7 @@ async fn main() -> Result<()> {
                 account_lease_repo,
                 coin_order_fxt_repo, coin_trade_fxt_repo,
                 phasing_poll_hashed_secret_repo, phasing_poll_result_repo, phasing_poll_voter_repo, phasing_poll_linked_transaction_repo,
-                hub_repo, currency_founder_repo, currency_supply_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
+                hub_repo, currency_founder_repo, currency_supply_repo, exchange_repo, peer_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
             ).await
             */
 
@@ -458,6 +460,8 @@ async fn main() -> Result<()> {
             let hub_repo: Arc<dyn HubRepository> = Arc::new(orm::SqliteHubRepository::new(pool.clone()));
             let currency_founder_repo: Arc<dyn CurrencyFounderRepository> = Arc::new(orm::SqliteCurrencyFounderRepository::new(pool.clone()));
             let currency_supply_repo: Arc<dyn CurrencySupplyRepository> = Arc::new(orm::SqliteCurrencySupplyRepository::new(pool.clone()));
+            let exchange_repo: Arc<dyn ExchangeRepository> = Arc::new(orm::SqliteExchangeRepository::new(pool.clone()));
+            let peer_repo: Arc<dyn PeerRepository> = Arc::new(orm::SqlitePeerRepository::new(pool.clone()));
             let prunable_message_repo: Arc<dyn PrunableMessageRepository> = Arc::new(orm::SqlitePrunableMessageRepository::new(pool.clone()));
             let purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository> = Arc::new(orm::SqlitePurchaseFeedbackRepository::new(pool.clone()));
             let referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository> =
@@ -490,7 +494,7 @@ async fn main() -> Result<()> {
                 // ✅ 新增：13个Repository
                 coin_order_fxt_repo, coin_trade_fxt_repo,
                 phasing_poll_hashed_secret_repo, phasing_poll_result_repo, phasing_poll_voter_repo, phasing_poll_linked_transaction_repo,
-                hub_repo, currency_founder_repo, currency_supply_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
+                hub_repo, currency_founder_repo, currency_supply_repo, exchange_repo, peer_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
             ).await
         }
     }
@@ -564,6 +568,8 @@ async fn start_node(
     hub_repo: Arc<dyn HubRepository>,
     currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
     currency_supply_repo: Arc<dyn CurrencySupplyRepository>,
+    exchange_repo: Arc<dyn ExchangeRepository>,
+    peer_repo: Arc<dyn PeerRepository>,
     prunable_message_repo: Arc<dyn PrunableMessageRepository>,
     purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
     referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository>,
@@ -623,10 +629,11 @@ async fn start_node(
         // CoinExchange订单和交易（P0修复）(2个)
         coin_order_fxt_repo,
         coin_trade_fxt_repo,
-        // P2辅助表（Hub/CurrencyFounder/CurrencySupply/PrunableMessage/PurchaseFeedback/ReferencedTransaction）(6个)
+        // P2辅助表（Hub/CurrencyFounder/CurrencySupply/Exchange/PrunableMessage/PurchaseFeedback/ReferencedTransaction）(7个)
         hub_repo,
         currency_founder_repo,
         currency_supply_repo,
+        exchange_repo,
         prunable_message_repo,
         purchase_feedback_repo,
         referenced_transaction_repo,
@@ -776,6 +783,37 @@ async fn start_node(
         forging_for_loop.run().await;
     });
     info!("Forging service started");
+
+    // 启动 peers 定期持久化任务
+    let peers_for_persist = Arc::clone(&peers);
+    let peer_repo_for_persist = peer_repo.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(300)).await; // 每5分钟保存一次
+            let active = peers_for_persist.get_active_peers().await;
+            if active.is_empty() {
+                continue;
+            }
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i32;
+            let mut saved = 0usize;
+            for peer in &active {
+                let model = orm::models::misc::PeerModel {
+                    address: peer.address.to_string(),
+                    last_updated: Some(now),
+                    services: Some(peer.services),
+                };
+                if peer_repo_for_persist.upsert(&model).await.is_ok() {
+                    saved += 1;
+                }
+            }
+            if saved > 0 {
+                debug!("Persisted {} active peers to database", saved);
+            }
+        }
+    });
 
     let api_state = ApiState {
         account_manager,

@@ -58,7 +58,7 @@ use orm::{
     PhasingPollHashedSecretRepository, PhasingPollResultRepository,
     PhasingPollVoterRepository, PhasingPollLinkedTransactionRepository,
     // P2: Auxiliary tables
-    HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
+    HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, ExchangeRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
     // P2: Referenced Transaction
     ReferencedTransactionRepository,
 };
@@ -381,6 +381,7 @@ pub struct DatabaseTransactionProcessor {
     hub_repo: Arc<dyn HubRepository>,
     currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
     currency_supply_repo: Arc<dyn CurrencySupplyRepository>,
+    exchange_repo: Arc<dyn ExchangeRepository>,
     prunable_message_repo: Arc<dyn PrunableMessageRepository>,
     purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
 
@@ -462,6 +463,7 @@ impl DatabaseTransactionProcessor {
         hub_repo: Arc<dyn HubRepository>,
         currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
         currency_supply_repo: Arc<dyn CurrencySupplyRepository>,
+        exchange_repo: Arc<dyn ExchangeRepository>,
         prunable_message_repo: Arc<dyn PrunableMessageRepository>,
         purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
         // 新增：Referenced Transaction（P2修复）
@@ -529,6 +531,7 @@ impl DatabaseTransactionProcessor {
             hub_repo,
             currency_founder_repo,
             currency_supply_repo,
+            exchange_repo,
             prunable_message_repo,
             purchase_feedback_repo,
             // 新增：Referenced Transaction（P2修复）

@@ -10,17 +10,20 @@
 use crate::config::P2PConfig;
 use crate::peer::{Peer, PeerState, Peers};
 use crate::protocol::{PeerRequest, RequestType};
+use orm::PeerRepository;
+use orm::models::misc::PeerModel;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 /// Discovery Daemon
-/// 
+///
 /// 对应 NRCS Java: getMorePeersThread
 pub struct DiscoveryDaemon {
     peers: Arc<Peers>,
     config: P2PConfig,
+    peer_repo: Option<Arc<dyn PeerRepository>>,
     running: Arc<RwLock<bool>>,
 }
 
@@ -30,8 +33,14 @@ impl DiscoveryDaemon {
         Self {
             peers,
             config,
+            peer_repo: None,
             running: Arc::new(RwLock::new(false)),
         }
+    }
+
+    /// Set peer repository for persistence
+    pub fn set_peer_repo(&mut self, repo: Arc<dyn PeerRepository>) {
+        self.peer_repo = Some(repo);
     }
 
     /// Start the discovery daemon
@@ -45,10 +54,11 @@ impl DiscoveryDaemon {
         drop(running);
 
         info!("Discovery daemon started (interval: {}s)", self.config.discovery_daemon_interval_secs);
-        
+
         let peers = Arc::clone(&self.peers);
         let config = self.config.clone();
         let running = Arc::clone(&self.running);
+        let peer_repo = self.peer_repo.clone();
 
         tokio::spawn(async move {
             loop {
@@ -57,9 +67,16 @@ impl DiscoveryDaemon {
                 }
 
                 tokio::time::sleep(Duration::from_secs(config.discovery_daemon_interval_secs)).await;
-                
+
                 if let Err(e) = Self::discovery_loop(&peers, &config).await {
                     warn!("Discovery loop error: {}", e);
+                }
+
+                // Persist peers to database
+                if let Some(ref repo) = peer_repo {
+                    if let Err(e) = Self::persist_peers(&peers, repo).await {
+                        warn!("Peer persistence error: {}", e);
+                    }
                 }
             }
             info!("Discovery daemon stopped");
@@ -245,38 +262,35 @@ impl DiscoveryDaemon {
         Ok(())
     }
 
-    /// Update saved peers to database（完整实现）
-    ///
-    /// 对应 NRCS Java: updateSavedPeers()
-    #[allow(dead_code)]
-    async fn update_saved_peers(peers: &Arc<Peers>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // 获取所有已知节点
-        let all_peers = peers.get_known_peers().await;
+    /// Persist peers to database
+    async fn persist_peers(peers: &Arc<Peers>, repo: &Arc<dyn PeerRepository>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let all_peers = peers.get_active_peers().await;
 
         if all_peers.is_empty() {
-            debug!("[DiscoveryDaemon] No peers to persist");
             return Ok(());
         }
 
-        // 使用持久化管理器保存节点
-        // 注意：实际实现需要传入已初始化的 PeerPersistence 实例
-        // 这里演示调用方式，实际集成时需要从 P2PManager 传入
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i32;
 
-        let mut saved_count = 0usize;
+        let mut saved = 0usize;
         for peer in &all_peers {
-            // 只保存有公告地址的节点（与 Java 一致）
-            if peer.announced_address.is_some() {
-                // PeerPersistence::save_peer(peer).await?;
-                saved_count += 1;
+            let addr_str = peer.address.to_string();
+            let model = PeerModel {
+                address: addr_str,
+                last_updated: Some(now),
+                services: Some(peer.services),
+            };
+            if repo.upsert(&model).await.is_ok() {
+                saved += 1;
             }
         }
 
-        if saved_count > 0 {
-            debug!("[DiscoveryDaemon] Saved {} peers to database", saved_count);
+        if saved > 0 {
+            debug!("[DiscoveryDaemon] Persisted {} peers to database", saved);
         }
-
-        debug!("[DiscoveryDaemon] Peer persistence completed ({} total, {} saved)",
-               all_peers.len(), saved_count);
 
         Ok(())
     }

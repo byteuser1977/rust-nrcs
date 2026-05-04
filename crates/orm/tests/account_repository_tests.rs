@@ -24,12 +24,35 @@ async fn setup_pg() -> (PgPool, PgAccountRepository) {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://nrcs_user:password@localhost:5432/nrcs_db".to_string());
     let pool = PgPool::connect(&database_url).await.expect("pg pool failed");
-    let tables = ["account", "public_key"];
-    for table in &tables {
-        let _ = sqlx::query(&format!("TRUNCATE TABLE {} CASCADE", table)).execute(&pool).await;
-    }
+    cleanup_all_pg(&pool).await;
     let repo = PgAccountRepository::new(pool.clone());
     (pool, repo)
+}
+
+async fn cleanup_all_pg(pool: &PgPool) {
+    let tables = [
+        "account_guaranteed_balance", "account_ledger", "account_asset",
+        "account_currency", "account_info", "account_lease",
+        "account_property", "account_control_phasing",
+        "alias", "alias_offer", "asset_transfer", "asset_property",
+        "asset_history", "asset_delete", "asset_dividend",
+        "ask_order", "bid_order", "trade",
+        "purchase", "purchase_feedback", "goods",
+        "currency_transfer", "currency_founder", "currency_mint",
+        "shuffling_participant", "shuffling_data",
+        "vote", "poll_result", "poll",
+        "phasing_vote", "phasing_poll_result", "phasing_poll_voter",
+        "phasing_poll_linked_transaction", "phasing_poll_hashed_secret", "phasing_poll",
+        "tagged_data", "tagged_data_tag", "tagged_data_extend", "tagged_timestamp",
+        "prunable_message", "referenced_transaction",
+        "exchange_request", "hub", "contract_reference",
+        "coin_order_fxt", "coin_trade_fxt",
+        "public_key", "transaction", "block",
+        "account",
+    ];
+    for table in &tables {
+        let _ = sqlx::query(&format!("TRUNCATE TABLE {} CASCADE", table)).execute(pool).await;
+    }
 }
 
 fn make_account(id: i64, balance: i64, height: i32) -> AccountModel {
