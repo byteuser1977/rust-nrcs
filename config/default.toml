@@ -1,4 +1,5 @@
 log_level = "info"
+# log_file = "logs"  # 日志文件目录，取消注释后启用文件输出（日志写入 logs/nrcs.log）
 
 [p2p]
 listen_addr = "0.0.0.0:17974"

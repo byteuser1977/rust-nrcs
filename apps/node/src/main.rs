@@ -88,6 +88,7 @@ impl DatabaseType {
 
 /// 节点配置结构（与 TOML 映射）
 fn default_log_level() -> String { "info".to_string() }
+fn default_log_file() -> Option<String> { None }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 struct NodeConfig {
@@ -97,6 +98,8 @@ struct NodeConfig {
     database: DatabaseConfig,
     #[serde(default = "default_log_level")]
     log_level: String,
+    #[serde(default = "default_log_file")]
+    log_file: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -181,10 +184,28 @@ async fn main() -> Result<()> {
     } else {
         EnvFilter::new(&cfg.log_level).add_directive("sqlx=warn".parse()?)
     };
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+
+    if let Some(ref log_path) = cfg.log_file {
+        use std::fs;
+        let log_dir = std::path::Path::new(log_path).parent().unwrap_or(std::path::Path::new("."));
+        fs::create_dir_all(log_dir)?;
+
+        let file_appender = tracing_appender::rolling::never(log_path, "nrcs.log");
+        let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+        std::mem::forget(_guard);
+
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(tracing_subscriber::fmt::layer().with_writer(non_blocking).with_ansi(false))
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+        info!("Log file: {}", log_path);
+    } else {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+    }
 
     info!("Starting NRCS Node...");
     info!(

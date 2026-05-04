@@ -634,7 +634,11 @@ impl BlockVerifier for BlockchainVerifier {
         // 如果 accept 失败，需要清理已插入的区块数据
         match self.accept_block(&block).await {
             Ok(()) => {
-                info!("Block accepted: height={}, id={}, txs={}", block_height, block_id, block.transactions.len());
+                if block_height.is_multiple_of(5000) {
+                    info!("Block accepted: height={}, id={}, txs={}", block_height, block_id, block.transactions.len());
+                } else {
+                    debug!("Block accepted: height={}, id={}, txs={}", block_height, block_id, block.transactions.len());
+                }
                 Ok(())
             }
             Err(e) => {
