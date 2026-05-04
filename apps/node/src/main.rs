@@ -35,6 +35,7 @@ use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransfer
          TaggedDataExtendRepository, TaggedTimestampRepository,
          PhasingPollRepository, PhasingVoteRepository, AccountControlPhasingRepository,
          AccountInfoRepository,
+         DbPool,
          // 新增导入
          AliasRepository, AliasOfferRepository,
          PollRepository, VoteRepository,
@@ -199,6 +200,126 @@ async fn main() -> Result<()> {
     
     match db_type {
         DatabaseType::PostgreSQL => {
+            /*
+            use sqlx::postgres::PgPoolOptions;
+
+            let pg_pool = PgPoolOptions::new()
+                .max_connections(10)
+                .connect(&database_url)
+                .await
+                .context("Failed to connect to PostgreSQL database")?;
+
+            info!("PostgreSQL database connected, running migrations...");
+
+            let migration_sql = include_str!("../../../migrations/postgres/0.sql");
+            for statement in migration_sql.split(';') {
+                let statement = statement.trim();
+                let is_sql_comment = statement.len() >= 2
+                    && statement.as_bytes()[0] == b'/'
+                    && statement.as_bytes()[1] == b'*';
+                if !statement.is_empty() && !is_sql_comment {
+                    if let Err(e) = sqlx::query(statement).execute(&pg_pool).await {
+                        if !e.to_string().contains("already exists") {
+                            warn!("Migration warning: {}", e);
+                        }
+                    }
+                }
+            }
+            info!("PostgreSQL migrations completed");
+
+            let block_repo: Arc<dyn BlockRepository> = Arc::new(orm::PgBlockRepository::new(pg_pool.clone()));
+            let tx_repo: Arc<dyn TransactionRepository> = Arc::new(orm::PgTransactionRepository::new(pg_pool.clone()));
+            let account_repo: Arc<dyn AccountRepository> = Arc::new(orm::PgAccountRepository::new(pg_pool.clone()));
+            let asset_repo: Arc<dyn AssetRepository> = Arc::new(orm::PgAssetRepository::new(pg_pool.clone()));
+            let account_asset_repo: Arc<dyn AccountAssetRepository> = Arc::new(orm::PgAccountAssetRepository::new(pg_pool.clone()));
+            let asset_transfer_repo: Arc<dyn AssetTransferRepository> = Arc::new(orm::PgAssetTransferRepository::new(pg_pool.clone()));
+            let public_key_repo: Arc<dyn PublicKeyRepository> = Arc::new(orm::PgPublicKeyRepository::new(pg_pool.clone()));
+            let ledger_repo: Arc<dyn AccountLedgerRepository> = Arc::new(orm::PgAccountLedgerRepository::new(pg_pool.clone()));
+            let guaranteed_balance_repo: Arc<dyn AccountGuaranteedBalanceRepository> = Arc::new(
+                orm::PgAccountGuaranteedBalanceRepository::new(pg_pool.clone())
+            );
+
+            let alias_repo: Arc<dyn AliasRepository> = Arc::new(orm::PgAliasRepository::new(pg_pool.clone()));
+            let alias_offer_repo: Arc<dyn AliasOfferRepository> = Arc::new(orm::PgAliasOfferRepository::new(pg_pool.clone()));
+            let poll_repo: Arc<dyn PollRepository> = Arc::new(orm::PgPollRepository::new(pg_pool.clone()));
+            let vote_repo: Arc<dyn VoteRepository> = Arc::new(orm::PgVoteRepository::new(pg_pool.clone()));
+            let account_property_repo: Arc<dyn AccountPropertyRepository> = Arc::new(orm::PgAccountPropertyRepository::new(pg_pool.clone()));
+            let account_info_repo: Arc<dyn AccountInfoRepository> = Arc::new(orm::PgAccountInfoRepository::new(pg_pool.clone()));
+            let phasing_poll_repo: Arc<dyn PhasingPollRepository> = Arc::new(orm::PgPhasingPollRepository::new(pg_pool.clone()));
+            let phasing_vote_repo: Arc<dyn PhasingVoteRepository> = Arc::new(orm::PgPhasingVoteRepository::new(pg_pool.clone()));
+            let account_control_phasing_repo: Arc<dyn AccountControlPhasingRepository> = Arc::new(orm::PgAccountControlPhasingRepository::new(pg_pool.clone()));
+            let tagged_data_repo: Arc<dyn TaggedDataRepository> = Arc::new(orm::PgTaggedDataRepository::new(pg_pool.clone()));
+            let tagged_data_tag_repo: Arc<dyn TaggedDataTagRepository> = Arc::new(orm::PgTaggedDataTagRepository::new(pg_pool.clone()));
+            let tagged_data_extend_repo: Arc<dyn TaggedDataExtendRepository> = Arc::new(orm::PgTaggedDataExtendRepository::new(pg_pool.clone()));
+            let tagged_timestamp_repo: Arc<dyn TaggedTimestampRepository> = Arc::new(orm::PgTaggedTimestampRepository::new(pg_pool.clone()));
+            let contract_ref_repo: Arc<dyn ContractReferenceRepository> = Arc::new(orm::PgContractReferenceRepository::new(pg_pool.clone()));
+            let ask_order_repo: Arc<dyn AskOrderRepository> = Arc::new(orm::PgAskOrderRepository::new(pg_pool.clone()));
+            let bid_order_repo: Arc<dyn BidOrderRepository> = Arc::new(orm::PgBidOrderRepository::new(pg_pool.clone()));
+            let trade_repo: Arc<dyn TradeRepository> = Arc::new(orm::PgTradeRepository::new(pg_pool.clone()));
+            let poll_result_repo: Arc<dyn PollResultRepository> = Arc::new(orm::PgPollResultRepository::new(pg_pool.clone()));
+            let shuffling_data_repo: Arc<dyn ShufflingDataRepository> = Arc::new(orm::PgShufflingDataRepository::new(pg_pool.clone()));
+            let shuffling_participant_repo: Arc<dyn ShufflingParticipantRepository> = Arc::new(orm::PgShufflingParticipantRepository::new(pg_pool.clone()));
+            let currency_repo: Arc<dyn CurrencyRepository> = Arc::new(orm::PgCurrencyRepository::new(pg_pool.clone()));
+            let account_currency_repo: Arc<dyn AccountCurrencyRepository> = Arc::new(orm::PgAccountCurrencyRepository::new(pg_pool.clone()));
+            let currency_transfer_repo: Arc<dyn CurrencyTransferRepository> = Arc::new(orm::PgCurrencyTransferRepository::new(pg_pool.clone()));
+            let asset_property_repo: Arc<dyn AssetPropertyRepository> = Arc::new(orm::PgAssetPropertyRepository::new(pg_pool.clone()));
+            let dividend_repo: Arc<dyn AssetDividendRepository> = Arc::new(orm::PgAssetDividendRepository::new(pg_pool.clone()));
+            let asset_delete_repo: Arc<dyn AssetDeleteRepository> = Arc::new(orm::PgAssetDeleteRepository::new(pg_pool.clone()));
+            let asset_history_repo: Arc<dyn AssetHistoryRepository> = Arc::new(orm::PgAssetHistoryRepository::new(pg_pool.clone()));
+            let exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>> =
+                Arc::new(orm::PgExchangeRequestRepository::new(pg_pool.clone()));
+            let currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>> =
+                Arc::new(orm::PgCurrencyMintRepository::new(pg_pool.clone()));
+            let goods_repo: Arc<dyn GoodsRepository> = Arc::new(orm::PgGoodsRepository::new(pg_pool.clone()));
+            let purchase_repo: Arc<dyn PurchaseRepository> = Arc::new(orm::PgPurchaseRepository::new(pg_pool.clone()));
+            let shuffling_repo: Arc<dyn ShufflingRepository> = Arc::new(orm::PgShufflingRepository::new(pg_pool.clone()));
+            let account_lease_repo: Arc<dyn AccountLeaseRepository> = Arc::new(orm::PgAccountLeaseRepository::new(pg_pool.clone()));
+            let coin_order_fxt_repo: Arc<dyn CoinOrderFxtRepository> = Arc::new(orm::PgCoinOrderFxtRepository::new(pg_pool.clone()));
+            let coin_trade_fxt_repo: Arc<dyn CoinTradeFxtRepository> = Arc::new(orm::PgCoinTradeFxtRepository::new(pg_pool.clone()));
+            let phasing_poll_hashed_secret_repo: Arc<dyn PhasingPollHashedSecretRepository> =
+                Arc::new(orm::PgPhasingPollHashedSecretRepository::new(pg_pool.clone()));
+            let phasing_poll_result_repo: Arc<dyn PhasingPollResultRepository> =
+                Arc::new(orm::PgPhasingPollResultRepository::new(pg_pool.clone()));
+            let phasing_poll_voter_repo: Arc<dyn PhasingPollVoterRepository> =
+                Arc::new(orm::PgPhasingPollVoterRepository::new(pg_pool.clone()));
+            let phasing_poll_linked_transaction_repo: Arc<dyn PhasingPollLinkedTransactionRepository> =
+                Arc::new(orm::PgPhasingPollLinkedTransactionRepository::new(pg_pool.clone()));
+            let hub_repo: Arc<dyn HubRepository> = Arc::new(orm::PgHubRepository::new(pg_pool.clone()));
+            let currency_founder_repo: Arc<dyn CurrencyFounderRepository> = Arc::new(orm::PgCurrencyFounderRepository::new(pg_pool.clone()));
+            let prunable_message_repo: Arc<dyn PrunableMessageRepository> = Arc::new(orm::PgPrunableMessageRepository::new(pg_pool.clone()));
+            let purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository> = Arc::new(orm::PgPurchaseFeedbackRepository::new(pg_pool.clone()));
+            let referenced_transaction_repo: Arc<dyn ReferencedTransactionRepository> =
+                Arc::new(orm::PgReferencedTransactionRepository::new(pg_pool.clone()));
+
+            orm::genesis::ensure_genesis(
+                &*block_repo,
+                &*account_repo,
+                &*tx_repo,
+                &*ledger_repo,
+                &*guaranteed_balance_repo,
+            ).await.context("Failed to create genesis block")?;
+            info!("Genesis block ensured");
+
+            let db_pool: DbPool = orm::connection::create_pool(
+                &orm::connection::DatabaseConfig::from_url(&database_url)
+            ).await.context("Failed to create DbPool for verifier")?;
+
+            start_node(cfg, db_pool, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
+                alias_repo, alias_offer_repo, poll_repo, vote_repo, account_property_repo, account_info_repo, phasing_poll_repo, phasing_vote_repo, account_control_phasing_repo, tagged_data_repo, tagged_data_tag_repo, tagged_data_extend_repo, tagged_timestamp_repo, contract_ref_repo, ask_order_repo, bid_order_repo, trade_repo, poll_result_repo,
+                shuffling_data_repo, shuffling_participant_repo,
+                currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo,
+                dividend_repo,
+                asset_delete_repo, asset_history_repo,
+                exchange_request_repo, currency_mint_repo,
+                goods_repo, purchase_repo,
+                shuffling_repo,
+                account_lease_repo,
+                coin_order_fxt_repo, coin_trade_fxt_repo,
+                phasing_poll_hashed_secret_repo, phasing_poll_result_repo, phasing_poll_voter_repo, phasing_poll_linked_transaction_repo,
+                hub_repo, currency_founder_repo, prunable_message_repo, purchase_feedback_repo, referenced_transaction_repo
+            ).await
+            */
+            
             return Err(anyhow::anyhow!("PostgreSQL is temporarily disabled. Please use SQLite."));
         }
         DatabaseType::SQLite => {
@@ -329,7 +450,11 @@ async fn main() -> Result<()> {
             ).await.context("Failed to create genesis block")?;
             info!("Genesis block ensured");
 
-            start_node(cfg, pool, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
+            let db_pool: DbPool = orm::connection::create_pool(
+                &orm::connection::DatabaseConfig::from_url(&database_url)
+            ).await.context("Failed to create DbPool for verifier")?;
+
+            start_node(cfg, db_pool, block_repo, tx_repo, asset_repo, account_asset_repo, asset_transfer_repo, account_repo, public_key_repo, ledger_repo, guaranteed_balance_repo,
                 alias_repo, alias_offer_repo, poll_repo, vote_repo, account_property_repo, account_info_repo, phasing_poll_repo, phasing_vote_repo, account_control_phasing_repo, tagged_data_repo, tagged_data_tag_repo, tagged_data_extend_repo, tagged_timestamp_repo, contract_ref_repo, ask_order_repo, bid_order_repo, trade_repo, poll_result_repo,
                 shuffling_data_repo, shuffling_participant_repo,
                 currency_repo, account_currency_repo, currency_transfer_repo, asset_property_repo,
@@ -351,7 +476,7 @@ async fn main() -> Result<()> {
 #[allow(clippy::too_many_arguments)]
 async fn start_node(
     cfg: NodeConfig,
-    pool: SqlitePool,
+    pool: DbPool,
     block_repo: Arc<dyn BlockRepository>,
     tx_repo: Arc<dyn TransactionRepository>,
     asset_repo: Arc<dyn AssetRepository>,

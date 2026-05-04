@@ -530,9 +530,9 @@ impl Block {
         
         buf.extend_from_slice(&(self.transactions.len() as i32).to_le_bytes());
         
-        if self.version < 3 {
-            buf.extend_from_slice(&((self.total_amount / 100_000_000) as i32).to_le_bytes());
-            buf.extend_from_slice(&((self.total_fee / 100_000_000) as i32).to_le_bytes());
+        if self.version < BLOCK_VERSION {
+            buf.extend_from_slice(&((self.total_amount / ONE_NRCS) as i32).to_le_bytes());
+            buf.extend_from_slice(&((self.total_fee / ONE_NRCS) as i32).to_le_bytes());
         } else {
             buf.extend_from_slice(&self.total_amount.to_le_bytes());
             buf.extend_from_slice(&self.total_fee.to_le_bytes());

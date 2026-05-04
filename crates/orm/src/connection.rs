@@ -6,6 +6,9 @@
 use sqlx::{AnyPool, Pool, any::AnyConnectOptions};
 use tracing::{info, warn};
 
+pub type DbPool = sqlx::AnyPool;
+pub type DbTransaction<'a> = sqlx::Transaction<'a, sqlx::Any>;
+
 /// Database type enumeration
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DatabaseType {

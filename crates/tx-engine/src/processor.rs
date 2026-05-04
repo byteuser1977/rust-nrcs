@@ -2725,8 +2725,10 @@ impl DatabaseTransactionProcessor {
 
                 let message = self.parse_string_field(tx, "message");
                 let message_is_text = self.parse_bool_field(tx, "messageIsText").unwrap_or(true);
-                let encrypted_message = self.parse_string_field(tx, "encryptedMessage");
-                let encrypted_is_text = self.parse_bool_field(tx, "encryptedIsText").unwrap_or(true);
+                let enc_result = self.parse_encrypted_message(tx);
+                let encrypted_message = enc_result.as_ref().map(|(data, _, _, _)| data.clone());
+                let encrypted_is_text = enc_result.as_ref().map(|(_, _, is_text, _)| *is_text).unwrap_or(true);
+                let is_compressed = enc_result.as_ref().map(|(_, _, _, is_comp)| *is_comp).unwrap_or(false);
 
                 // 如果有消息内容（无论是明文还是加密），则存储到PRUNABLE_MESSAGE表
                 if message.is_some() || encrypted_message.is_some() {
@@ -2737,8 +2739,8 @@ impl DatabaseTransactionProcessor {
                         recipient_id: if recipient_id > 0 { Some(recipient_id) } else { None },
                         message: message.map(|m| m.into_bytes()),
                         message_is_text,
-                        is_compressed: false, // 简化处理
-                        encrypted_message: encrypted_message.map(|em| em.into_bytes()),
+                        is_compressed,
+                        encrypted_message: encrypted_message.clone(),
                         encrypted_is_text,
                         block_timestamp: current_timestamp,
                         transaction_timestamp: current_timestamp,
@@ -4232,6 +4234,20 @@ impl DatabaseTransactionProcessor {
             }
             _ => None,
         }
+    }
+
+    /// 从 attachment JSON 对象中解析加密消息（EncryptedMessage）
+    ///
+    /// Java NRCS 中 encryptedMessage 是嵌套对象：
+    /// { "data": hex, "nonce": hex, "isText": bool, "isCompressed": bool }
+    fn parse_encrypted_message(&self, tx: &Transaction) -> Option<(Vec<u8>, Vec<u8>, bool, bool)> {
+        let att_map = tx.attachment_json.as_ref()?;
+        let enc_obj = att_map.get("encryptedMessage")?.as_object()?;
+        let data = enc_obj.get("data")?.as_str().and_then(|s| hex::decode(s).ok())?;
+        let nonce = enc_obj.get("nonce")?.as_str().and_then(|s| hex::decode(s).ok())?;
+        let is_text = enc_obj.get("isText").and_then(|v| v.as_bool()).unwrap_or(true);
+        let is_compressed = enc_obj.get("isCompressed").and_then(|v| v.as_bool()).unwrap_or(false);
+        Some((data, nonce, is_text, is_compressed))
     }
 
     fn parse_bytes_field(&self, tx: &Transaction, field_name: &str) -> Option<Vec<u8>> {

@@ -7,6 +7,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use blockchain_types::{AccountId, Amount, Height};
+use blockchain_types::constants::ONE_NRCS;
 
 use crate::restrictions::types::{AccountControlType, VotingModel, MinBalanceModel};
 use orm::models::{AccountModel, AccountControlPhasingModel};
@@ -141,7 +142,7 @@ impl AccountPhasingOnly {
         {
             return Err(RestrictionError::ControlError(format!(
                 "Maximum total fees limit of {} NRCS exceeded",
-                self.max_fees as f64 / 100_000_000.0
+                self.max_fees as f64 / ONE_NRCS as f64
             )));
         }
 

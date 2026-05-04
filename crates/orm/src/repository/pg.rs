@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 
 use crate::models::*;
+use crate::connection::DbTransaction;
 use super::traits::*;
 use super::public_key::PublicKeyRepository;
 use blockchain_types::account_ext::AccountPublicKey;
@@ -434,6 +435,58 @@ impl BlockRepository for PgBlockRepository {
         }
         Ok(())
     }
+
+    async fn insert_tx(&self, block: &BlockModel, tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO block (
+                id, version, timestamp, previous_block_id, total_amount,
+                total_fee, payload_length, previous_block_hash, cumulative_difficulty,
+                base_target, next_block_id, height, generation_signature,
+                block_signature, payload_hash, generator_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            "#,
+        )
+        .bind(block.id)
+        .bind(block.version)
+        .bind(block.timestamp)
+        .bind(block.previous_block_id)
+        .bind(block.total_amount)
+        .bind(block.total_fee)
+        .bind(block.payload_length)
+        .bind(block.previous_block_hash.as_deref())
+        .bind(block.cumulative_difficulty.as_slice())
+        .bind(block.base_target)
+        .bind(block.next_block_id)
+        .bind(block.height)
+        .bind(block.generation_signature.as_slice())
+        .bind(block.block_signature.as_slice())
+        .bind(block.payload_hash.as_slice())
+        .bind(block.generator_id)
+        .execute(&mut **tx)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn update_next_block_id_tx(&self, previous_block_id: i64, next_block_id: i64, tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
+        sqlx::query("UPDATE block SET next_block_id = $1 WHERE id = $2")
+            .bind(next_block_id)
+            .bind(previous_block_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete_by_db_id_tx(&self, db_id: i64, tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
+        sqlx::query("DELETE FROM block WHERE db_id = $1")
+            .bind(db_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -739,6 +792,15 @@ impl AccountPropertyRepository for PgAccountPropertyRepository {
     async fn delete_by_id(&self, id: i64) -> RepositoryResult<()> {
         sqlx::query("UPDATE account_property SET latest = FALSE WHERE id = $1 AND latest = TRUE")
             .bind(id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn soft_delete_by_id(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query("UPDATE account_property SET latest = FALSE WHERE db_id = $1 AND latest = TRUE")
+            .bind(db_id)
             .execute(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -1700,6 +1762,63 @@ impl TransactionRepository for PgTransactionRepository {
                 .await
                 .map_err(RepositoryError::DbError)?;
         }
+        Ok(())
+    }
+
+    async fn insert_tx(&self, tx_model: &TransactionModel, tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO "transaction" (
+                id, deadline, recipient_id, amount, fee, full_hash,
+                height, block_id, signature, timestamp, type, subtype,
+                sender_id, block_timestamp, referenced_transaction_full_hash,
+                transaction_index, phased, attachment_bytes, version,
+                has_message, has_encrypted_message, has_public_key_announcement,
+                has_prunable_message, has_prunable_attachment, ec_block_height,
+                ec_block_id, has_encrypttoself_message, has_prunable_encrypted_message
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+            "#,
+        )
+        .bind(tx_model.id)
+        .bind(tx_model.deadline)
+        .bind(tx_model.recipient_id)
+        .bind(tx_model.amount)
+        .bind(tx_model.fee)
+        .bind(tx_model.full_hash.as_slice())
+        .bind(tx_model.height)
+        .bind(tx_model.block_id)
+        .bind(tx_model.signature.as_slice())
+        .bind(tx_model.timestamp)
+        .bind(tx_model.r#type)
+        .bind(tx_model.subtype)
+        .bind(tx_model.sender_id)
+        .bind(tx_model.block_timestamp)
+        .bind(tx_model.referenced_transaction_full_hash.as_deref())
+        .bind(tx_model.transaction_index)
+        .bind(tx_model.phased)
+        .bind(tx_model.attachment_bytes.as_deref())
+        .bind(tx_model.version)
+        .bind(tx_model.has_message)
+        .bind(tx_model.has_encrypted_message)
+        .bind(tx_model.has_public_key_announcement)
+        .bind(tx_model.has_prunable_message)
+        .bind(tx_model.has_prunable_attachment)
+        .bind(tx_model.ec_block_height)
+        .bind(tx_model.ec_block_id)
+        .bind(tx_model.has_encrypttoself_message)
+        .bind(tx_model.has_prunable_encrypted_message)
+        .execute(&mut **tx)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(())
+    }
+
+    async fn delete_by_db_id_tx(&self, db_id: i64, tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
+        sqlx::query(r#"DELETE FROM "transaction" WHERE db_id = $1"#)
+            .bind(db_id)
+            .execute(&mut **tx)
+            .await
+            .map_err(RepositoryError::DbError)?;
         Ok(())
     }
 }
@@ -3818,15 +3937,14 @@ impl Repository<VoteModel> for PgVoteRepository {
     async fn insert(&self, vote: &VoteModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO vote (id, poll_id, voter_id, vote, timestamp, height)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO vote (id, poll_id, voter_id, vote_bytes, height)
+            VALUES ($1, $2, $3, $4, $5)
             "#,
         )
         .bind(vote.id)
         .bind(vote.poll_id)
         .bind(vote.voter_id)
-        .bind(&vote.vote)
-        .bind(vote.timestamp)
+        .bind(&vote.vote_bytes)
         .bind(vote.height)
         .execute(&self.pool)
         .await
@@ -6441,8 +6559,8 @@ impl PgPrunableMessageRepository {
 impl Repository<PrunableMessageModel> for PgPrunableMessageRepository {
     async fn insert(&self, m: &PrunableMessageModel) -> RepositoryResult<()> {
         sqlx::query(
-            r#"INSERT INTO prunable_message (id, sender_id, recipient_id, message, message_is_text, is_compressed, encrypted_message, encrypted_is_text, block_transaction_height)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"#)
+            r#"INSERT INTO prunable_message (id, sender_id, recipient_id, message, message_is_text, is_compressed, encrypted_message, encrypted_is_text, block_timestamp, transaction_timestamp, height)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#)
             .bind(m.id).bind(m.sender_id).bind(m.recipient_id).bind(&m.message)
             .bind(m.message_is_text).bind(m.is_compressed).bind(&m.encrypted_message)
             .bind(m.encrypted_is_text).bind(m.block_timestamp).bind(m.transaction_timestamp).bind(m.height)

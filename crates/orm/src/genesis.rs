@@ -3,7 +3,7 @@
 use serde_json::Value;
 use std::fs;
 use chrono::{NaiveDate, FixedOffset, TimeZone};
-use blockchain_types::constants::{GENESIS_BLOCK_ID, INITIAL_BASE_TARGET};
+use blockchain_types::constants::{GENESIS_BLOCK_ID, INITIAL_BASE_TARGET, ONE_NRCS};
 use crate::models::*;
 use crate::repository::*;
 use crate::RepositoryResult;
@@ -126,7 +126,7 @@ pub async fn ensure_genesis(
 
     let (_unix_timestamp, accounts) = load_genesis_config()?;
     
-    let one_nrcs_nqt: i64 = 100_000_000;
+    let one_nrcs_nqt: i64 = ONE_NRCS as i64;
     let total_amount: i64 = accounts.iter().map(|(_, amt)| *amt * one_nrcs_nqt).sum();
     let height = 0i32;
     let block_id = GENESIS_BLOCK_ID as i64;

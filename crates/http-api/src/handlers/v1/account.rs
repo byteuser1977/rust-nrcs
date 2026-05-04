@@ -5,6 +5,7 @@
 #![allow(clippy::new_without_default)]
 
 use async_trait::async_trait;
+use blockchain_types::constants::ONE_NRCS;
 use serde_json::json;
 
 use crate::api_tag::ApiTag;
@@ -128,7 +129,7 @@ impl RequestHandler for GetBalanceHandler {
             .insert("accountRS", format_account_rs(account_id))
             .insert("balanceNQT", balance.to_string())
             .insert("unconfirmedBalanceNQT", balance.to_string())
-            .insert("effectiveBalanceNRCS", (balance / 100_000_000) as i64)
+            .insert("effectiveBalanceNRCS", (balance as u64 / ONE_NRCS) as i64)
             .insert("guaranteedBalanceNQT", balance.to_string());
         
         Ok(builder.build())

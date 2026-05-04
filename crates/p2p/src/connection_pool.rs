@@ -19,7 +19,7 @@ use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::sync::{oneshot, RwLock, Mutex as TokioMutex};
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, warn,info};
 
 /// 等待中的请求（对应 Java PeerPostRequest）
 ///
@@ -77,7 +77,7 @@ impl WebSocketConnection {
             Self::read_loop(read, pending, connected, addr_clone).await;
         });
 
-        debug!("[ConnectionPool] New connection established to {}", addr);
+        info!("[ConnectionPool] New connection established to {}", addr);
         Ok(conn)
     }
 
@@ -169,7 +169,7 @@ impl WebSocketConnection {
             let _ = req.complete.send(Err("Connection closed".to_string()));
         }
 
-        debug!("[ConnectionPool] Connection to {} closed", self.addr);
+        info!("[ConnectionPool] Connection to {} closed", self.addr);
     }
 
     /// 读取循环（在后台线程运行）

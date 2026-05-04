@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 use crate::models::*;
+use crate::connection::DbTransaction;
 
 #[derive(Debug, Error)]
 pub enum RepositoryError {
@@ -53,8 +54,11 @@ pub trait BlockRepository: Repository<BlockModel> {
     async fn delete_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>>;
     async fn find_blocks_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>>;
 
-    /// Delete blocks by IDs (for rollback operations)
     async fn delete_blocks_by_ids(&self, db_ids: &[i64]) -> RepositoryResult<()>;
+
+    async fn insert_tx(&self, block: &BlockModel, tx: &mut DbTransaction<'_>) -> RepositoryResult<()>;
+    async fn update_next_block_id_tx(&self, previous_block_id: i64, next_block_id: i64, tx: &mut DbTransaction<'_>) -> RepositoryResult<()>;
+    async fn delete_by_db_id_tx(&self, db_id: i64, tx: &mut DbTransaction<'_>) -> RepositoryResult<()>;
 }
 
 #[async_trait]
@@ -67,8 +71,10 @@ pub trait TransactionRepository: Repository<TransactionModel> {
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<TransactionModel>>;
     async fn find_unconfirmed(&self, limit: i64) -> RepositoryResult<Vec<TransactionModel>>;
 
-    /// Delete transactions by IDs (for rollback operations)
     async fn delete_transactions_by_ids(&self, db_ids: &[i64]) -> RepositoryResult<()>;
+
+    async fn insert_tx(&self, tx_model: &TransactionModel, tx: &mut DbTransaction<'_>) -> RepositoryResult<()>;
+    async fn delete_by_db_id_tx(&self, db_id: i64, tx: &mut DbTransaction<'_>) -> RepositoryResult<()>;
 }
 
 #[async_trait]

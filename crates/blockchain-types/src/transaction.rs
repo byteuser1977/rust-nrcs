@@ -495,7 +495,10 @@ impl Transaction {
         let referenced_transaction_full_hash = get_hash256_opt("referencedTransactionFullHash")?;
 
         let ec_block_height = obj.get("ecBlockHeight")
-            .and_then(|v| v.as_u64())
+            .and_then(|v| {
+                v.as_u64()
+                    .or_else(|| v.as_str().and_then(|s| s.parse::<u64>().ok()))
+            })
             .map(|v| v as u32);
         let ec_block_id = obj.get("ecBlockId")
             .and_then(|v| {
@@ -729,7 +732,7 @@ impl Transaction {
         self.serialize_for_signing()
     }
 
-    fn get_flags(&self) -> u32 {
+    pub fn get_flags(&self) -> u32 {
         // 对应 Java Transaction.getFlags() 的位图定义（严格匹配 Java 源码）：
         // bit 0 (1): message != null
         // bit 1 (2): encryptedMessage != null

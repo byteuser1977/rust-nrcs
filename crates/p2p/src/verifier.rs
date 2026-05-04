@@ -14,7 +14,7 @@ use blockchain_types::block::{Block, PreviousBlockData, calculate_base_target_an
 use blockchain_types::transaction::Transaction;
 
 use crate::handlers::BlockVerifier;
-use orm::{BlockRepository, TransactionRepository, BlockModel, TransactionModel};
+use orm::{BlockRepository, TransactionRepository, BlockModel, TransactionModel, DbPool, DbTransaction};
 
 use crate::block_apply::BlockRewardApplicator;
 use tx_engine::TransactionProcessor;
@@ -24,7 +24,7 @@ pub struct BlockchainVerifier {
     tx_repo: Arc<dyn TransactionRepository>,
     tx_processor: Arc<dyn TransactionProcessor>,
     block_reward_applicator: Arc<BlockRewardApplicator>,
-    pool: sqlx::SqlitePool,
+    pool: DbPool,
     state: Arc<Mutex<()>>,
 }
 
@@ -34,7 +34,7 @@ impl BlockchainVerifier {
         tx_repo: Arc<dyn TransactionRepository>,
         tx_processor: Arc<dyn TransactionProcessor>,
         block_reward_applicator: Arc<BlockRewardApplicator>,
-        pool: sqlx::SqlitePool,
+        pool: DbPool,
     ) -> Self {
         Self {
             block_repo,
@@ -88,6 +88,35 @@ impl BlockchainVerifier {
             // 对 pruned 交易跳过单笔签名验证，依赖区块级 payload_hash 校验保证完整性。
             // （对应 Java: BlockchainProcessor.validateTransactions() 同样跳过）
             if !tx_is_pruned && !tx.verify_signature() {
+                // Debug: dump serialize_for_signing bytes for comparison with Java
+                let sfs = tx.serialize_for_signing();
+                warn!(
+                    "Signature verification FAILED for tx[{}] id={}: serialize_for_signing len={}, hex={}",
+                    tx.transaction_index, tx.id, sfs.len(), hex::encode(&sfs)
+                );
+                warn!(
+                    "  tx fields: version={}, type={:?}, subtype={}, timestamp={}, deadline={}, sender={}, recipient={:?}, amount={}, fee={}, ecBlockHeight={:?}, ecBlockId={:?}, flags={:#010X}",
+                    tx.version, tx.type_id, tx.subtype, tx.timestamp, tx.deadline,
+                    tx.sender_id, tx.recipient_id, tx.amount, tx.fee,
+                    tx.ec_block_height, tx.ec_block_id, tx.get_flags()
+                );
+                warn!(
+                    "  sender_public_key={}, full_hash={}, signature={}",
+                    hex::encode(&tx.sender_public_key.0),
+                    hex::encode(&tx.full_hash.0),
+                    hex::encode(&tx.signature.0),
+                );
+                warn!(
+                    "  attachment_bytes ({}B): {}",
+                    tx.attachment_bytes.len(),
+                    hex::encode(&tx.attachment_bytes)
+                );
+                warn!(
+                    "  appendix flags: has_msg={}, has_enc_msg={}, has_pk_ann={}, has_enc2self={}, phased={}, has_prun_msg={}, has_prun_enc={}, has_prun_att={}",
+                    tx.has_message, tx.has_encrypted_message, tx.has_public_key_announcement,
+                    tx.has_encrypttoself_message, tx.phased, tx.has_prunable_message,
+                    tx.has_prunable_encrypted_message, tx.has_prunable_attachment
+                );
                 return Err(BlockchainError::InvalidTransaction(
                     format!("transaction {} signature verification failed", tx.id)
                 ));
@@ -221,114 +250,31 @@ impl BlockchainVerifier {
         Ok(())
     }
 
-    /// Transaction-aware version of insert_block
     async fn insert_block_tx<'a>(
         &self,
         block: &Block,
-        tx: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
+        tx: &mut DbTransaction<'a>,
     ) -> anyhow::Result<()> {
         let block_model = BlockModel::from_domain(block)?;
 
-        // Insert block using raw SQL with transaction
-        sqlx::query(
-            r#"
-            INSERT INTO block (
-                id, version, timestamp, previous_block_id, total_amount,
-                total_fee, payload_length, previous_block_hash, cumulative_difficulty,
-                base_target, next_block_id, height, generation_signature,
-                block_signature, payload_hash, generator_id
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-            )
-            "#,
-        )
-        .bind(block_model.id)
-        .bind(block_model.version)
-        .bind(block_model.timestamp)
-        .bind(block_model.previous_block_id)
-        .bind(block_model.total_amount)
-        .bind(block_model.total_fee)
-        .bind(block_model.payload_length)
-        .bind(&block_model.previous_block_hash)
-        .bind(&block_model.cumulative_difficulty)
-        .bind(block_model.base_target)
-        .bind(block_model.next_block_id)
-        .bind(block_model.height)
-        .bind(&block_model.generation_signature)
-        .bind(&block_model.block_signature)
-        .bind(&block_model.payload_hash)
-        .bind(block_model.generator_id)
-        .execute(&mut **tx)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to insert block: {}", e))?;
+        self.block_repo.insert_tx(&block_model, tx).await
+            .map_err(|e| anyhow::anyhow!("Failed to insert block: {}", e))?;
 
         let block_id = block.get_id() as i64;
 
-        // Update previous block's next_block_id
         if let Some(prev_id) = block.previous_block_id.filter(|&id| id != 0) {
-            sqlx::query("UPDATE block SET next_block_id = ? WHERE id = ?")
-                .bind(block_id)
-                .bind(prev_id as i64)
-                .execute(&mut **tx)
-                .await
+            self.block_repo.update_next_block_id_tx(prev_id as i64, block_id, tx).await
                 .map_err(|e| anyhow::anyhow!("Failed to update next_block_id: {}", e))?;
         }
 
-        // Insert transactions
         for (idx, tx_item) in block.transactions.iter().enumerate() {
             let mut tx_model = TransactionModel::from_domain(tx_item)?;
             tx_model.height = block.height as i32;
             tx_model.block_id = block_id;
             tx_model.transaction_index = idx as i16;
 
-            sqlx::query(
-                r#"
-                INSERT INTO "transaction" (
-                    id, deadline, sender_id, recipient_id, amount,
-                    fee, height, block_id, transaction_index, timestamp,
-                    type, subtype, block_timestamp, full_hash, signature,
-                    referenced_transaction_full_hash, attachment_bytes,
-                    version, phased, has_message, has_encrypted_message,
-                    has_public_key_announcement, has_prunable_message,
-                    has_prunable_attachment, ec_block_height, ec_block_id,
-                    has_encrypttoself_message, has_prunable_encrypted_message
-                ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-                )
-                "#,
-            )
-            .bind(tx_model.id)
-            .bind(tx_model.deadline)
-            .bind(tx_model.sender_id)
-            .bind(tx_model.recipient_id)
-            .bind(tx_model.amount)
-            .bind(tx_model.fee)
-            .bind(tx_model.height)
-            .bind(tx_model.block_id)
-            .bind(tx_model.transaction_index)
-            .bind(tx_model.timestamp)
-            .bind(tx_model.r#type)
-            .bind(tx_model.subtype)
-            .bind(tx_model.block_timestamp)
-            .bind(&tx_model.full_hash)
-            .bind(&tx_model.signature)
-            .bind(&tx_model.referenced_transaction_full_hash)
-            .bind(&tx_model.attachment_bytes)
-            .bind(tx_model.version)
-            .bind(tx_model.phased)
-            .bind(tx_model.has_message)
-            .bind(tx_model.has_encrypted_message)
-            .bind(tx_model.has_public_key_announcement)
-            .bind(tx_model.has_prunable_message)
-            .bind(tx_model.has_prunable_attachment)
-            .bind(tx_model.ec_block_height)
-            .bind(tx_model.ec_block_id)
-            .bind(tx_model.has_encrypttoself_message)
-            .bind(tx_model.has_prunable_encrypted_message)
-            .execute(&mut **tx)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to insert transaction {}: {}", tx_item.id, e))?;
+            self.tx_repo.insert_tx(&tx_model, tx).await
+                .map_err(|e| anyhow::anyhow!("Failed to insert transaction {}: {}", tx_item.id, e))?;
         }
 
         Ok(())
@@ -344,15 +290,11 @@ impl BlockchainVerifier {
         }
     }
 
-    /// Transaction-aware version of accept_block
-    /// Note: The tx_processor and block_reward_applicator use their own connections,
-    /// so this method delegates to the original accept_block.
-    /// The database transaction protects the block/transaction inserts.
     #[allow(dead_code)]
     async fn accept_block_tx<'a>(
         &self,
         block: &Block,
-        _tx: &mut sqlx::Transaction<'a, sqlx::Sqlite>,
+        _tx: &mut DbTransaction<'a>,
     ) -> anyhow::Result<()> {
         self.accept_block(block).await
     }
@@ -475,10 +417,6 @@ impl BlockchainVerifier {
         Ok(())
     }
 
-    /// 清理已插入但 accept 失败的区块数据
-    ///
-    /// 当 insert 成功但 accept（apply_unconfirmed/apply）失败时调用，
-    /// 删除指定高度的区块及其所有交易，保持数据库一致性
     async fn cleanup_inserted_block(&self, height: i32) -> anyhow::Result<()> {
         let mut db_tx = self.pool.begin().await
             .map_err(|e| anyhow::anyhow!("Failed to begin cleanup transaction: {}", e))?;
@@ -492,19 +430,13 @@ impl BlockchainVerifier {
                 .map_err(|e| anyhow::anyhow!("Failed to find transactions for block {}: {}", block_id, e))?;
 
             for tx in &txs {
-                sqlx::query("DELETE FROM \"transaction\" WHERE db_id = ?")
-                    .bind(tx.db_id)
-                    .execute(&mut *db_tx)
-                    .await
+                self.tx_repo.delete_by_db_id_tx(tx.db_id, &mut db_tx).await
                     .map_err(|e| anyhow::anyhow!("Failed to delete transaction {}: {}", tx.db_id, e))?;
             }
 
             debug!("Cleaned up {} transactions from block {}", txs.len(), block_id);
 
-            sqlx::query("DELETE FROM block WHERE db_id = ?")
-                .bind(block_model.db_id)
-                .execute(&mut *db_tx)
-                .await
+            self.block_repo.delete_by_db_id_tx(block_model.db_id, &mut db_tx).await
                 .map_err(|e| anyhow::anyhow!("Failed to delete block {}: {}", block_model.db_id, e))?;
 
             debug!("Cleaned up block at height={}, id={}", height, block_id);
@@ -800,7 +732,7 @@ impl BlockVerifier for BlockchainVerifier {
             .map_err(|e| anyhow::anyhow!("Failed to find blocks after height {}: {}", height, e))?;
 
         if blocks_to_remove.is_empty() {
-            info!("No blocks to pop off after height {}", height);
+            debug!("No blocks to pop off after height {}", height);
             return Ok(vec![]);
         }
 

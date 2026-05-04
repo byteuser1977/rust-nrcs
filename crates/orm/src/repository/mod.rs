@@ -1,5 +1,5 @@
 pub mod sqlite;
-// pub mod pg;  // Temporarily disabled due to SQLx macro issues
+// pub mod pg;
 pub mod public_key;
 pub mod traits;
 pub mod peer;
