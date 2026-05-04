@@ -1627,7 +1627,7 @@ impl DatabaseTransactionProcessor {
             .or_else(|| self.parse_long_field(tx, "amountNQTPerShare"))
             .unwrap_or(0);
 
-        if dividend_per_share <= 0 || asset_id <= 0 {
+        if dividend_per_share <= 0 || asset_id == 0 {
             warn!("Invalid dividend parameters in transaction {}", tx.id);
             return Ok(());
         }
@@ -2203,7 +2203,10 @@ impl DatabaseTransactionProcessor {
         let current_height = self.get_current_height();
 
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
-        let rate = self.parse_long_field(tx, "rate").unwrap_or(0);
+        let mut rate = self.parse_long_field(tx, "rateNQT").unwrap_or(0);  // Java: MonetarySystemExchange.rateNQT
+        if rate == 0 {
+            rate = self.parse_long_field(tx, "rate").unwrap_or(0);
+        }
         let units = self.parse_long_field(tx, "units").unwrap_or(0);
 
         if currency_id > 0 && units > 0 && rate > 0 {
@@ -2251,7 +2254,7 @@ impl DatabaseTransactionProcessor {
         let current_height = self.get_current_height();
 
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
-        let rate = self.parse_long_field(tx, "rate").unwrap_or(0);
+        let rate = self.parse_long_field(tx, "rateNQT").unwrap_or(0);  // Java: MonetarySystemExchange.rateNQT
         let units = self.parse_long_field(tx, "units").unwrap_or(0);
 
         if currency_id > 0 && units > 0 && rate > 0 {
@@ -3496,7 +3499,7 @@ impl DatabaseTransactionProcessor {
                     .unwrap_or(0);
                 let _extend_data = self.parse_string_field(tx, "data");
 
-                if tagged_data_id > 0 {
+                if tagged_data_id != 0 {
                     // 验证tagged data是否存在且属于当前用户
                     match self.tagged_data_repo.find_by_id(tagged_data_id).await {
                         Ok(Some(existing)) if existing.account_id == sender_id => {
@@ -3537,7 +3540,7 @@ impl DatabaseTransactionProcessor {
                     .or_else(|| self.parse_long_field(tx, "taggedDataId"))
                     .unwrap_or(0);
 
-                if tagged_data_id > 0 {
+                if tagged_data_id != 0 {
                     match self.tagged_data_repo.find_by_id(tagged_data_id).await {
                         Ok(Some(_existing)) => {
                             let timestamp_model = orm::models::TaggedTimestampModel::new(
@@ -3648,19 +3651,17 @@ impl DatabaseTransactionProcessor {
             }
 
             1 => { // CONTRACT_REFERENCE_DELETE
-                // Java: ContractReference.deleteContractReference(account, name)
-                // Reference: ContractReferenceDeleteAttachment.java
-                //   attachment fields: { "name": String }
-                //   DB operation: DELETE from CONTRACT_REFERENCE table
+                // Java: ContractReferenceDeleteAttachment.putMyBytes()
+                //   attachment fields: { "contractReference": long }
+                //   DB operation: DELETE from CONTRACT_REFERENCE table by id
 
-                // 对应 Java: ContractReferenceDelete - 操作 sender 而非 recipient
-                let ref_name = self.parse_string_field(tx, "name").unwrap_or_default();
+                let ref_id = self.parse_long_field(tx, "contractReference").unwrap_or(0);
 
-                if !ref_name.is_empty() {
-                    debug!("Deleting contract reference '{}' from account {} (tx={})",
-                        ref_name, sender_id, tx.id);
+                if ref_id != 0 {
+                    debug!("Deleting contract reference id={} from account {} (tx={})",
+                        ref_id, sender_id, tx.id);
                     debug!("ContractReference deletion not yet fully implemented (stub)");
-                    // TODO: 调用contract_ref_repo.delete_by_account_and_name(recipient_id, &ref_name)
+                    // TODO: 调用contract_ref_repo.delete_by_id(ref_id)
                 } else {
                     warn!("Invalid parameters for CONTRACT_REFERENCE_DELETE in tx {}", tx.id);
                 }
@@ -3685,10 +3686,12 @@ impl DatabaseTransactionProcessor {
                 let name = self.parse_string_field(tx, "name").unwrap_or_default();
                 let description = self.parse_string_field(tx, "description").unwrap_or_default();
                 let price_nqt = self.parse_long_field(tx, "priceNQT").unwrap_or(0);
+                let _price = self.parse_long_field(tx, "price").unwrap_or(0);
                 let quantity = self.parse_long_field(tx, "quantity").unwrap_or(1);
                 let tags = self.parse_string_field(tx, "tags").unwrap_or_default();
 
                 if !name.is_empty() && price_nqt > 0 && quantity > 0 {
+                    let goods_price = if price_nqt == 0 { _price } else { price_nqt };
                     let goods_model = orm::GoodsModel {
                         db_id: 0,
                         id: tx.id as i64,
@@ -3699,7 +3702,7 @@ impl DatabaseTransactionProcessor {
                         tags: Some(tags),
                         timestamp: tx.timestamp as i32,
                         quantity: quantity as i32,
-                        price: price_nqt,
+                        price: goods_price,
                         delisted: false,
                         height: self.get_current_height(),
                         latest: true,
@@ -4223,10 +4226,9 @@ impl DatabaseTransactionProcessor {
                 })
             }
             Some(serde_json::Value::String(s)) => {
-                s.parse::<i64>().ok()
-                    .or_else(|| {
-                        s.parse::<u64>().ok().map(|v| v as i64)
-                    })
+                // Try u64 first: NRCS IDs are unsigned and can exceed i64::MAX
+                s.parse::<u64>().ok().map(|v| v as i64)
+                    .or_else(|| s.parse::<i64>().ok())
             }
             _ => None,
         }
