@@ -58,9 +58,11 @@ use orm::{
     PhasingPollHashedSecretRepository, PhasingPollResultRepository,
     PhasingPollVoterRepository, PhasingPollLinkedTransactionRepository,
     // P2: Auxiliary tables
-    HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, ExchangeRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
+    HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, CurrencyMintRepository, ExchangeRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
     // P2: Referenced Transaction
     ReferencedTransactionRepository,
+    // Public Key
+    PublicKeyRepository,
 };
 use thiserror::Error;
 
@@ -371,7 +373,7 @@ pub struct DatabaseTransactionProcessor {
 
     // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
     exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
-    currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
+    currency_mint_repo: Arc<dyn CurrencyMintRepository>,
 
     // 新增：CoinExchange订单和交易（P0修复）
     coin_order_fxt_repo: Arc<dyn CoinOrderFxtRepository>,
@@ -382,6 +384,7 @@ pub struct DatabaseTransactionProcessor {
     currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
     currency_supply_repo: Arc<dyn CurrencySupplyRepository>,
     exchange_repo: Arc<dyn ExchangeRepository>,
+    public_key_repo: Arc<dyn PublicKeyRepository>,
     prunable_message_repo: Arc<dyn PrunableMessageRepository>,
     purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
 
@@ -455,7 +458,7 @@ impl DatabaseTransactionProcessor {
         asset_history_repo: Arc<dyn AssetHistoryRepository>,
         // 新增：Exchange和Mint（P1优化完成 - 专用Repository）
         exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
-        currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
+        currency_mint_repo: Arc<dyn CurrencyMintRepository>,
         // 新增：CoinExchange订单和交易（P0修复）
         coin_order_fxt_repo: Arc<dyn CoinOrderFxtRepository>,
         coin_trade_fxt_repo: Arc<dyn CoinTradeFxtRepository>,
@@ -464,6 +467,7 @@ impl DatabaseTransactionProcessor {
         currency_founder_repo: Arc<dyn CurrencyFounderRepository>,
         currency_supply_repo: Arc<dyn CurrencySupplyRepository>,
         exchange_repo: Arc<dyn ExchangeRepository>,
+        public_key_repo: Arc<dyn PublicKeyRepository>,
         prunable_message_repo: Arc<dyn PrunableMessageRepository>,
         purchase_feedback_repo: Arc<dyn PurchaseFeedbackRepository>,
         // 新增：Referenced Transaction（P2修复）
@@ -532,6 +536,7 @@ impl DatabaseTransactionProcessor {
             currency_founder_repo,
             currency_supply_repo,
             exchange_repo,
+            public_key_repo,
             prunable_message_repo,
             purchase_feedback_repo,
             // 新增：Referenced Transaction（P2修复）
@@ -858,6 +863,21 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
             let total = amount_nqt + fee_nqt;
             if total != 0 {
                 self.account_repo.add_to_balance(sender_id, -total, self.current_height()).await?;
+            }
+        }
+
+        // === Step 1.5: Save sender's public key to PUBLIC_KEY table ===
+        if !tx.sender_public_key.0.is_empty() && !tx.sender_public_key.0.iter().all(|&b| b == 0) {
+            let latest_pk = self.public_key_repo.find_latest_by_account_id(sender_id).await.ok().flatten();
+            let current_key = tx.sender_public_key.0;
+            let key_changed = latest_pk.as_ref().map(|pk| pk.public_key != current_key).unwrap_or(true);
+            if key_changed {
+                let pk_model = blockchain_types::account_ext::AccountPublicKey {
+                    account_id: sender_id as u64,
+                    public_key: current_key,
+                    height: self.get_current_height(),
+                };
+                let _ = self.public_key_repo.insert(&pk_model).await;
             }
         }
 
@@ -1659,6 +1679,7 @@ impl DatabaseTransactionProcessor {
                 debug!("Paying dividend on asset {} to {} holders (total={} NQT, excluded sender shares={})",
                     asset_id, holders.len(), total_dividend_amount, sender_shares);
 
+                let mut dividend_recipient_count = 0i32;
                 for holder in holders {
                     let holder_id = holder.account_id;
                     let shares = holder.quantity;
@@ -1667,6 +1688,7 @@ impl DatabaseTransactionProcessor {
                     if dividend_amount > 0 && holder_id != sender_id {
                         // Java: recipientAccount.addToBalanceAndUnconfirmedBalance(event, txId, dividend);
                         self.account_repo.add_to_balance(holder_id, dividend_amount, self.current_height()).await?;
+                        dividend_recipient_count += 1;
 
                         // 写入LEDGER记录
                         use orm::models::AccountLedgerModel;
@@ -1690,26 +1712,17 @@ impl DatabaseTransactionProcessor {
                     }
                 }
 
-                debug!("Dividend payment completed for asset {}", asset_id);
+                debug!("Dividend payment completed for asset {}: {} recipients, total {}", asset_id, dividend_recipient_count, total_dividend_amount);
 
-                // ✅ 修复：添加资产分红记录到 asset_dividend 表
-                // NRCS Java: Dividend.save(dividend) 会插入一条记录
-                //
-                // 字段说明（对齐NRCS Java实现）：
-                // - AMOUNT: 每股分红金额（交易附件中的amountNQT），不是总分红金额
-                // - TOTAL_DIVIDEND: 初始为0（可能是运行时统计字段）
-                // - NUM_ACCOUNTS: 初始为0（可能是运行时统计字段）
-                //
-                // 参考数据：
-                //   AMOUNT=100000000, TOTAL_DIVIDEND=0, NUM_ACCOUNTS=0
+                // 资产分红记录到 asset_dividend 表
                 let dividend_record = orm::models::AssetDividendModel {
                     db_id: 0,
                     id: tx.id as i64,
                     asset_id,
-                    amount: dividend_per_share,        // 每股分红金额（不是总金额）
+                    amount: dividend_per_share,
                     dividend_height: current_height,
-                    total_dividend: 0,                  // 初始为0
-                    num_accounts: 0,                    // 初始为0
+                    total_dividend: total_dividend_amount,
+                    num_accounts: dividend_recipient_count,
                     timestamp: current_timestamp,
                     height: current_height,
                 };
@@ -1851,6 +1864,10 @@ impl DatabaseTransactionProcessor {
                 latest: true,
             };
 
+            // Soft-delete existing property before inserting new (NRCS upsert pattern)
+            if let Err(e) = self.asset_property_repo.delete_by_asset_account_property(asset_id, sender_id, &property_name).await {
+                debug!("No existing property to delete for asset={} property={}: {}", asset_id, property_name, e);
+            }
             self.asset_property_repo.insert(&prop_model).await?;
             debug!("Set property '{}'='{}' on asset {}", property_name, property_value, asset_id);
         }
@@ -1899,6 +1916,10 @@ impl DatabaseTransactionProcessor {
                 latest: true,
             };
 
+            // Soft-delete existing property before inserting new (NRCS upsert pattern)
+            if let Err(e) = self.asset_property_repo.delete_by_asset_account_property(asset_id, sender_id, &property_name).await {
+                debug!("No existing property to delete for asset={} property={}: {}", asset_id, property_name, e);
+            }
             self.asset_property_repo.insert(&prop_model).await?;
             debug!("Set long-value property '{}'={} on asset {}", property_name, long_value, asset_id);
         }
@@ -2326,12 +2347,17 @@ impl DatabaseTransactionProcessor {
         let minted_units = self.parse_long_field(tx, "units").unwrap_or(0);
 
         if currency_id != 0 && minted_units > 0 {
-            // 创建CURRENCY_MINT记录
+            // NRCS: counter = cumulative sequential count, not minted quantity
+            let next_counter = self.currency_mint_repo
+                .find_max_counter_by_currency(currency_id)
+                .await
+                .unwrap_or(0) + 1;
+
             let mint_model = CurrencyMintModel {
                 db_id: 0,
                 currency_id,
                 account_id: sender_id,
-                counter: minted_units, // 使用counter字段存储minted数量
+                counter: next_counter,
                 height: current_height,
                 latest: true,
             };
@@ -3003,8 +3029,8 @@ impl DatabaseTransactionProcessor {
                         name: poll_name.clone(),
                         description: Some(poll_description),
                         options: options_str.clone(),
-                        min_num_options: self.parse_long_field(tx, "minNumOptions").map(|n| n as i16),
-                        max_num_options: self.parse_long_field(tx, "maxNumOptions").map(|n| n as i16),
+                        min_num_options: Some(self.parse_long_field(tx, "minNumOptions").map(|n| n as i16).unwrap_or(1)),
+                        max_num_options: Some(self.parse_long_field(tx, "maxNumOptions").map(|n| n as i16).unwrap_or(1)),
                         min_range_value: self.parse_long_field(tx, "minRangeValue").map(|r| r as i16),
                         max_range_value: self.parse_long_field(tx, "maxRangeValue").map(|r| r as i16),
                         timestamp: current_timestamp,
@@ -3021,8 +3047,21 @@ impl DatabaseTransactionProcessor {
                             debug!("Created poll '{}' (ID={}) for account {}", poll_name, tx.id, sender_id);
 
                             // 初始化POLL_RESULT（每个选项初始weight=0）
-                            // TODO: 解析options数组并创建对应的PollResultModel
-                            debug!("Initializing poll results for poll {}", tx.id);
+                            if !options_str.is_empty() {
+                                let options: Vec<&str> = options_str.split(',').collect();
+                                for (idx, _option) in options.iter().enumerate() {
+                                    let poll_result = orm::models::PollResultModel {
+                                        db_id: 0,
+                                        poll_id: tx.id as i64,
+                                        option: idx as i64,
+                                        result: None,
+                                        weight: 0,
+                                        height: current_height,
+                                    };
+                                    let _ = self.poll_result_repo.insert(&poll_result).await;
+                                }
+                                debug!("Initialized {} poll result rows for poll {}", options.len(), tx.id);
+                            }
                         }
                         Err(e) => {
                             warn!("Failed to create poll '{}': {}", poll_name, e);
@@ -3048,8 +3087,11 @@ impl DatabaseTransactionProcessor {
                     // 验证poll是否存在
                     match self.poll_repo.find_by_id(poll_id).await {
                         Ok(Some(_poll)) => {
-                            // 创建Vote记录
-                            let vote_bytes = vec![1u8]; // TODO: 从attachment解析实际的vote bytes
+                            // 创建Vote记录 - 从attachment解析vote bytes
+                            let vote_bytes = self.parse_bytes_field(tx, "voteBytes")
+                                .or_else(|| self.parse_string_field(tx, "voteBytes")
+                                    .and_then(|hex_str| hex::decode(&hex_str).ok()))
+                                .unwrap_or(vec![1u8]);
 
                             let vote_model = VoteModel {
                                 db_id: 0,
@@ -3177,9 +3219,9 @@ impl DatabaseTransactionProcessor {
                                 if let Some(vote_value) = vote_bytes.as_i64() {
                                     let result_model = orm::models::PhasingPollResultModel {
                                         db_id: 0,
-                                        id: 0, // 由数据库生成
+                                        id: phased_tx_id,
                                         result: vote_value,
-                                        approved: false, // 简化处理
+                                        approved: false,
                                         height: self.get_current_height(),
                                     };
 
@@ -3672,6 +3714,9 @@ impl DatabaseTransactionProcessor {
                         latest: true,
                     };
 
+                    // NRCS: 先删除旧值（如果存在），再插入新值
+                    let _ = self.contract_ref_repo.delete_by_account_and_name(sender_id, &ref_name).await;
+
                     match self.contract_ref_repo.insert(&contract_ref_model).await {
                         Ok(_) => {
                             debug!("Set contract reference '{}' on account {} (tx={})",
@@ -3697,8 +3742,9 @@ impl DatabaseTransactionProcessor {
                 if ref_id != 0 {
                     debug!("Deleting contract reference id={} from account {} (tx={})",
                         ref_id, sender_id, tx.id);
-                    debug!("ContractReference deletion not yet fully implemented (stub)");
-                    // TODO: 调用contract_ref_repo.delete_by_id(ref_id)
+                    if let Err(e) = self.contract_ref_repo.delete(ref_id).await {
+                        warn!("Failed to delete contract reference id={}: {}", ref_id, e);
+                    }
                 } else {
                     warn!("Invalid parameters for CONTRACT_REFERENCE_DELETE in tx {}", tx.id);
                 }
@@ -3729,6 +3775,14 @@ impl DatabaseTransactionProcessor {
 
                 if !name.is_empty() && price_nqt > 0 && quantity > 0 {
                     let goods_price = if price_nqt == 0 { _price } else { price_nqt };
+                    // Check if goods has image from attachment or prunable message
+                    let has_image = tx.attachment_json.as_ref()
+                        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+                        .and_then(|v| {
+                            v.get("goodsIsImage").and_then(|x| x.as_bool())
+                                .or_else(|| v.get("hasImage").and_then(|x| x.as_bool()))
+                        })
+                        .unwrap_or(false);
                     let goods_model = orm::GoodsModel {
                         db_id: 0,
                         id: tx.id as i64,
@@ -3743,7 +3797,7 @@ impl DatabaseTransactionProcessor {
                         delisted: false,
                         height: self.get_current_height(),
                         latest: true,
-                        has_image: false,
+                        has_image,
                     };
 
                     self.goods_repo.insert(&goods_model).await
@@ -4669,20 +4723,50 @@ impl DatabaseTransactionProcessor {
         let holding_id = self.parse_long_field(tx, "holdingId").unwrap_or(0);
         let min_balance_model = self.parse_long_field(tx, "minBalanceModel").unwrap_or(0) as i16;
 
+        // Parse whitelist from attachment JSON
+        let whitelist_size = tx.attachment_json.as_ref()
+            .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+            .and_then(|v| {
+                v.get("phasingWhitelist")
+                    .or_else(|| v.get("whitelist"))
+                    .and_then(|w| w.as_array())
+                    .map(|arr| arr.len() as i16)
+            })
+            .unwrap_or(0);
+
+        // Parse hashed_secret and algorithm from attachment
+        let hashed_secret = tx.attachment_json.as_ref()
+            .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+            .and_then(|v| {
+                v.get("phasingHashedSecret")
+                    .or_else(|| v.get("hashedSecret"))
+                    .and_then(|s| s.as_str())
+                    .and_then(|hex_str| hex::decode(hex_str).ok())
+            });
+
+        let algorithm = if hashed_secret.is_some() {
+            Some(self.parse_long_field(tx, "phasingHashedSecretAlgorithm")
+                .or_else(|| self.parse_long_field(tx, "hashAlgorithm"))
+                .map(|a| a as i16)
+                .unwrap_or(2)) // 默认SHA256
+        } else {
+            None
+        };
+
         // 创建PHASING_POLL记录
         let poll_model = orm::models::PhasingPollModel {
             db_id: 0,
             id: tx.id as i64,
             account_id: sender_id,
-            whitelist_size: 0, // 简化处理，实际应从attachment解析
+            whitelist_size,
             finish_height,
             voting_model,
             quorum: Some(quorum),
             min_balance: Some(min_balance),
             holding_id: Some(holding_id),
             min_balance_model: Some(min_balance_model),
-            hashed_secret: None, // 稍后填充
-            algorithm: None,     // 稍后填充
+            hashed_secret,
+            algorithm,
             height: current_height,
         };
 

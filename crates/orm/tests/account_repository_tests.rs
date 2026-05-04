@@ -31,27 +31,27 @@ async fn setup_pg() -> (PgPool, PgAccountRepository) {
 
 async fn cleanup_all_pg(pool: &PgPool) {
     let tables = [
-        "account_guaranteed_balance", "account_ledger", "account_asset",
-        "account_currency", "account_info", "account_lease",
-        "account_property", "account_control_phasing",
-        "alias", "alias_offer", "asset_transfer", "asset_property",
-        "asset_history", "asset_delete", "asset_dividend",
-        "ask_order", "bid_order", "trade",
-        "purchase", "purchase_feedback", "goods",
-        "currency_transfer", "currency_founder", "currency_mint",
-        "shuffling_participant", "shuffling_data",
-        "vote", "poll_result", "poll",
-        "phasing_vote", "phasing_poll_result", "phasing_poll_voter",
-        "phasing_poll_linked_transaction", "phasing_poll_hashed_secret", "phasing_poll",
-        "tagged_data", "tagged_data_tag", "tagged_data_extend", "tagged_timestamp",
-        "prunable_message", "referenced_transaction",
-        "exchange_request", "hub", "contract_reference",
-        "coin_order_fxt", "coin_trade_fxt",
-        "public_key", "transaction", "block",
-        "account",
+        "ACCOUNT_GUARANTEED_BALANCE", "ACCOUNT_LEDGER", "ACCOUNT_ASSET",
+        "ACCOUNT_CURRENCY", "ACCOUNT_INFO", "ACCOUNT_LEASE",
+        "ACCOUNT_PROPERTY", "ACCOUNT_CONTROL_PHASING",
+        "ALIAS", "ALIAS_OFFER", "ASSET_TRANSFER", "ASSET_PROPERTY",
+        "ASSET_HISTORY", "ASSET_DELETE", "ASSET_DIVIDEND",
+        "ASK_ORDER", "BID_ORDER", "TRADE",
+        "PURCHASE", "PURCHASE_FEEDBACK", "GOODS",
+        "CURRENCY_TRANSFER", "CURRENCY_FOUNDER", "CURRENCY_MINT",
+        "SHUFFLING_PARTICIPANT", "SHUFFLING_DATA",
+        "VOTE", "POLL_RESULT", "POLL",
+        "PHASING_VOTE", "PHASING_POLL_RESULT", "PHASING_POLL_VOTER",
+        "PHASING_POLL_LINKED_TRANSACTION", "PHASING_POLL_HASHED_SECRET", "PHASING_POLL",
+        "TAGGED_DATA", "TAGGED_DATA_TAG", "TAGGED_DATA_EXTEND", "TAGGED_TIMESTAMP",
+        "PRUNABLE_MESSAGE", "REFERENCED_TRANSACTION",
+        "EXCHANGE_REQUEST", "HUB", "CONTRACT_REFERENCE",
+        "COIN_ORDER_FXT", "COIN_TRADE_FXT",
+        "PUBLIC_KEY", "TRANSACTION", "BLOCK",
+        "ACCOUNT",
     ];
     for table in &tables {
-        let _ = sqlx::query(&format!("TRUNCATE TABLE {} CASCADE", table)).execute(pool).await;
+        let _ = sqlx::query(&format!("TRUNCATE TABLE \"{}\" CASCADE", table)).execute(pool).await;
     }
 }
 

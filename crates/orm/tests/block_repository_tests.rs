@@ -26,9 +26,9 @@ async fn setup_pg() -> (PgPool, PgBlockRepository) {
         .unwrap_or_else(|_| "postgres://nrcs_user:password@localhost:5432/nrcs_db".to_string());
     let pool = PgPool::connect(&database_url).await.expect("pg pool failed");
 
-    let tables = ["block", "transaction", "account", "public_key"];
+    let tables = ["BLOCK", "TRANSACTION", "ACCOUNT", "PUBLIC_KEY"];
     for table in &tables {
-        let _ = sqlx::query(&format!("TRUNCATE TABLE {} CASCADE", table)).execute(&pool).await;
+        let _ = sqlx::query(&format!("TRUNCATE TABLE \"{}\" CASCADE", table)).execute(&pool).await;
     }
 
     let repo = PgBlockRepository::new(pool.clone());

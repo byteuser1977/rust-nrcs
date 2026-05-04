@@ -3949,6 +3949,18 @@ impl ContractReferenceRepository for SqliteContractReferenceRepository {
         Ok(record)
     }
 
+    async fn find_by_account_and_name(&self, account_id: i64, name: &str) -> RepositoryResult<Option<ContractReferenceModel>> {
+        let record = sqlx::query_as::<_, ContractReferenceModel>(
+            "SELECT * FROM contract_reference WHERE account_id = ? AND contract_name = ? LIMIT 1"
+        )
+        .bind(account_id)
+        .bind(name)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(record)
+    }
+
     async fn delete_by_account_and_name(&self, account_id: i64, name: &str) -> RepositoryResult<()> {
         sqlx::query("DELETE FROM contract_reference WHERE account_id = ? AND contract_name = ?")
             .bind(account_id)
@@ -5012,6 +5024,20 @@ impl Repository<CurrencyMintModel> for SqliteCurrencyMintRepository {
             .await
             .map_err(RepositoryError::DbError)?;
         Ok(count)
+    }
+}
+
+#[async_trait]
+impl CurrencyMintRepository for SqliteCurrencyMintRepository {
+    async fn find_max_counter_by_currency(&self, currency_id: i64) -> RepositoryResult<i64> {
+        let result = sqlx::query_as::<_, (i64,)>(
+            "SELECT COALESCE(MAX(counter), 0) FROM currency_mint WHERE currency_id = ?"
+        )
+        .bind(currency_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(result.0)
     }
 }
 

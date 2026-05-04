@@ -271,7 +271,13 @@ pub trait ShufflingParticipantRepository: Repository<ShufflingParticipantModel> 
 pub trait ContractReferenceRepository: Repository<ContractReferenceModel> {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<ContractReferenceModel>>;
     async fn find_by_contract_name(&self, name: &str) -> RepositoryResult<Option<ContractReferenceModel>>;
+    async fn find_by_account_and_name(&self, account_id: i64, name: &str) -> RepositoryResult<Option<ContractReferenceModel>>;
     async fn delete_by_account_and_name(&self, account_id: i64, name: &str) -> RepositoryResult<()>;
+}
+
+#[async_trait]
+pub trait CurrencyMintRepository: Repository<CurrencyMintModel> {
+    async fn find_max_counter_by_currency(&self, currency_id: i64) -> RepositoryResult<i64>;
 }
 
 #[async_trait]

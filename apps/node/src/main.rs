@@ -63,7 +63,7 @@ use orm::{BlockRepository, TransactionRepository, AssetRepository, AssetTransfer
          PhasingPollHashedSecretRepository, PhasingPollResultRepository,
          PhasingPollVoterRepository, PhasingPollLinkedTransactionRepository,
          // P2: Auxiliary tables
-         HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, ExchangeRepository, PeerRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
+         HubRepository, CurrencyFounderRepository, CurrencySupplyRepository, CurrencyMintRepository, ExchangeRepository, PeerRepository, PrunableMessageRepository, PurchaseFeedbackRepository,
          ReferencedTransactionRepository};
 use orm::repository::sqlite::SqliteAccountGuaranteedBalanceRepository;
 
@@ -289,7 +289,7 @@ async fn main() -> Result<()> {
             let asset_history_repo: Arc<dyn AssetHistoryRepository> = Arc::new(orm::PgAssetHistoryRepository::new(pg_pool.clone()));
             let exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>> =
                 Arc::new(orm::PgExchangeRequestRepository::new(pg_pool.clone()));
-            let currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>> =
+            let currency_mint_repo: Arc<dyn CurrencyMintRepository> =
                 Arc::new(orm::PgCurrencyMintRepository::new(pg_pool.clone()));
             let goods_repo: Arc<dyn GoodsRepository> = Arc::new(orm::PgGoodsRepository::new(pg_pool.clone()));
             let purchase_repo: Arc<dyn PurchaseRepository> = Arc::new(orm::PgPurchaseRepository::new(pg_pool.clone()));
@@ -432,7 +432,7 @@ async fn main() -> Result<()> {
             // Exchange和Mint使用专用Repository（P1优化完成）
             let exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>> =
                 Arc::new(orm::SqliteExchangeRequestRepository::new(pool.clone()));
-            let currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>> =
+            let currency_mint_repo: Arc<dyn CurrencyMintRepository> =
                 Arc::new(orm::SqliteCurrencyMintRepository::new(pool.clone()));
             // Digital Goods
             let goods_repo: Arc<dyn GoodsRepository> = Arc::new(orm::SqliteGoodsRepository::new(pool.clone()));
@@ -548,7 +548,7 @@ async fn start_node(
     asset_history_repo: Arc<dyn AssetHistoryRepository>,
     // 新增：Exchange和Mint（P1优化完成）
     exchange_request_repo: Arc<dyn orm::Repository<orm::models::ExchangeRequestModel>>,
-    currency_mint_repo: Arc<dyn orm::Repository<orm::models::CurrencyMintModel>>,
+    currency_mint_repo: Arc<dyn CurrencyMintRepository>,
     // Digital Goods
     goods_repo: Arc<dyn GoodsRepository>,
     purchase_repo: Arc<dyn PurchaseRepository>,
@@ -644,6 +644,8 @@ async fn start_node(
         shuffling_repo,
         // Account Lease (1个)
         account_lease_repo,
+        // Public Key
+        Arc::clone(&public_key_repo),
     ));
 
     // 创建区块奖励应用器（含guaranteed_balance更新）
