@@ -6413,8 +6413,8 @@ impl PgCurrencyFounderRepository {
 #[async_trait]
 impl Repository<CurrencyFounderModel> for PgCurrencyFounderRepository {
     async fn insert(&self, m: &CurrencyFounderModel) -> RepositoryResult<()> {
-        sqlx::query(r#"INSERT INTO "CURRENCY_FOUNDER" ("CURRENCY_ID", "ACCOUNT_ID", "AMOUNT", "HEIGHT") VALUES ($1, $2, $3, $4)"#)
-            .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height)
+        sqlx::query(r#"INSERT INTO "CURRENCY_FOUNDER" ("CURRENCY_ID", "ACCOUNT_ID", "AMOUNT", "HEIGHT", "LATEST") VALUES ($1, $2, $3, $4, $5)"#)
+            .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height).bind(m.latest)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }

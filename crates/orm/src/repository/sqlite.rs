@@ -6475,8 +6475,8 @@ impl SqliteCurrencyFounderRepository {
 #[async_trait]
 impl Repository<CurrencyFounderModel> for SqliteCurrencyFounderRepository {
     async fn insert(&self, m: &CurrencyFounderModel) -> RepositoryResult<()> {
-        sqlx::query("INSERT INTO currency_founder (currency_id, account_id, amount, height) VALUES (?, ?, ?, ?)")
-            .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height)
+        sqlx::query("INSERT INTO currency_founder (currency_id, account_id, amount, height, latest) VALUES (?, ?, ?, ?, ?)")
+            .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height).bind(m.latest)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
