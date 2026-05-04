@@ -379,8 +379,8 @@ impl Repository<ShufflingDataModel> for SqliteShufflingDataRepository {
     async fn insert(&self, model: &ShufflingDataModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO shuffling_data (shuffling_id, account_id, data, transaction_height)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO shuffling_data (shuffling_id, account_id, data, transaction_timestamp, height)
+            VALUES (?, ?, ?, ?, ?)
             "#,
         )
         .bind(model.shuffling_id)
@@ -3025,8 +3025,9 @@ impl Repository<TaggedDataModel> for SqliteTaggedDataRepository {
             r#"
             INSERT INTO tagged_data (
                 id, account_id, name, description, tags, parsed_tags, type,
-                data, is_text, filename, channel, block_transaction_height, latest
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                data, is_text, filename, channel, block_timestamp,
+                transaction_timestamp, height, latest
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(data.id)
@@ -3555,10 +3556,10 @@ impl Repository<PurchaseModel> for SqlitePurchaseRepository {
             r#"
             INSERT INTO purchase (
                 id, buyer_id, goods_id, seller_id, quantity, price, deadline,
-                note, nonce, pending, goods, goods_nonce, goods_is_text,
+                note, nonce, timestamp, pending, goods, goods_nonce, goods_is_text,
                 refund_note, refund_nonce, has_feedback_notes, has_public_feedbacks,
                 discount, refund, height, latest
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(purchase.id)
@@ -4404,8 +4405,8 @@ impl Repository<TaggedTimestampModel> for SqliteTaggedTimestampRepository {
     async fn insert(&self, ts: &TaggedTimestampModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO tagged_timestamp (id, account_id, tag, height, latest)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO tagged_timestamp (id, account_id, tag, timestamp, height, latest)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(ts.id)
@@ -4838,8 +4839,8 @@ impl Repository<ExchangeRequestModel> for SqliteExchangeRequestRepository {
     async fn insert(&self, request: &ExchangeRequestModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO exchange_request (id, account_id, currency_id, units, rate, is_buy, height)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO exchange_request (id, account_id, currency_id, units, rate, is_buy, timestamp, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(request.id)
@@ -5679,8 +5680,8 @@ impl Repository<AssetDividendModel> for SqliteAssetDividendRepository {
     async fn insert(&self, model: &AssetDividendModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO asset_dividend (id, asset_id, amount, dividend_height, total_dividend, num_accounts, height)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO asset_dividend (id, asset_id, amount, dividend_height, total_dividend, num_accounts, timestamp, height)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(model.id)
@@ -6049,8 +6050,8 @@ impl Repository<CoinTradeFxtModel> for SqliteCoinTradeFxtRepository {
     async fn insert(&self, model: &CoinTradeFxtModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO coin_trade_fxt (chain_id, exchange_id, account_id, block_id, height, exchange_quantity, exchange_price, order_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO coin_trade_fxt (chain_id, exchange_id, account_id, block_id, height, timestamp, exchange_quantity, exchange_price, order_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(model.chain_id)
@@ -6408,7 +6409,7 @@ impl Repository<HubModel> for SqliteHubRepository {
             .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn update(&self, m: &HubModel) -> RepositoryResult<()> {
-        sqlx::query("UPDATE hub SET account_id=?, uris=?, min_fee_per_byte=?, timestamp=?, height=? WHERE db_id=?")
+        sqlx::query("UPDATE hub SET account_id=?, uris=?, min_fee_per_byte=?, height=? WHERE db_id=?")
             .bind(m.account_id).bind(&m.uris).bind(m.min_fee_per_byte).bind(m.height).bind(m.db_id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
@@ -6622,7 +6623,7 @@ impl Repository<ReferencedTransactionModel> for SqliteReferencedTransactionRepos
     }
 
     async fn update(&self, m: &ReferencedTransactionModel) -> RepositoryResult<()> {
-        sqlx::query("UPDATE referenced_transaction SET transaction_id=$1, referenced_transaction_id=$2 WHERE db_id=$3")
+        sqlx::query("UPDATE referenced_transaction SET transaction_id=?, referenced_transaction_id=? WHERE db_id=?")
             .bind(m.transaction_id).bind(m.referenced_transaction_id).bind(m.db_id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
