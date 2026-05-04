@@ -421,6 +421,13 @@ pub trait CurrencySupplyRepository: Repository<CurrencySupplyModel> {
     async fn soft_delete_by_currency(&self, currency_id: i64) -> RepositoryResult<()>;
 }
 
+/// Exchange Repository (EXCHANGE表)
+#[async_trait]
+pub trait ExchangeRepository: Repository<ExchangeModel> {
+    async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<ExchangeModel>>;
+    async fn find_by_offer(&self, transaction_id: i64, offer_id: i64) -> RepositoryResult<Option<ExchangeModel>>;
+}
+
 /// Prunable Message Repository (PRUNABLE_MESSAGE表)
 #[async_trait]
 pub trait PrunableMessageRepository: Repository<PrunableMessageModel> {

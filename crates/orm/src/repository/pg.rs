@@ -34,7 +34,7 @@ impl PgShufflingDataRepository {
 impl Repository<ShufflingDataModel> for PgShufflingDataRepository {
     async fn insert(&self, model: &ShufflingDataModel) -> RepositoryResult<()> {
         sqlx::query(
-            "INSERT INTO shuffling_data (shuffling_id, account_id, data, transaction_timestamp, height) VALUES ($1, $2, $3, $4, $5)"
+            r#"INSERT INTO shuffling_data ("SHUFFLING_ID", "ACCOUNT_ID", "DATA", "TRANSACTION_TIMESTAMP", "HEIGHT") VALUES ($1, $2, $3, $4, $5)"#
         )
         .bind(model.shuffling_id)
         .bind(model.account_id)
@@ -49,7 +49,7 @@ impl Repository<ShufflingDataModel> for PgShufflingDataRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<ShufflingDataModel>> {
         let record = sqlx::query_as::<_, ShufflingDataModel>(
-            "SELECT * FROM shuffling_data WHERE db_id = $1"
+            r#"SELECT * FROM shuffling_data WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -60,7 +60,7 @@ impl Repository<ShufflingDataModel> for PgShufflingDataRepository {
 
     async fn update(&self, model: &ShufflingDataModel) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE shuffling_data SET shuffling_id = $1, account_id = $2, data = $3, transaction_timestamp = $4, height = $5 WHERE db_id = $6"
+            r#"UPDATE shuffling_data SET "SHUFFLING_ID" = $1, "ACCOUNT_ID" = $2, "DATA" = $3, "TRANSACTION_TIMESTAMP" = $4, "HEIGHT" = $5 WHERE "DB_ID" = $6"#
         )
         .bind(model.shuffling_id)
         .bind(model.account_id)
@@ -75,7 +75,7 @@ impl Repository<ShufflingDataModel> for PgShufflingDataRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM shuffling_data WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM shuffling_data WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -87,7 +87,7 @@ impl Repository<ShufflingDataModel> for PgShufflingDataRepository {
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, ShufflingDataModel>(
-            "SELECT * FROM shuffling_data ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM shuffling_data ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(lim)
         .bind(off)
@@ -110,7 +110,7 @@ impl Repository<ShufflingDataModel> for PgShufflingDataRepository {
 impl ShufflingDataRepository for PgShufflingDataRepository {
     async fn find_by_shuffling(&self, shuffling_id: i64) -> RepositoryResult<Vec<ShufflingDataModel>> {
         let records = sqlx::query_as::<_, ShufflingDataModel>(
-            "SELECT * FROM shuffling_data WHERE shuffling_id = $1"
+            r#"SELECT * FROM shuffling_data WHERE "SHUFFLING_ID" = $1"#
         )
         .bind(shuffling_id)
         .fetch_all(&self.pool)
@@ -135,8 +135,8 @@ impl Repository<ShufflingParticipantModel> for PgShufflingParticipantRepository 
     async fn insert(&self, model: &ShufflingParticipantModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"INSERT INTO shuffling_participant (
-                shuffling_id, account_id, next_account_id, participant_index,
-                state, blame_data, key_seeds, data_transaction_full_hash, height, latest
+                "SHUFFLING_ID", "ACCOUNT_ID", "NEXT_ACCOUNT_ID", "PARTICIPANT_INDEX",
+                "STATE", "BLAME_DATA", "KEY_SEEDS", "DATA_TRANSACTION_FULL_HASH", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"#
         )
         .bind(model.shuffling_id)
@@ -157,7 +157,7 @@ impl Repository<ShufflingParticipantModel> for PgShufflingParticipantRepository 
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<ShufflingParticipantModel>> {
         let record = sqlx::query_as::<_, ShufflingParticipantModel>(
-            "SELECT * FROM shuffling_participant WHERE db_id = $1"
+            r#"SELECT * FROM shuffling_participant WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -169,10 +169,10 @@ impl Repository<ShufflingParticipantModel> for PgShufflingParticipantRepository 
     async fn update(&self, model: &ShufflingParticipantModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"UPDATE shuffling_participant SET
-                shuffling_id = $1, account_id = $2, next_account_id = $3,
-                participant_index = $4, state = $5, blame_data = $6,
-                key_seeds = $7, data_transaction_full_hash = $8, height = $9, latest = $10
-            WHERE db_id = $11"#
+                "SHUFFLING_ID" = $1, "ACCOUNT_ID" = $2, "NEXT_ACCOUNT_ID" = $3,
+                "PARTICIPANT_INDEX" = $4, "STATE" = $5, "BLAME_DATA" = $6,
+                "KEY_SEEDS" = $7, "DATA_TRANSACTION_FULL_HASH" = $8, "HEIGHT" = $9, "LATEST" = $10
+            WHERE "DB_ID" = $11"#
         )
         .bind(model.shuffling_id)
         .bind(model.account_id)
@@ -192,7 +192,7 @@ impl Repository<ShufflingParticipantModel> for PgShufflingParticipantRepository 
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM shuffling_participant WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM shuffling_participant WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -204,7 +204,7 @@ impl Repository<ShufflingParticipantModel> for PgShufflingParticipantRepository 
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, ShufflingParticipantModel>(
-            "SELECT * FROM shuffling_participant WHERE latest = true ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM shuffling_participant WHERE "LATEST" = true ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(lim)
         .bind(off)
@@ -215,7 +215,7 @@ impl Repository<ShufflingParticipantModel> for PgShufflingParticipantRepository 
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM shuffling_participant WHERE latest = true")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM shuffling_participant WHERE "LATEST" = true"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -227,7 +227,7 @@ impl Repository<ShufflingParticipantModel> for PgShufflingParticipantRepository 
 impl ShufflingParticipantRepository for PgShufflingParticipantRepository {
     async fn find_by_shuffling(&self, shuffling_id: i64) -> RepositoryResult<Vec<ShufflingParticipantModel>> {
         let records = sqlx::query_as::<_, ShufflingParticipantModel>(
-            "SELECT * FROM shuffling_participant WHERE shuffling_id = $1 AND latest = true"
+            r#"SELECT * FROM shuffling_participant WHERE "SHUFFLING_ID" = $1 AND "LATEST" = true"#
         )
         .bind(shuffling_id)
         .fetch_all(&self.pool)
@@ -238,7 +238,7 @@ impl ShufflingParticipantRepository for PgShufflingParticipantRepository {
 
     async fn find_by_account_and_shuffling(&self, account_id: i64, shuffling_id: i64) -> RepositoryResult<Option<ShufflingParticipantModel>> {
         let record = sqlx::query_as::<_, ShufflingParticipantModel>(
-            "SELECT * FROM shuffling_participant WHERE account_id = $1 AND shuffling_id = $2 AND latest = true LIMIT 1"
+            r#"SELECT * FROM shuffling_participant WHERE "ACCOUNT_ID" = $1 AND "SHUFFLING_ID" = $2 AND "LATEST" = true LIMIT 1"#
         )
         .bind(account_id)
         .bind(shuffling_id)
@@ -252,7 +252,7 @@ impl ShufflingParticipantRepository for PgShufflingParticipantRepository {
 #[async_trait]
 impl BlockRepository for PgBlockRepository {
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height = $1").bind(height)
+        let record = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block WHERE "HEIGHT" = $1"#).bind(height)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -260,7 +260,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_by_id_column(&self, id: i64) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE id = $1").bind(id)
+        let record = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block WHERE "ID" = $1"#).bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -268,7 +268,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_by_hash(&self, hash: &[u8]) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE payload_hash = $1 OR generation_signature = $1").bind(hash)
+        let record = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block WHERE "PAYLOAD_HASH" = $1 OR "GENERATION_SIGNATURE" = $1"#).bind(hash)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -276,7 +276,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_latest(&self) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block ORDER BY height DESC LIMIT 1")
+        let record = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block ORDER BY "HEIGHT" DESC LIMIT 1"#)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -284,7 +284,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_range(&self, start_height: i32, end_height: i32) -> RepositoryResult<Vec<BlockModel>> {
-        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height BETWEEN $1 AND $2 ORDER BY height ASC").bind(start_height).bind(end_height)
+        let records = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block WHERE "HEIGHT" BETWEEN $1 AND $2 ORDER BY "HEIGHT" ASC"#).bind(start_height).bind(end_height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -292,7 +292,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_by_generator(&self, generator_id: i64) -> RepositoryResult<Vec<BlockModel>> {
-        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE generator_id = $1 ORDER BY height DESC").bind(generator_id)
+        let records = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block WHERE "GENERATOR_ID" = $1 ORDER BY "HEIGHT" DESC"#).bind(generator_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -300,7 +300,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn get_height(&self) -> RepositoryResult<i32> {
-        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block ORDER BY height DESC LIMIT 1")
+        let record = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block ORDER BY "HEIGHT" DESC LIMIT 1"#)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -308,7 +308,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn get_block_id_at_height(&self, height: i32) -> RepositoryResult<Option<i64>> {
-        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height = $1").bind(height)
+        let record = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block WHERE "HEIGHT" = $1"#).bind(height)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -317,7 +317,7 @@ impl BlockRepository for PgBlockRepository {
 
     async fn has_block(&self, id: i64) -> RepositoryResult<bool> {
         let count: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM block WHERE id = $1"
+            r#"SELECT COUNT(*) FROM block WHERE "ID" = $1"#
         )
         .bind(id)
         .fetch_one(&self.pool)
@@ -333,7 +333,7 @@ impl BlockRepository for PgBlockRepository {
         }
         let height = block.unwrap().height;
         
-        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height > $1 ORDER BY height ASC LIMIT $2").bind(height).bind(limit as i64)
+        let records = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block WHERE "HEIGHT" > $1 ORDER BY "HEIGHT" ASC LIMIT $2"#).bind(height).bind(limit as i64)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -342,7 +342,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn update_next_block_id(&self, previous_block_id: i64, next_block_id: i64) -> RepositoryResult<()> {
-        sqlx::query("UPDATE block SET next_block_id = $1 WHERE id = $2")
+        sqlx::query(r#"UPDATE block SET "NEXT_BLOCK_ID" = $1 WHERE "ID" = $2"#)
             .bind(next_block_id)
             .bind(previous_block_id)
             .execute(&self.pool)
@@ -355,7 +355,7 @@ impl BlockRepository for PgBlockRepository {
         let blocks = self.find_blocks_after_height(height).await?;
         
         for block in &blocks {
-            sqlx::query("DELETE FROM block WHERE id = $1")
+            sqlx::query(r#"DELETE FROM block WHERE "ID" = $1"#)
                 .bind(block.id)
                 .execute(&self.pool)
                 .await
@@ -363,7 +363,7 @@ impl BlockRepository for PgBlockRepository {
         }
         
         if let Some(last_block) = blocks.last() {
-            sqlx::query("UPDATE block SET next_block_id = NULL WHERE id = $1")
+            sqlx::query(r#"UPDATE block SET "NEXT_BLOCK_ID" = NULL WHERE "ID" = $1"#)
                 .bind(last_block.previous_block_id)
                 .execute(&self.pool)
                 .await
@@ -374,7 +374,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn find_blocks_after_height(&self, height: i32) -> RepositoryResult<Vec<BlockModel>> {
-        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE height > $1 ORDER BY height ASC").bind(height)
+        let records = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block WHERE "HEIGHT" > $1 ORDER BY "HEIGHT" ASC"#).bind(height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -387,7 +387,7 @@ impl BlockRepository for PgBlockRepository {
         }
 
         for &db_id in db_ids {
-            sqlx::query("DELETE FROM block WHERE db_id = $1")
+            sqlx::query(r#"DELETE FROM block WHERE "DB_ID" = $1"#)
                 .bind(db_id)
                 .execute(&self.pool)
                 .await
@@ -400,10 +400,10 @@ impl BlockRepository for PgBlockRepository {
         sqlx::query(
             r#"
             INSERT INTO block (
-                id, version, timestamp, previous_block_id, total_amount,
-                total_fee, payload_length, previous_block_hash, cumulative_difficulty,
-                base_target, next_block_id, height, generation_signature,
-                block_signature, payload_hash, generator_id
+                "ID", "VERSION", timestamp, "PREVIOUS_BLOCK_ID", "TOTAL_AMOUNT",
+                "TOTAL_FEE", "PAYLOAD_LENGTH", "PREVIOUS_BLOCK_HASH", "CUMULATIVE_DIFFICULTY",
+                "BASE_TARGET", "NEXT_BLOCK_ID", "HEIGHT", "GENERATION_SIGNATURE",
+                "BLOCK_SIGNATURE", "PAYLOAD_HASH", "GENERATOR_ID"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             "#,
         )
@@ -430,7 +430,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn update_next_block_id_tx(&self, previous_block_id: i64, next_block_id: i64, tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
-        sqlx::query("UPDATE block SET next_block_id = $1 WHERE id = $2")
+        sqlx::query(r#"UPDATE block SET "NEXT_BLOCK_ID" = $1 WHERE "ID" = $2"#)
             .bind(next_block_id)
             .bind(previous_block_id)
             .execute(&mut **tx)
@@ -440,7 +440,7 @@ impl BlockRepository for PgBlockRepository {
     }
 
     async fn delete_by_db_id_tx(&self, db_id: i64, tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM block WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM block WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&mut **tx)
             .await
@@ -455,10 +455,10 @@ impl Repository<BlockModel> for PgBlockRepository {
         sqlx::query(
             r#"
             INSERT INTO block (
-                id, version, timestamp, previous_block_id, total_amount,
-                total_fee, payload_length, previous_block_hash, cumulative_difficulty,
-                base_target, next_block_id, height, generation_signature,
-                block_signature, payload_hash, generator_id
+                "ID", "VERSION", timestamp, "PREVIOUS_BLOCK_ID", "TOTAL_AMOUNT",
+                "TOTAL_FEE", "PAYLOAD_LENGTH", "PREVIOUS_BLOCK_HASH", "CUMULATIVE_DIFFICULTY",
+                "BASE_TARGET", "NEXT_BLOCK_ID", "HEIGHT", "GENERATION_SIGNATURE",
+                "BLOCK_SIGNATURE", "PAYLOAD_HASH", "GENERATOR_ID"
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
             )
@@ -487,7 +487,7 @@ impl Repository<BlockModel> for PgBlockRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<BlockModel>> {
-        let record = sqlx::query_as::<_, BlockModel>("SELECT * FROM block WHERE db_id = $1").bind(db_id)
+        let record = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block WHERE "DB_ID" = $1"#).bind(db_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -498,13 +498,13 @@ impl Repository<BlockModel> for PgBlockRepository {
         sqlx::query(
             r#"
             UPDATE block SET
-                version = $2, timestamp = $3, previous_block_id = $4,
-                total_amount = $5, total_fee = $6, payload_length = $7,
-                previous_block_hash = $8, cumulative_difficulty = $9,
-                base_target = $10, next_block_id = $11, height = $12,
-                generation_signature = $13, block_signature = $14,
-                payload_hash = $15, generator_id = $16
-            WHERE db_id = $1
+                "VERSION" = $2, timestamp = $3, "PREVIOUS_BLOCK_ID" = $4,
+                "TOTAL_AMOUNT" = $5, "TOTAL_FEE" = $6, "PAYLOAD_LENGTH" = $7,
+                "PREVIOUS_BLOCK_HASH" = $8, "CUMULATIVE_DIFFICULTY" = $9,
+                "BASE_TARGET" = $10, "NEXT_BLOCK_ID" = $11, "HEIGHT" = $12,
+                "GENERATION_SIGNATURE" = $13, "BLOCK_SIGNATURE" = $14,
+                "PAYLOAD_HASH" = $15, "GENERATOR_ID" = $16
+            WHERE "DB_ID" = $1
             "#,
         )
         .bind(block.db_id)
@@ -530,7 +530,7 @@ impl Repository<BlockModel> for PgBlockRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM block WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM block WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -541,7 +541,7 @@ impl Repository<BlockModel> for PgBlockRepository {
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<BlockModel>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let records = sqlx::query_as::<_, BlockModel>("SELECT * FROM block ORDER BY height DESC LIMIT $1 OFFSET $2").bind(limit).bind(offset)
+        let records = sqlx::query_as::<_, BlockModel>(r#"SELECT * FROM block ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#).bind(limit).bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -571,7 +571,7 @@ impl PgPublicKeyRepository {
 impl PublicKeyRepository for PgPublicKeyRepository {
     async fn find_latest_by_account_id(&self, account_id: i64) -> RepositoryResult<Option<AccountPublicKey>> {
         let row: Option<(Vec<u8>, i32)> = sqlx::query_as(
-            "SELECT public_key, height FROM public_key WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC LIMIT 1"
+            r#"SELECT public_key, "HEIGHT" FROM public_key WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT 1"#
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -593,7 +593,7 @@ impl PublicKeyRepository for PgPublicKeyRepository {
     async fn insert(&self, pk: &AccountPublicKey) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO public_key (account_id, public_key, height)
+            INSERT INTO public_key ("ACCOUNT_ID", public_key, "HEIGHT")
             VALUES ($1, $2, $3)
             "#,
         )
@@ -622,7 +622,7 @@ impl Repository<AccountPropertyModel> for PgAccountPropertyRepository {
     async fn insert(&self, model: &AccountPropertyModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO account_property (id, recipient_id, setter_id, property, value, height, latest)
+            INSERT INTO account_property ("ID", "RECIPIENT_ID", "SETTER_ID", "PROPERTY", "VALUE", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
         )
@@ -641,7 +641,7 @@ impl Repository<AccountPropertyModel> for PgAccountPropertyRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountPropertyModel>> {
         let record = sqlx::query_as::<_, AccountPropertyModel>(
-            "SELECT * FROM account_property WHERE db_id = $1"
+            r#"SELECT * FROM account_property WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -654,9 +654,9 @@ impl Repository<AccountPropertyModel> for PgAccountPropertyRepository {
         sqlx::query(
             r#"
             UPDATE account_property SET
-                recipient_id = $1, setter_id = $2, property = $3, value = $4,
-                height = $5, latest = $6
-            WHERE db_id = $7
+                "RECIPIENT_ID" = $1, "SETTER_ID" = $2, "PROPERTY" = $3, "VALUE" = $4,
+                "HEIGHT" = $5, "LATEST" = $6
+            WHERE "DB_ID" = $7
             "#,
         )
         .bind(model.recipient_id)
@@ -673,7 +673,7 @@ impl Repository<AccountPropertyModel> for PgAccountPropertyRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM account_property WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM account_property WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -683,7 +683,7 @@ impl Repository<AccountPropertyModel> for PgAccountPropertyRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountPropertyModel>> {
         let records = sqlx::query_as::<_, AccountPropertyModel>(
-            "SELECT * FROM account_property ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM account_property ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -706,7 +706,7 @@ impl Repository<AccountPropertyModel> for PgAccountPropertyRepository {
 impl AccountPropertyRepository for PgAccountPropertyRepository {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountPropertyModel>> {
         let records = sqlx::query_as::<_, AccountPropertyModel>(
-            "SELECT * FROM account_property WHERE recipient_id = $1 AND latest = TRUE"
+            r#"SELECT * FROM account_property WHERE "RECIPIENT_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -717,7 +717,7 @@ impl AccountPropertyRepository for PgAccountPropertyRepository {
 
     async fn find_by_property(&self, account_id: i64, property: &str) -> RepositoryResult<Option<AccountPropertyModel>> {
         let record = sqlx::query_as::<_, AccountPropertyModel>(
-            "SELECT * FROM account_property WHERE recipient_id = $1 AND property = $2 AND latest = TRUE"
+            r#"SELECT * FROM account_property WHERE "RECIPIENT_ID" = $1 AND "PROPERTY" = $2 AND "LATEST" = TRUE"#
         )
         .bind(account_id)
         .bind(property)
@@ -729,7 +729,7 @@ impl AccountPropertyRepository for PgAccountPropertyRepository {
 
     async fn upsert(&self, model: &AccountPropertyModel) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE account_property SET latest = FALSE WHERE recipient_id = $1 AND property = $2 AND latest = TRUE"
+            r#"UPDATE account_property SET "LATEST" = FALSE WHERE "RECIPIENT_ID" = $1 AND "PROPERTY" = $2 AND "LATEST" = TRUE"#
         )
         .bind(model.recipient_id)
         .bind(&model.property)
@@ -741,7 +741,7 @@ impl AccountPropertyRepository for PgAccountPropertyRepository {
     }
 
     async fn delete_by_id(&self, id: i64) -> RepositoryResult<()> {
-        sqlx::query("UPDATE account_property SET latest = FALSE WHERE id = $1 AND latest = TRUE")
+        sqlx::query(r#"UPDATE account_property SET "LATEST" = FALSE WHERE "ID" = $1 AND "LATEST" = TRUE"#)
             .bind(id)
             .execute(&self.pool)
             .await
@@ -750,7 +750,7 @@ impl AccountPropertyRepository for PgAccountPropertyRepository {
     }
 
     async fn soft_delete_by_id(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("UPDATE account_property SET latest = FALSE WHERE db_id = $1 AND latest = TRUE")
+        sqlx::query(r#"UPDATE account_property SET "LATEST" = FALSE WHERE "DB_ID" = $1 AND "LATEST" = TRUE"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -775,9 +775,9 @@ impl Repository<AccountControlPhasingModel> for PgAccountControlPhasingRepositor
         sqlx::query(
             r#"
             INSERT INTO account_control_phasing (
-                account_id, whitelist, voting_model, quorum, min_balance,
-                holding_id, min_balance_model, max_fees, min_duration,
-                max_duration, height, latest
+                "ACCOUNT_ID", "WHITELIST", "VOTING_MODEL", "QUORUM", "MIN_BALANCE",
+                "HOLDING_ID", "MIN_BALANCE_MODEL", "MAX_FEES", "MIN_DURATION",
+                "MAX_DURATION", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
         )
@@ -801,7 +801,7 @@ impl Repository<AccountControlPhasingModel> for PgAccountControlPhasingRepositor
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountControlPhasingModel>> {
         let record = sqlx::query_as::<_, AccountControlPhasingModel>(
-            "SELECT * FROM account_control_phasing WHERE db_id = $1"
+            r#"SELECT * FROM account_control_phasing WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -814,11 +814,11 @@ impl Repository<AccountControlPhasingModel> for PgAccountControlPhasingRepositor
         sqlx::query(
             r#"
             UPDATE account_control_phasing SET
-                account_id = $1, whitelist = $2, voting_model = $3, quorum = $4,
-                min_balance = $5, holding_id = $6, min_balance_model = $7,
-                max_fees = $8, min_duration = $9, max_duration = $10,
-                height = $11, latest = $12
-            WHERE db_id = $13
+                "ACCOUNT_ID" = $1, "WHITELIST" = $2, "VOTING_MODEL" = $3, "QUORUM" = $4,
+                "MIN_BALANCE" = $5, "HOLDING_ID" = $6, "MIN_BALANCE_MODEL" = $7,
+                "MAX_FEES" = $8, "MIN_DURATION" = $9, "MAX_DURATION" = $10,
+                "HEIGHT" = $11, "LATEST" = $12
+            WHERE "DB_ID" = $13
             "#,
         )
         .bind(model.account_id)
@@ -841,7 +841,7 @@ impl Repository<AccountControlPhasingModel> for PgAccountControlPhasingRepositor
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM account_control_phasing WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM account_control_phasing WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -851,7 +851,7 @@ impl Repository<AccountControlPhasingModel> for PgAccountControlPhasingRepositor
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountControlPhasingModel>> {
         let records = sqlx::query_as::<_, AccountControlPhasingModel>(
-            "SELECT * FROM account_control_phasing ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM account_control_phasing ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -874,7 +874,7 @@ impl Repository<AccountControlPhasingModel> for PgAccountControlPhasingRepositor
 impl AccountControlPhasingRepository for PgAccountControlPhasingRepository {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Option<AccountControlPhasingModel>> {
         let record = sqlx::query_as::<_, AccountControlPhasingModel>(
-            "SELECT * FROM account_control_phasing WHERE account_id = $1 AND latest = TRUE"
+            r#"SELECT * FROM account_control_phasing WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -885,7 +885,7 @@ impl AccountControlPhasingRepository for PgAccountControlPhasingRepository {
 
     async fn upsert(&self, model: &AccountControlPhasingModel) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE account_control_phasing SET latest = FALSE WHERE account_id = $1 AND latest = TRUE"
+            r#"UPDATE account_control_phasing SET "LATEST" = FALSE WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(model.account_id)
         .execute(&self.pool)
@@ -911,7 +911,7 @@ impl Repository<AccountInfoModel> for PgAccountInfoRepository {
     async fn insert(&self, model: &AccountInfoModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO account_info (account_id, name, description, height, latest)
+            INSERT INTO account_info ("ACCOUNT_ID", "NAME", "DESCRIPTION", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5)
             "#,
         )
@@ -928,7 +928,7 @@ impl Repository<AccountInfoModel> for PgAccountInfoRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountInfoModel>> {
         let record = sqlx::query_as::<_, AccountInfoModel>(
-            "SELECT * FROM account_info WHERE db_id = $1"
+            r#"SELECT * FROM account_info WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -941,8 +941,8 @@ impl Repository<AccountInfoModel> for PgAccountInfoRepository {
         sqlx::query(
             r#"
             UPDATE account_info SET
-                name = $1, description = $2, height = $3, latest = $4
-            WHERE db_id = $5
+                "NAME" = $1, "DESCRIPTION" = $2, "HEIGHT" = $3, "LATEST" = $4
+            WHERE "DB_ID" = $5
             "#,
         )
         .bind(&model.name)
@@ -957,7 +957,7 @@ impl Repository<AccountInfoModel> for PgAccountInfoRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM account_info WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM account_info WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -967,7 +967,7 @@ impl Repository<AccountInfoModel> for PgAccountInfoRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountInfoModel>> {
         let records = sqlx::query_as::<_, AccountInfoModel>(
-            "SELECT * FROM account_info ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM account_info ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -990,7 +990,7 @@ impl Repository<AccountInfoModel> for PgAccountInfoRepository {
 impl AccountInfoRepository for PgAccountInfoRepository {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Option<AccountInfoModel>> {
         let record = sqlx::query_as::<_, AccountInfoModel>(
-            "SELECT * FROM account_info WHERE account_id = $1 AND latest = TRUE"
+            r#"SELECT * FROM account_info WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -1001,7 +1001,7 @@ impl AccountInfoRepository for PgAccountInfoRepository {
 
     async fn upsert(&self, model: &AccountInfoModel) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE account_info SET latest = FALSE WHERE account_id = $1 AND latest = TRUE"
+            r#"UPDATE account_info SET "LATEST" = FALSE WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(model.account_id)
         .execute(&self.pool)
@@ -1028,9 +1028,9 @@ impl Repository<AccountLeaseModel> for PgAccountLeaseRepository {
         sqlx::query(
             r#"
             INSERT INTO account_lease (
-                lessor_id, current_leasing_height_from, current_leasing_height_to,
-                current_lessee_id, next_leasing_height_from, next_leasing_height_to,
-                next_lessee_id, height, latest
+                "LESSOR_ID", "CURRENT_LEASING_HEIGHT_FROM", "CURRENT_LEASING_HEIGHT_TO",
+                "CURRENT_LESSEE_ID", "NEXT_LEASING_HEIGHT_FROM", "NEXT_LEASING_HEIGHT_TO",
+                "NEXT_LESSEE_ID", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
@@ -1051,7 +1051,7 @@ impl Repository<AccountLeaseModel> for PgAccountLeaseRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountLeaseModel>> {
         let record = sqlx::query_as::<_, AccountLeaseModel>(
-            "SELECT * FROM account_lease WHERE db_id = $1"
+            r#"SELECT * FROM account_lease WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -1064,11 +1064,11 @@ impl Repository<AccountLeaseModel> for PgAccountLeaseRepository {
         sqlx::query(
             r#"
             UPDATE account_lease SET
-                current_leasing_height_from = $1, current_leasing_height_to = $2,
-                current_lessee_id = $3, next_leasing_height_from = $4,
-                next_leasing_height_to = $5, next_lessee_id = $6,
-                height = $7, latest = $8
-            WHERE db_id = $9
+                "CURRENT_LEASING_HEIGHT_FROM" = $1, "CURRENT_LEASING_HEIGHT_TO" = $2,
+                "CURRENT_LESSEE_ID" = $3, "NEXT_LEASING_HEIGHT_FROM" = $4,
+                "NEXT_LEASING_HEIGHT_TO" = $5, "NEXT_LESSEE_ID" = $6,
+                "HEIGHT" = $7, "LATEST" = $8
+            WHERE "DB_ID" = $9
             "#,
         )
         .bind(model.current_leasing_height_from)
@@ -1087,7 +1087,7 @@ impl Repository<AccountLeaseModel> for PgAccountLeaseRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM account_lease WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM account_lease WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -1097,7 +1097,7 @@ impl Repository<AccountLeaseModel> for PgAccountLeaseRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountLeaseModel>> {
         let records = sqlx::query_as::<_, AccountLeaseModel>(
-            "SELECT * FROM account_lease ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM account_lease ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -1120,7 +1120,7 @@ impl Repository<AccountLeaseModel> for PgAccountLeaseRepository {
 impl AccountLeaseRepository for PgAccountLeaseRepository {
     async fn find_by_account(&self, lessor_id: i64) -> RepositoryResult<Option<AccountLeaseModel>> {
         let record = sqlx::query_as::<_, AccountLeaseModel>(
-            "SELECT * FROM account_lease WHERE lessor_id = $1 AND latest = TRUE"
+            r#"SELECT * FROM account_lease WHERE "LESSOR_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(lessor_id)
         .fetch_optional(&self.pool)
@@ -1131,7 +1131,7 @@ impl AccountLeaseRepository for PgAccountLeaseRepository {
 
     async fn upsert(&self, model: &AccountLeaseModel) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE account_lease SET latest = FALSE WHERE lessor_id = $1 AND latest = TRUE"
+            r#"UPDATE account_lease SET "LATEST" = FALSE WHERE "LESSOR_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(model.lessor_id)
         .execute(&self.pool)
@@ -1156,7 +1156,7 @@ impl PgTradeRepository {
 impl TradeRepository for PgTradeRepository {
     async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<TradeModel>> {
         let records = sqlx::query_as::<_, TradeModel>(
-            "SELECT * FROM trade WHERE asset_id = $1 ORDER BY height DESC, timestamp DESC LIMIT $2"
+            r#"SELECT * FROM trade WHERE "ASSET_ID" = $1 ORDER BY "HEIGHT" DESC, timestamp DESC LIMIT $2"#
         )
         .bind(asset_id)
         .bind(limit)
@@ -1168,7 +1168,7 @@ impl TradeRepository for PgTradeRepository {
 
     async fn find_by_ask_order(&self, ask_order_id: i64) -> RepositoryResult<Vec<TradeModel>> {
         let records = sqlx::query_as::<_, TradeModel>(
-            "SELECT * FROM trade WHERE ask_order_id = $1 ORDER BY height DESC"
+            r#"SELECT * FROM trade WHERE "ASK_ORDER_ID" = $1 ORDER BY "HEIGHT" DESC"#
         )
         .bind(ask_order_id)
         .fetch_all(&self.pool)
@@ -1179,7 +1179,7 @@ impl TradeRepository for PgTradeRepository {
 
     async fn find_by_bid_order(&self, bid_order_id: i64) -> RepositoryResult<Vec<TradeModel>> {
         let records = sqlx::query_as::<_, TradeModel>(
-            "SELECT * FROM trade WHERE bid_order_id = $1 ORDER BY height DESC"
+            r#"SELECT * FROM trade WHERE "BID_ORDER_ID" = $1 ORDER BY "HEIGHT" DESC"#
         )
         .bind(bid_order_id)
         .fetch_all(&self.pool)
@@ -1190,7 +1190,7 @@ impl TradeRepository for PgTradeRepository {
 
     async fn find_by_buyer(&self, buyer_id: i64, limit: i64) -> RepositoryResult<Vec<TradeModel>> {
         let records = sqlx::query_as::<_, TradeModel>(
-            "SELECT * FROM trade WHERE buyer_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM trade WHERE "BUYER_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(buyer_id)
         .bind(limit)
@@ -1202,7 +1202,7 @@ impl TradeRepository for PgTradeRepository {
 
     async fn find_by_seller(&self, seller_id: i64, limit: i64) -> RepositoryResult<Vec<TradeModel>> {
         let records = sqlx::query_as::<_, TradeModel>(
-            "SELECT * FROM trade WHERE seller_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM trade WHERE "SELLER_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(seller_id)
         .bind(limit)
@@ -1219,8 +1219,8 @@ impl Repository<TradeModel> for PgTradeRepository {
         sqlx::query(
             r#"
             INSERT INTO trade (
-                asset_id, block_id, ask_order_id, bid_order_id, ask_order_height,
-                bid_order_height, seller_id, buyer_id, is_buy, quantity, price, timestamp, height
+                "ASSET_ID", "BLOCK_ID", "ASK_ORDER_ID", "BID_ORDER_ID", "ASK_ORDER_HEIGHT",
+                "BID_ORDER_HEIGHT", "SELLER_ID", "BUYER_ID", "IS_BUY", "QUANTITY", "PRICE", timestamp, "HEIGHT"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             "#,
         )
@@ -1245,7 +1245,7 @@ impl Repository<TradeModel> for PgTradeRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TradeModel>> {
         let record = sqlx::query_as::<_, TradeModel>(
-            "SELECT * FROM trade WHERE db_id = $1"
+            r#"SELECT * FROM trade WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -1266,7 +1266,7 @@ impl Repository<TradeModel> for PgTradeRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, TradeModel>(
-            "SELECT * FROM trade ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM trade ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -1299,7 +1299,7 @@ impl PgGoodsRepository {
 impl GoodsRepository for PgGoodsRepository {
     async fn find_by_goods_id(&self, id: i64) -> RepositoryResult<Option<GoodsModel>> {
         let record = sqlx::query_as::<_, GoodsModel>(
-            "SELECT * FROM goods WHERE id = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM goods WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -1310,7 +1310,7 @@ impl GoodsRepository for PgGoodsRepository {
 
     async fn find_by_seller(&self, seller_id: i64, limit: i64) -> RepositoryResult<Vec<GoodsModel>> {
         let records = sqlx::query_as::<_, GoodsModel>(
-            "SELECT * FROM goods WHERE seller_id = $1 AND latest = TRUE AND delisted = FALSE ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM goods WHERE "SELLER_ID" = $1 AND "LATEST" = TRUE AND "DELISTED" = FALSE ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(seller_id)
         .bind(limit)
@@ -1322,7 +1322,7 @@ impl GoodsRepository for PgGoodsRepository {
 
     async fn find_in_stock(&self, limit: i64) -> RepositoryResult<Vec<GoodsModel>> {
         let records = sqlx::query_as::<_, GoodsModel>(
-            "SELECT * FROM goods WHERE latest = TRUE AND delisted = FALSE AND quantity > 0 ORDER BY height DESC LIMIT $1"
+            r#"SELECT * FROM goods WHERE "LATEST" = TRUE AND "DELISTED" = FALSE AND "QUANTITY" > 0 ORDER BY "HEIGHT" DESC LIMIT $1"#
         )
         .bind(limit)
         .fetch_all(&self.pool)
@@ -1332,7 +1332,7 @@ impl GoodsRepository for PgGoodsRepository {
     }
 
     async fn update_quantity(&self, goods_id: i64, quantity: i32) -> RepositoryResult<()> {
-        sqlx::query("UPDATE goods SET quantity = $1 WHERE id = $2 AND latest = TRUE")
+        sqlx::query(r#"UPDATE goods SET "QUANTITY" = $1 WHERE "ID" = $2 AND "LATEST" = TRUE"#)
             .bind(quantity)
             .bind(goods_id)
             .execute(&self.pool)
@@ -1342,7 +1342,7 @@ impl GoodsRepository for PgGoodsRepository {
     }
 
     async fn update_price(&self, goods_id: i64, price: i64) -> RepositoryResult<()> {
-        sqlx::query("UPDATE goods SET price = $1 WHERE id = $2 AND latest = TRUE")
+        sqlx::query(r#"UPDATE goods SET "PRICE" = $1 WHERE "ID" = $2 AND "LATEST" = TRUE"#)
             .bind(price)
             .bind(goods_id)
             .execute(&self.pool)
@@ -1352,7 +1352,7 @@ impl GoodsRepository for PgGoodsRepository {
     }
 
     async fn set_delisted(&self, goods_id: i64, delisted: bool) -> RepositoryResult<()> {
-        sqlx::query("UPDATE goods SET delisted = $1 WHERE id = $2 AND latest = TRUE")
+        sqlx::query(r#"UPDATE goods SET "DELISTED" = $1 WHERE "ID" = $2 AND "LATEST" = TRUE"#)
             .bind(delisted)
             .bind(goods_id)
             .execute(&self.pool)
@@ -1368,8 +1368,8 @@ impl Repository<GoodsModel> for PgGoodsRepository {
         sqlx::query(
             r#"
             INSERT INTO goods (
-                id, seller_id, name, description, parsed_tags, tags,
-                timestamp, quantity, price, delisted, height, latest, has_image
+                "ID", "SELLER_ID", "NAME", "DESCRIPTION", "PARSED_TAGS", "TAGS",
+                timestamp, "QUANTITY", "PRICE", "DELISTED", "HEIGHT", "LATEST", "HAS_IMAGE"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             "#,
         )
@@ -1393,7 +1393,7 @@ impl Repository<GoodsModel> for PgGoodsRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<GoodsModel>> {
-        let record = sqlx::query_as::<_, GoodsModel>("SELECT * FROM goods WHERE db_id = $1")
+        let record = sqlx::query_as::<_, GoodsModel>(r#"SELECT * FROM goods WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -1413,7 +1413,7 @@ impl Repository<GoodsModel> for PgGoodsRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, GoodsModel>(
-            "SELECT * FROM goods WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM goods WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -1424,7 +1424,7 @@ impl Repository<GoodsModel> for PgGoodsRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM goods WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM goods WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -1446,7 +1446,7 @@ impl PgCurrencyRepository {
 impl CurrencyRepository for PgCurrencyRepository {
     async fn find_by_currency_id(&self, id: i64) -> RepositoryResult<Option<CurrencyModel>> {
         let record = sqlx::query_as::<_, CurrencyModel>(
-            "SELECT * FROM currency WHERE id = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM currency WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -1457,7 +1457,7 @@ impl CurrencyRepository for PgCurrencyRepository {
 
     async fn find_by_code(&self, code: &str) -> RepositoryResult<Option<CurrencyModel>> {
         let record = sqlx::query_as::<_, CurrencyModel>(
-            "SELECT * FROM currency WHERE code = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM currency WHERE "CODE" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(code)
         .fetch_optional(&self.pool)
@@ -1468,7 +1468,7 @@ impl CurrencyRepository for PgCurrencyRepository {
 
     async fn find_by_owner(&self, account_id: i64) -> RepositoryResult<Vec<CurrencyModel>> {
         let records = sqlx::query_as::<_, CurrencyModel>(
-            "SELECT * FROM currency WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC"
+            r#"SELECT * FROM currency WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC"#
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -1479,7 +1479,7 @@ impl CurrencyRepository for PgCurrencyRepository {
 
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<CurrencyModel>> {
         let records = sqlx::query_as::<_, CurrencyModel>(
-            "SELECT * FROM currency WHERE height = $1 AND latest = TRUE"
+            r#"SELECT * FROM currency WHERE "HEIGHT" = $1 AND "LATEST" = TRUE"#
         )
         .bind(height)
         .fetch_all(&self.pool)
@@ -1491,8 +1491,8 @@ impl CurrencyRepository for PgCurrencyRepository {
     async fn increase_supply(&self, currency_id: i64, delta: i64) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            UPDATE currency SET initial_supply = initial_supply + $2, latest = TRUE
-            WHERE id = $1 AND latest = TRUE
+            UPDATE currency SET "INITIAL_SUPPLY" = "INITIAL_SUPPLY" + $2, "LATEST" = TRUE
+            WHERE "ID" = $1 AND "LATEST" = TRUE
             "#,
         )
         .bind(currency_id)
@@ -1505,7 +1505,7 @@ impl CurrencyRepository for PgCurrencyRepository {
 
     async fn increase_reserve(&self, currency_id: i64, amount_per_unit: i64) -> RepositoryResult<()> {
         let (current_supply,): (i64,) = sqlx::query_as(
-            "SELECT COALESCE(initial_supply, 0) FROM currency WHERE id = $1 AND latest = TRUE"
+            r#"SELECT COALESCE("INITIAL_SUPPLY", 0) FROM currency WHERE "ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(currency_id)
         .fetch_one(&self.pool)
@@ -1516,8 +1516,8 @@ impl CurrencyRepository for PgCurrencyRepository {
 
         sqlx::query(
             r#"
-            UPDATE currency SET reserve_supply = reserve_supply + $2, latest = TRUE
-            WHERE id = $1 AND latest = TRUE
+            UPDATE currency SET "RESERVE_SUPPLY" = "RESERVE_SUPPLY" + $2, "LATEST" = TRUE
+            WHERE "ID" = $1 AND "LATEST" = TRUE
             "#,
         )
         .bind(currency_id)
@@ -1529,7 +1529,7 @@ impl CurrencyRepository for PgCurrencyRepository {
     }
 
     async fn delete_currency(&self, currency_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM currency WHERE id = $1")
+        sqlx::query(r#"DELETE FROM currency WHERE "ID" = $1"#)
             .bind(currency_id)
             .execute(&self.pool)
             .await
@@ -1544,10 +1544,10 @@ impl Repository<CurrencyModel> for PgCurrencyRepository {
         sqlx::query(
             r#"
             INSERT INTO currency (
-                id, account_id, name, name_lower, code, description, type,
-                initial_supply, reserve_supply, max_supply, creation_height,
-                issuance_height, min_reserve_per_unit_nqt, min_difficulty,
-                max_difficulty, ruleset, algorithm, decimals, height, latest
+                "ID", "ACCOUNT_ID", "NAME", "NAME_LOWER", "CODE", "DESCRIPTION", type,
+                "INITIAL_SUPPLY", "RESERVE_SUPPLY", "MAX_SUPPLY", "CREATION_HEIGHT",
+                "ISSUANCE_HEIGHT", "MIN_RESERVE_PER_UNIT_NQT", "MIN_DIFFICULTY",
+                "MAX_DIFFICULTY", "RULESET", "ALGORITHM", "DECIMALS", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             "#,
         )
@@ -1578,7 +1578,7 @@ impl Repository<CurrencyModel> for PgCurrencyRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<CurrencyModel>> {
-        let record = sqlx::query_as::<_, CurrencyModel>("SELECT * FROM currency WHERE db_id = $1")
+        let record = sqlx::query_as::<_, CurrencyModel>(r#"SELECT * FROM currency WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -1598,7 +1598,7 @@ impl Repository<CurrencyModel> for PgCurrencyRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, CurrencyModel>(
-            "SELECT * FROM currency WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM currency WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -1609,7 +1609,7 @@ impl Repository<CurrencyModel> for PgCurrencyRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM currency WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM currency WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -1707,7 +1707,7 @@ impl TransactionRepository for PgTransactionRepository {
         }
 
         for &db_id in db_ids {
-            sqlx::query(r#"DELETE FROM "transaction" WHERE db_id = $1"#)
+            sqlx::query(r#"DELETE FROM "transaction" WHERE "DB_ID" = $1"#)
                 .bind(db_id)
                 .execute(&self.pool)
                 .await
@@ -1720,13 +1720,13 @@ impl TransactionRepository for PgTransactionRepository {
         sqlx::query(
             r#"
             INSERT INTO "transaction" (
-                id, deadline, recipient_id, amount, fee, full_hash,
-                height, block_id, signature, timestamp, type, subtype,
-                sender_id, block_timestamp, referenced_transaction_full_hash,
-                transaction_index, phased, attachment_bytes, version,
-                has_message, has_encrypted_message, has_public_key_announcement,
-                has_prunable_message, has_prunable_attachment, ec_block_height,
-                ec_block_id, has_encrypttoself_message, has_prunable_encrypted_message
+                "ID", "DEADLINE", "RECIPIENT_ID", "AMOUNT", "FEE", "FULL_HASH",
+                "HEIGHT", "BLOCK_ID", "SIGNATURE", timestamp, type, "SUBTYPE",
+                "SENDER_ID", "BLOCK_TIMESTAMP", "REFERENCED_TRANSACTION_FULL_HASH",
+                "TRANSACTION_INDEX", "PHASED", "ATTACHMENT_BYTES", "VERSION",
+                "HAS_MESSAGE", "HAS_ENCRYPTED_MESSAGE", "HAS_PUBLIC_KEY_ANNOUNCEMENT",
+                "HAS_PRUNABLE_MESSAGE", "HAS_PRUNABLE_ATTACHMENT", "EC_BLOCK_HEIGHT",
+                "EC_BLOCK_ID", "HAS_ENCRYPTTOSELF_MESSAGE", "HAS_PRUNABLE_ENCRYPTED_MESSAGE"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
             "#,
         )
@@ -1765,7 +1765,7 @@ impl TransactionRepository for PgTransactionRepository {
     }
 
     async fn delete_by_db_id_tx(&self, db_id: i64, tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
-        sqlx::query(r#"DELETE FROM "transaction" WHERE db_id = $1"#)
+        sqlx::query(r#"DELETE FROM "transaction" WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&mut **tx)
             .await
@@ -1780,13 +1780,13 @@ impl Repository<TransactionModel> for PgTransactionRepository {
         sqlx::query(
             r#"
             INSERT INTO "transaction" (
-                id, deadline, recipient_id, amount, fee, full_hash,
-                height, block_id, block_timestamp, transaction_index, signature, timestamp, type, subtype,
-                sender_id, referenced_transaction_full_hash,
-                attachment_bytes, version, phased,
-                has_message, has_encrypted_message, has_public_key_announcement,
-                has_prunable_message, has_prunable_attachment, ec_block_height,
-                ec_block_id, has_encrypttoself_message, has_prunable_encrypted_message
+                "ID", "DEADLINE", "RECIPIENT_ID", "AMOUNT", "FEE", "FULL_HASH",
+                "HEIGHT", "BLOCK_ID", "BLOCK_TIMESTAMP", "TRANSACTION_INDEX", "SIGNATURE", timestamp, type, "SUBTYPE",
+                "SENDER_ID", "REFERENCED_TRANSACTION_FULL_HASH",
+                "ATTACHMENT_BYTES", "VERSION", "PHASED",
+                "HAS_MESSAGE", "HAS_ENCRYPTED_MESSAGE", "HAS_PUBLIC_KEY_ANNOUNCEMENT",
+                "HAS_PRUNABLE_MESSAGE", "HAS_PRUNABLE_ATTACHMENT", "EC_BLOCK_HEIGHT",
+                "EC_BLOCK_ID", "HAS_ENCRYPTTOSELF_MESSAGE", "HAS_PRUNABLE_ENCRYPTED_MESSAGE"
             ) VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
                 $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
@@ -1872,7 +1872,7 @@ impl PgAccountRepository {
 #[async_trait]
 impl AccountRepository for PgAccountRepository {
     async fn find_by_account_id(&self, id: i64) -> RepositoryResult<Option<AccountModel>> {
-        let record = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE id = $1 AND latest = TRUE LIMIT 1").bind(id)
+        let record = sqlx::query_as::<_, AccountModel>(r#"SELECT * FROM account WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#).bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1880,7 +1880,7 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AccountModel>> {
-        let records = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE height = $1 AND latest = TRUE").bind(height)
+        let records = sqlx::query_as::<_, AccountModel>(r#"SELECT * FROM account WHERE "HEIGHT" = $1 AND "LATEST" = TRUE"#).bind(height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1892,7 +1892,7 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn find_by_address(&self, _address: &str) -> RepositoryResult<Option<AccountModel>> {
-        let record = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE latest = TRUE ORDER BY height DESC LIMIT 1")
+        let record = sqlx::query_as::<_, AccountModel>(r#"SELECT * FROM account WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT 1"#)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -1903,8 +1903,8 @@ impl AccountRepository for PgAccountRepository {
         sqlx::query(
             r#"
             UPDATE account
-            SET balance = $1, unconfirmed_balance = $2, height = $3
-            WHERE id = $4 AND latest = TRUE
+            SET "BALANCE" = $1, "UNCONFIRMED_BALANCE" = $2, "HEIGHT" = $3
+            WHERE "ID" = $4 AND "LATEST" = TRUE
             "#,
         )
         .bind(balance)
@@ -1958,8 +1958,8 @@ impl AccountRepository for PgAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET balance = balance + $1, height = $2
-            WHERE id = $3 AND latest = TRUE
+            SET "BALANCE" = "BALANCE" + $1, "HEIGHT" = $2
+            WHERE "ID" = $3 AND "LATEST" = TRUE
             "#,
         )
         .bind(amount)
@@ -1974,8 +1974,8 @@ impl AccountRepository for PgAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET balance = balance + $1, height = $2
-                WHERE id = $3 AND latest = TRUE
+                SET "BALANCE" = "BALANCE" + $1, "HEIGHT" = $2
+                WHERE "ID" = $3 AND "LATEST" = TRUE
                 "#,
             )
             .bind(amount)
@@ -2008,8 +2008,8 @@ impl AccountRepository for PgAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET unconfirmed_balance = unconfirmed_balance + $1, height = $2
-            WHERE id = $3 AND latest = TRUE
+            SET "UNCONFIRMED_BALANCE" = "UNCONFIRMED_BALANCE" + $1, "HEIGHT" = $2
+            WHERE "ID" = $3 AND "LATEST" = TRUE
             "#,
         )
         .bind(amount)
@@ -2024,8 +2024,8 @@ impl AccountRepository for PgAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET unconfirmed_balance = unconfirmed_balance + $1, height = $2
-                WHERE id = $3 AND latest = TRUE
+                SET "UNCONFIRMED_BALANCE" = "UNCONFIRMED_BALANCE" + $1, "HEIGHT" = $2
+                WHERE "ID" = $3 AND "LATEST" = TRUE
                 "#,
             )
             .bind(amount)
@@ -2042,8 +2042,8 @@ impl AccountRepository for PgAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET balance = balance + $1, unconfirmed_balance = unconfirmed_balance + $1, height = $2
-            WHERE id = $3 AND latest = TRUE
+            SET "BALANCE" = "BALANCE" + $1, "UNCONFIRMED_BALANCE" = "UNCONFIRMED_BALANCE" + $1, "HEIGHT" = $2
+            WHERE "ID" = $3 AND "LATEST" = TRUE
             "#,
         )
         .bind(amount)
@@ -2058,8 +2058,8 @@ impl AccountRepository for PgAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET balance = balance + $1, unconfirmed_balance = unconfirmed_balance + $1, height = $2
-                WHERE id = $3 AND latest = TRUE
+                SET "BALANCE" = "BALANCE" + $1, "UNCONFIRMED_BALANCE" = "UNCONFIRMED_BALANCE" + $1, "HEIGHT" = $2
+                WHERE "ID" = $3 AND "LATEST" = TRUE
                 "#,
             )
             .bind(amount)
@@ -2073,7 +2073,7 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn get_account_count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM account WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -2084,8 +2084,8 @@ impl AccountRepository for PgAccountRepository {
         let result = sqlx::query(
             r#"
             UPDATE account
-            SET forged_balance = forged_balance + $1, height = $2
-            WHERE id = $3 AND latest = TRUE
+            SET "FORGED_BALANCE" = "FORGED_BALANCE" + $1, "HEIGHT" = $2
+            WHERE "ID" = $3 AND "LATEST" = TRUE
             "#,
         )
         .bind(amount)
@@ -2100,8 +2100,8 @@ impl AccountRepository for PgAccountRepository {
             sqlx::query(
                 r#"
                 UPDATE account
-                SET forged_balance = forged_balance + $1, height = $2
-                WHERE id = $3 AND latest = TRUE
+                SET "FORGED_BALANCE" = "FORGED_BALANCE" + $1, "HEIGHT" = $2
+                WHERE "ID" = $3 AND "LATEST" = TRUE
                 "#,
             )
             .bind(amount)
@@ -2121,8 +2121,8 @@ impl Repository<AccountModel> for PgAccountRepository {
         sqlx::query(
             r#"
             INSERT INTO account (
-                id, balance, unconfirmed_balance, forged_balance,
-                active_lessee_id, has_control_phasing, height, latest
+                "ID", "BALANCE", "UNCONFIRMED_BALANCE", "FORGED_BALANCE",
+                "ACTIVE_LESSEE_ID", "HAS_CONTROL_PHASING", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
@@ -2141,7 +2141,7 @@ impl Repository<AccountModel> for PgAccountRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountModel>> {
-        let record = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE db_id = $1").bind(db_id)
+        let record = sqlx::query_as::<_, AccountModel>(r#"SELECT * FROM account WHERE "DB_ID" = $1"#).bind(db_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2152,9 +2152,9 @@ impl Repository<AccountModel> for PgAccountRepository {
         sqlx::query(
             r#"
             UPDATE account SET
-                balance = $2, unconfirmed_balance = $3, forged_balance = $4,
-                active_lessee_id = $5, has_control_phasing = $6, height = $7, latest = $8
-            WHERE db_id = $1
+                "BALANCE" = $2, "UNCONFIRMED_BALANCE" = $3, "FORGED_BALANCE" = $4,
+                "ACTIVE_LESSEE_ID" = $5, "HAS_CONTROL_PHASING" = $6, "HEIGHT" = $7, "LATEST" = $8
+            WHERE "DB_ID" = $1
             "#,
         )
         .bind(account.db_id)
@@ -2178,7 +2178,7 @@ impl Repository<AccountModel> for PgAccountRepository {
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountModel>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let records = sqlx::query_as::<_, AccountModel>("SELECT * FROM account WHERE latest = TRUE ORDER BY id LIMIT $1 OFFSET $2").bind(limit).bind(offset)
+        let records = sqlx::query_as::<_, AccountModel>(r#"SELECT * FROM account WHERE "LATEST" = TRUE ORDER BY "ID" LIMIT $1 OFFSET $2"#).bind(limit).bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2186,7 +2186,7 @@ impl Repository<AccountModel> for PgAccountRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM account WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -2207,7 +2207,7 @@ impl PgAccountAssetRepository {
 #[async_trait]
 impl AccountAssetRepository for PgAccountAssetRepository {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
-        let records = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE account_id = $1 AND latest = TRUE").bind(account_id)
+        let records = sqlx::query_as::<_, AccountAssetModel>(r#"SELECT * FROM account_asset WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE"#).bind(account_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2215,7 +2215,7 @@ impl AccountAssetRepository for PgAccountAssetRepository {
     }
 
     async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AccountAssetModel>> {
-        let records = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE asset_id = $1 AND latest = TRUE").bind(asset_id)
+        let records = sqlx::query_as::<_, AccountAssetModel>(r#"SELECT * FROM account_asset WHERE "ASSET_ID" = $1 AND "LATEST" = TRUE"#).bind(asset_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2223,7 +2223,7 @@ impl AccountAssetRepository for PgAccountAssetRepository {
     }
 
     async fn find_by_account_and_asset(&self, account_id: i64, asset_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
-        let record = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE account_id = $1 AND asset_id = $2 AND latest = TRUE LIMIT 1").bind(account_id).bind(asset_id)
+        let record = sqlx::query_as::<_, AccountAssetModel>(r#"SELECT * FROM account_asset WHERE "ACCOUNT_ID" = $1 AND "ASSET_ID" = $2 AND "LATEST" = TRUE LIMIT 1"#).bind(account_id).bind(asset_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2234,8 +2234,8 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         sqlx::query(
             r#"
             UPDATE account_asset
-            SET quantity = $1, height = $2, latest = TRUE
-            WHERE account_id = $3 AND asset_id = $4
+            SET "QUANTITY" = $1, "HEIGHT" = $2, "LATEST" = TRUE
+            WHERE "ACCOUNT_ID" = $3 AND "ASSET_ID" = $4
             "#,
         )
         .bind(quantity)
@@ -2252,8 +2252,8 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         let result = sqlx::query(
             r#"
             UPDATE account_asset
-            SET quantity = quantity + $1, latest = TRUE
-            WHERE account_id = $2 AND asset_id = $3
+            SET "QUANTITY" = "QUANTITY" + $1, "LATEST" = TRUE
+            WHERE "ACCOUNT_ID" = $2 AND "ASSET_ID" = $3
             "#,
         )
         .bind(delta)
@@ -2264,12 +2264,12 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         .map_err(RepositoryError::DbError)?;
 
         if result.rows_affected() == 0 && delta != 0 {
-            let current_height: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(height), 0) FROM block")
+            let current_height: i32 = sqlx::query_scalar(r#"SELECT COALESCE(MAX("HEIGHT"), 0) FROM block"#)
                 .fetch_one(&self.pool)
                 .await
                 .unwrap_or(0);
             sqlx::query(
-                "INSERT INTO account_asset (account_id, asset_id, quantity, unconfirmed_quantity, height, latest) VALUES ($1, $2, $3, 0, $4, TRUE)"
+                r#"INSERT INTO account_asset ("ACCOUNT_ID", "ASSET_ID", "QUANTITY", "UNCONFIRMED_QUANTITY", "HEIGHT", "LATEST") VALUES ($1, $2, $3, 0, $4, TRUE)"#
             )
             .bind(account_id)
             .bind(asset_id)
@@ -2286,8 +2286,8 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         let result = sqlx::query(
             r#"
             UPDATE account_asset
-            SET quantity = quantity - $1, latest = TRUE
-            WHERE account_id = $2 AND asset_id = $3 AND quantity >= $1
+            SET "QUANTITY" = "QUANTITY" - $1, "LATEST" = TRUE
+            WHERE "ACCOUNT_ID" = $2 AND "ASSET_ID" = $3 AND "QUANTITY" >= $1
             "#,
         )
         .bind(delta)
@@ -2307,8 +2307,8 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         let result = sqlx::query(
             r#"
             UPDATE account_asset
-            SET unconfirmed_quantity = unconfirmed_quantity + $1, latest = TRUE
-            WHERE account_id = $2 AND asset_id = $3
+            SET "UNCONFIRMED_QUANTITY" = "UNCONFIRMED_QUANTITY" + $1, "LATEST" = TRUE
+            WHERE "ACCOUNT_ID" = $2 AND "ASSET_ID" = $3
             "#,
         )
         .bind(delta)
@@ -2319,12 +2319,12 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         .map_err(RepositoryError::DbError)?;
 
         if result.rows_affected() == 0 && delta != 0 {
-            let current_height: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(height), 0) FROM block")
+            let current_height: i32 = sqlx::query_scalar(r#"SELECT COALESCE(MAX("HEIGHT"), 0) FROM block"#)
                 .fetch_one(&self.pool)
                 .await
                 .unwrap_or(0);
             sqlx::query(
-                "INSERT INTO account_asset (account_id, asset_id, quantity, unconfirmed_quantity, height, latest) VALUES ($1, $2, 0, $3, $4, TRUE)"
+                r#"INSERT INTO account_asset ("ACCOUNT_ID", "ASSET_ID", "QUANTITY", "UNCONFIRMED_QUANTITY", "HEIGHT", "LATEST") VALUES ($1, $2, 0, $3, $4, TRUE)"#
             )
             .bind(account_id)
             .bind(asset_id)
@@ -2345,7 +2345,7 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
         sqlx::query(
             r#"
             INSERT INTO account_asset (
-                account_id, asset_id, quantity, unconfirmed_quantity, height, latest
+                "ACCOUNT_ID", "ASSET_ID", "QUANTITY", "UNCONFIRMED_QUANTITY", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6)
             "#,
         )
@@ -2362,7 +2362,7 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountAssetModel>> {
-        let record = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE db_id = $1").bind(db_id)
+        let record = sqlx::query_as::<_, AccountAssetModel>(r#"SELECT * FROM account_asset WHERE "DB_ID" = $1"#).bind(db_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2373,8 +2373,8 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
         sqlx::query(
             r#"
             UPDATE account_asset SET
-                quantity = $2, unconfirmed_quantity = $3, height = $4, latest = $5
-            WHERE db_id = $1
+                "QUANTITY" = $2, "UNCONFIRMED_QUANTITY" = $3, "HEIGHT" = $4, "LATEST" = $5
+            WHERE "DB_ID" = $1
             "#,
         )
         .bind(aa.db_id)
@@ -2395,7 +2395,7 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AccountAssetModel>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let records = sqlx::query_as::<_, AccountAssetModel>("SELECT * FROM account_asset WHERE latest = TRUE ORDER BY db_id LIMIT $1 OFFSET $2").bind(limit).bind(offset)
+        let records = sqlx::query_as::<_, AccountAssetModel>(r#"SELECT * FROM account_asset WHERE "LATEST" = TRUE ORDER BY "DB_ID" LIMIT $1 OFFSET $2"#).bind(limit).bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2403,7 +2403,7 @@ impl Repository<AccountAssetModel> for PgAccountAssetRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_asset WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM account_asset WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -2424,7 +2424,7 @@ impl PgAssetRepository {
 #[async_trait]
 impl AssetRepository for PgAssetRepository {
     async fn find_by_asset_id(&self, id: i64) -> RepositoryResult<Option<AssetModel>> {
-        let record = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE id = $1 AND latest = TRUE LIMIT 1").bind(id)
+        let record = sqlx::query_as::<_, AssetModel>(r#"SELECT * FROM asset WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#).bind(id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2432,7 +2432,7 @@ impl AssetRepository for PgAssetRepository {
     }
 
     async fn find_by_owner(&self, owner_id: i64) -> RepositoryResult<Vec<AssetModel>> {
-        let records = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC").bind(owner_id)
+        let records = sqlx::query_as::<_, AssetModel>(r#"SELECT * FROM asset WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC"#).bind(owner_id)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2440,7 +2440,7 @@ impl AssetRepository for PgAssetRepository {
     }
 
     async fn find_by_height(&self, height: i32) -> RepositoryResult<Vec<AssetModel>> {
-        let records = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE height = $1 AND latest = TRUE").bind(height)
+        let records = sqlx::query_as::<_, AssetModel>(r#"SELECT * FROM asset WHERE "HEIGHT" = $1 AND "LATEST" = TRUE"#).bind(height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2448,7 +2448,7 @@ impl AssetRepository for PgAssetRepository {
     }
 
     async fn find_tradable(&self, limit: i64) -> RepositoryResult<Vec<AssetModel>> {
-        let records = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE latest = TRUE ORDER BY height DESC LIMIT $1").bind(limit)
+        let records = sqlx::query_as::<_, AssetModel>(r#"SELECT * FROM asset WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1"#).bind(limit)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2459,8 +2459,8 @@ impl AssetRepository for PgAssetRepository {
         sqlx::query(
             r#"
             UPDATE asset
-            SET quantity = quantity + $1, latest = TRUE
-            WHERE id = $2 AND latest = TRUE
+            SET "QUANTITY" = "QUANTITY" + $1, "LATEST" = TRUE
+            WHERE "ID" = $2 AND "LATEST" = TRUE
             "#,
         )
         .bind(delta)
@@ -2475,8 +2475,8 @@ impl AssetRepository for PgAssetRepository {
         sqlx::query(
             r#"
             UPDATE asset
-            SET quantity = quantity - $1, latest = TRUE
-            WHERE id = $2 AND latest = TRUE AND quantity >= $1
+            SET "QUANTITY" = "QUANTITY" - $1, "LATEST" = TRUE
+            WHERE "ID" = $2 AND "LATEST" = TRUE AND "QUANTITY" >= $1
             "#,
         )
         .bind(delta)
@@ -2494,8 +2494,8 @@ impl Repository<AssetModel> for PgAssetRepository {
         sqlx::query(
             r#"
             INSERT INTO asset (
-                id, account_id, name, description, quantity, decimals,
-                has_control_phasing, initial_quantity, height, latest
+                "ID", "ACCOUNT_ID", "NAME", "DESCRIPTION", "QUANTITY", "DECIMALS",
+                "HAS_CONTROL_PHASING", "INITIAL_QUANTITY", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
@@ -2516,7 +2516,7 @@ impl Repository<AssetModel> for PgAssetRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetModel>> {
-        let record = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE db_id = $1").bind(db_id)
+        let record = sqlx::query_as::<_, AssetModel>(r#"SELECT * FROM asset WHERE "DB_ID" = $1"#).bind(db_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2534,7 +2534,7 @@ impl Repository<AssetModel> for PgAssetRepository {
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AssetModel>> {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
-        let records = sqlx::query_as::<_, AssetModel>("SELECT * FROM asset WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2").bind(limit).bind(offset)
+        let records = sqlx::query_as::<_, AssetModel>(r#"SELECT * FROM asset WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#).bind(limit).bind(offset)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;
@@ -2542,7 +2542,7 @@ impl Repository<AssetModel> for PgAssetRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM asset WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -2564,7 +2564,7 @@ impl PgAccountLedgerRepository {
 impl AccountLedgerRepository for PgAccountLedgerRepository {
     async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<AccountLedgerModel>> {
         let records = sqlx::query_as::<_, AccountLedgerModel>(
-            "SELECT * FROM account_ledger WHERE account_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM account_ledger WHERE "ACCOUNT_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(account_id)
         .bind(limit)
@@ -2576,7 +2576,7 @@ impl AccountLedgerRepository for PgAccountLedgerRepository {
 
     async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<AccountLedgerModel>> {
         let records = sqlx::query_as::<_, AccountLedgerModel>(
-            "SELECT * FROM account_ledger WHERE block_id = $1 ORDER BY height DESC"
+            r#"SELECT * FROM account_ledger WHERE "BLOCK_ID" = $1 ORDER BY "HEIGHT" DESC"#
         )
         .bind(block_id)
         .fetch_all(&self.pool)
@@ -2592,8 +2592,8 @@ impl Repository<AccountLedgerModel> for PgAccountLedgerRepository {
         sqlx::query(
             r#"
             INSERT INTO account_ledger (
-                account_id, event_type, event_id, holding_type, holding_id,
-                "CHANGE", balance, block_id, height, timestamp
+                "ACCOUNT_ID", "EVENT_TYPE", "EVENT_ID", "HOLDING_TYPE", "HOLDING_ID",
+                "CHANGE", "BALANCE", "BLOCK_ID", "HEIGHT", timestamp
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             "#,
         )
@@ -2615,7 +2615,7 @@ impl Repository<AccountLedgerModel> for PgAccountLedgerRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountLedgerModel>> {
         let record = sqlx::query_as::<_, AccountLedgerModel>(
-            "SELECT * FROM account_ledger WHERE db_id = $1"
+            r#"SELECT * FROM account_ledger WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -2636,7 +2636,7 @@ impl Repository<AccountLedgerModel> for PgAccountLedgerRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, AccountLedgerModel>(
-            "SELECT * FROM account_ledger ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM account_ledger ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -2669,7 +2669,7 @@ impl PgAliasRepository {
 impl AliasRepository for PgAliasRepository {
     async fn find_by_alias_id(&self, id: i64) -> RepositoryResult<Option<AliasModel>> {
         let record = sqlx::query_as::<_, AliasModel>(
-            "SELECT * FROM alias WHERE id = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM alias WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -2681,7 +2681,7 @@ impl AliasRepository for PgAliasRepository {
     async fn find_by_name(&self, name: &str) -> RepositoryResult<Option<AliasModel>> {
         let name_lower = name.to_lowercase();
         let record = sqlx::query_as::<_, AliasModel>(
-            "SELECT * FROM alias WHERE alias_name_lower = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM alias WHERE "ALIAS_NAME_LOWER" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(&name_lower)
         .fetch_optional(&self.pool)
@@ -2692,7 +2692,7 @@ impl AliasRepository for PgAliasRepository {
 
     async fn find_by_owner(&self, account_id: i64) -> RepositoryResult<Vec<AliasModel>> {
         let records = sqlx::query_as::<_, AliasModel>(
-            "SELECT * FROM alias WHERE account_id = $1 AND latest = TRUE ORDER BY alias_name_lower"
+            r#"SELECT * FROM alias WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE ORDER BY "ALIAS_NAME_LOWER""#
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -2703,7 +2703,7 @@ impl AliasRepository for PgAliasRepository {
 
     async fn update_owner(&self, alias_id: i64, new_owner_id: i64) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE alias SET account_id = $1 WHERE id = $2 AND latest = TRUE"
+            r#"UPDATE alias SET "ACCOUNT_ID" = $1 WHERE "ID" = $2 AND "LATEST" = TRUE"#
         )
         .bind(new_owner_id)
         .bind(alias_id)
@@ -2715,7 +2715,7 @@ impl AliasRepository for PgAliasRepository {
 
     async fn update_uri(&self, alias_id: i64, uri: &str) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE alias SET alias_uri = $1 WHERE id = $2 AND latest = TRUE"
+            r#"UPDATE alias SET "ALIAS_URI" = $1 WHERE "ID" = $2 AND "LATEST" = TRUE"#
         )
         .bind(uri)
         .bind(alias_id)
@@ -2732,8 +2732,8 @@ impl Repository<AliasModel> for PgAliasRepository {
         sqlx::query(
             r#"
             INSERT INTO alias (
-                id, account_id, alias_name, alias_name_lower, alias_uri,
-                timestamp, height, latest
+                "ID", "ACCOUNT_ID", "ALIAS_NAME", "ALIAS_NAME_LOWER", "ALIAS_URI",
+                timestamp, "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
@@ -2753,7 +2753,7 @@ impl Repository<AliasModel> for PgAliasRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AliasModel>> {
         let record = sqlx::query_as::<_, AliasModel>(
-            "SELECT * FROM alias WHERE db_id = $1"
+            r#"SELECT * FROM alias WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -2766,9 +2766,9 @@ impl Repository<AliasModel> for PgAliasRepository {
         sqlx::query(
             r#"
             UPDATE alias SET
-                account_id = $2, alias_name = $3, alias_name_lower = $4,
-                alias_uri = $5, timestamp = $6, height = $7, latest = $8
-            WHERE db_id = $1
+                "ACCOUNT_ID" = $2, "ALIAS_NAME" = $3, "ALIAS_NAME_LOWER" = $4,
+                "ALIAS_URI" = $5, timestamp = $6, "HEIGHT" = $7, "LATEST" = $8
+            WHERE "DB_ID" = $1
             "#,
         )
         .bind(alias.db_id)
@@ -2793,7 +2793,7 @@ impl Repository<AliasModel> for PgAliasRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, AliasModel>(
-            "SELECT * FROM alias WHERE latest = TRUE ORDER BY alias_name_lower LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM alias WHERE "LATEST" = TRUE ORDER BY "ALIAS_NAME_LOWER" LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -2804,7 +2804,7 @@ impl Repository<AliasModel> for PgAliasRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM alias WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM alias WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -2826,7 +2826,7 @@ impl PgAliasOfferRepository {
 impl AliasOfferRepository for PgAliasOfferRepository {
     async fn find_by_alias(&self, alias_id: i64) -> RepositoryResult<Option<AliasOfferModel>> {
         let record = sqlx::query_as::<_, AliasOfferModel>(
-            "SELECT * FROM alias_offer WHERE id = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM alias_offer WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(alias_id)
         .fetch_optional(&self.pool)
@@ -2837,7 +2837,7 @@ impl AliasOfferRepository for PgAliasOfferRepository {
 
     async fn find_by_buyer(&self, buyer_id: i64) -> RepositoryResult<Vec<AliasOfferModel>> {
         let records = sqlx::query_as::<_, AliasOfferModel>(
-            "SELECT * FROM alias_offer WHERE buyer_id = $1 AND latest = TRUE"
+            r#"SELECT * FROM alias_offer WHERE "BUYER_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(buyer_id)
         .fetch_all(&self.pool)
@@ -2848,7 +2848,7 @@ impl AliasOfferRepository for PgAliasOfferRepository {
 
     async fn update_price(&self, alias_id: i64, price: i64, buyer_id: Option<i64>) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE alias_offer SET price = $1, buyer_id = $2 WHERE id = $3 AND latest = TRUE"
+            r#"UPDATE alias_offer SET "PRICE" = $1, "BUYER_ID" = $2 WHERE "ID" = $3 AND "LATEST" = TRUE"#
         )
         .bind(price)
         .bind(buyer_id)
@@ -2860,7 +2860,7 @@ impl AliasOfferRepository for PgAliasOfferRepository {
     }
 
     async fn delete_by_alias(&self, alias_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM alias_offer WHERE id = $1")
+        sqlx::query(r#"DELETE FROM alias_offer WHERE "ID" = $1"#)
             .bind(alias_id)
             .execute(&self.pool)
             .await
@@ -2874,7 +2874,7 @@ impl Repository<AliasOfferModel> for PgAliasOfferRepository {
     async fn insert(&self, offer: &AliasOfferModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO alias_offer (id, price, buyer_id, height, latest)
+            INSERT INTO alias_offer ("ID", "PRICE", "BUYER_ID", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5)
             "#,
         )
@@ -2891,7 +2891,7 @@ impl Repository<AliasOfferModel> for PgAliasOfferRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AliasOfferModel>> {
         let record = sqlx::query_as::<_, AliasOfferModel>(
-            "SELECT * FROM alias_offer WHERE db_id = $1"
+            r#"SELECT * FROM alias_offer WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -2903,8 +2903,8 @@ impl Repository<AliasOfferModel> for PgAliasOfferRepository {
     async fn update(&self, offer: &AliasOfferModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            UPDATE alias_offer SET price = $2, buyer_id = $3, height = $4, latest = $5
-            WHERE db_id = $1
+            UPDATE alias_offer SET "PRICE" = $2, "BUYER_ID" = $3, "HEIGHT" = $4, "LATEST" = $5
+            WHERE "DB_ID" = $1
             "#,
         )
         .bind(offer.db_id)
@@ -2919,7 +2919,7 @@ impl Repository<AliasOfferModel> for PgAliasOfferRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM alias_offer WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM alias_offer WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -2931,7 +2931,7 @@ impl Repository<AliasOfferModel> for PgAliasOfferRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, AliasOfferModel>(
-            "SELECT * FROM alias_offer WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM alias_offer WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -2942,7 +2942,7 @@ impl Repository<AliasOfferModel> for PgAliasOfferRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM alias_offer WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM alias_offer WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -2964,7 +2964,7 @@ impl PgAssetTransferRepository {
 impl AssetTransferRepository for PgAssetTransferRepository {
     async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<AssetTransferModel>> {
         let records = sqlx::query_as::<_, AssetTransferModel>(
-            "SELECT * FROM asset_transfer WHERE asset_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM asset_transfer WHERE "ASSET_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(asset_id)
         .bind(limit)
@@ -2976,7 +2976,7 @@ impl AssetTransferRepository for PgAssetTransferRepository {
 
     async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<AssetTransferModel>> {
         let records = sqlx::query_as::<_, AssetTransferModel>(
-            "SELECT * FROM asset_transfer WHERE sender_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM asset_transfer WHERE "SENDER_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(sender_id)
         .bind(limit)
@@ -2988,7 +2988,7 @@ impl AssetTransferRepository for PgAssetTransferRepository {
 
     async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<AssetTransferModel>> {
         let records = sqlx::query_as::<_, AssetTransferModel>(
-            "SELECT * FROM asset_transfer WHERE recipient_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM asset_transfer WHERE "RECIPIENT_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(recipient_id)
         .bind(limit)
@@ -3004,7 +3004,7 @@ impl Repository<AssetTransferModel> for PgAssetTransferRepository {
     async fn insert(&self, transfer: &AssetTransferModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO asset_transfer (asset_id, sender_id, recipient_id, quantity, timestamp, height)
+            INSERT INTO asset_transfer ("ASSET_ID", "SENDER_ID", "RECIPIENT_ID", "QUANTITY", timestamp, "HEIGHT")
             VALUES ($1, $2, $3, $4, $5, $6)
             "#,
         )
@@ -3022,7 +3022,7 @@ impl Repository<AssetTransferModel> for PgAssetTransferRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetTransferModel>> {
         let record = sqlx::query_as::<_, AssetTransferModel>(
-            "SELECT * FROM asset_transfer WHERE db_id = $1"
+            r#"SELECT * FROM asset_transfer WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -3043,7 +3043,7 @@ impl Repository<AssetTransferModel> for PgAssetTransferRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, AssetTransferModel>(
-            "SELECT * FROM asset_transfer ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM asset_transfer ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -3076,7 +3076,7 @@ impl PgAskOrderRepository {
 impl AskOrderRepository for PgAskOrderRepository {
     async fn find_by_order_id(&self, id: i64) -> RepositoryResult<Option<AskOrderModel>> {
         let record = sqlx::query_as::<_, AskOrderModel>(
-            "SELECT * FROM ask_order WHERE id = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM ask_order WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -3087,7 +3087,7 @@ impl AskOrderRepository for PgAskOrderRepository {
 
     async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<AskOrderModel>> {
         let records = sqlx::query_as::<_, AskOrderModel>(
-            "SELECT * FROM ask_order WHERE asset_id = $1 AND latest = TRUE ORDER BY price ASC LIMIT $2"
+            r#"SELECT * FROM ask_order WHERE "ASSET_ID" = $1 AND "LATEST" = TRUE ORDER BY "PRICE" ASC LIMIT $2"#
         )
         .bind(asset_id)
         .bind(limit)
@@ -3099,7 +3099,7 @@ impl AskOrderRepository for PgAskOrderRepository {
 
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AskOrderModel>> {
         let records = sqlx::query_as::<_, AskOrderModel>(
-            "SELECT * FROM ask_order WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC"
+            r#"SELECT * FROM ask_order WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC"#
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -3110,7 +3110,7 @@ impl AskOrderRepository for PgAskOrderRepository {
 
     async fn find_best_by_asset(&self, asset_id: i64) -> RepositoryResult<Option<AskOrderModel>> {
         let record = sqlx::query_as::<_, AskOrderModel>(
-            "SELECT * FROM ask_order WHERE asset_id = $1 AND latest = TRUE ORDER BY price ASC LIMIT 1"
+            r#"SELECT * FROM ask_order WHERE "ASSET_ID" = $1 AND "LATEST" = TRUE ORDER BY "PRICE" ASC LIMIT 1"#
         )
         .bind(asset_id)
         .fetch_optional(&self.pool)
@@ -3121,7 +3121,7 @@ impl AskOrderRepository for PgAskOrderRepository {
 
     async fn update_quantity(&self, order_id: i64, quantity: i64) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE ask_order SET quantity = $1 WHERE id = $2 AND latest = TRUE"
+            r#"UPDATE ask_order SET "QUANTITY" = $1 WHERE "ID" = $2 AND "LATEST" = TRUE"#
         )
         .bind(quantity)
         .bind(order_id)
@@ -3137,7 +3137,7 @@ impl Repository<AskOrderModel> for PgAskOrderRepository {
     async fn insert(&self, order: &AskOrderModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO ask_order (id, account_id, asset_id, price, quantity, height, latest)
+            INSERT INTO ask_order ("ID", "ACCOUNT_ID", "ASSET_ID", "PRICE", "QUANTITY", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
         )
@@ -3156,7 +3156,7 @@ impl Repository<AskOrderModel> for PgAskOrderRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AskOrderModel>> {
         let record = sqlx::query_as::<_, AskOrderModel>(
-            "SELECT * FROM ask_order WHERE db_id = $1"
+            r#"SELECT * FROM ask_order WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -3177,7 +3177,7 @@ impl Repository<AskOrderModel> for PgAskOrderRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, AskOrderModel>(
-            "SELECT * FROM ask_order WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM ask_order WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -3188,7 +3188,7 @@ impl Repository<AskOrderModel> for PgAskOrderRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM ask_order WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM ask_order WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -3210,7 +3210,7 @@ impl PgBidOrderRepository {
 impl BidOrderRepository for PgBidOrderRepository {
     async fn find_by_order_id(&self, id: i64) -> RepositoryResult<Option<BidOrderModel>> {
         let record = sqlx::query_as::<_, BidOrderModel>(
-            "SELECT * FROM bid_order WHERE id = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM bid_order WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -3221,7 +3221,7 @@ impl BidOrderRepository for PgBidOrderRepository {
 
     async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<BidOrderModel>> {
         let records = sqlx::query_as::<_, BidOrderModel>(
-            "SELECT * FROM bid_order WHERE asset_id = $1 AND latest = TRUE ORDER BY price DESC LIMIT $2"
+            r#"SELECT * FROM bid_order WHERE "ASSET_ID" = $1 AND "LATEST" = TRUE ORDER BY "PRICE" DESC LIMIT $2"#
         )
         .bind(asset_id)
         .bind(limit)
@@ -3233,7 +3233,7 @@ impl BidOrderRepository for PgBidOrderRepository {
 
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<BidOrderModel>> {
         let records = sqlx::query_as::<_, BidOrderModel>(
-            "SELECT * FROM bid_order WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC"
+            r#"SELECT * FROM bid_order WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC"#
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -3244,7 +3244,7 @@ impl BidOrderRepository for PgBidOrderRepository {
 
     async fn find_best_by_asset(&self, asset_id: i64) -> RepositoryResult<Option<BidOrderModel>> {
         let record = sqlx::query_as::<_, BidOrderModel>(
-            "SELECT * FROM bid_order WHERE asset_id = $1 AND latest = TRUE ORDER BY price DESC LIMIT 1"
+            r#"SELECT * FROM bid_order WHERE "ASSET_ID" = $1 AND "LATEST" = TRUE ORDER BY "PRICE" DESC LIMIT 1"#
         )
         .bind(asset_id)
         .fetch_optional(&self.pool)
@@ -3255,7 +3255,7 @@ impl BidOrderRepository for PgBidOrderRepository {
 
     async fn update_quantity(&self, order_id: i64, quantity: i64) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE bid_order SET quantity = $1 WHERE id = $2 AND latest = TRUE"
+            r#"UPDATE bid_order SET "QUANTITY" = $1 WHERE "ID" = $2 AND "LATEST" = TRUE"#
         )
         .bind(quantity)
         .bind(order_id)
@@ -3271,7 +3271,7 @@ impl Repository<BidOrderModel> for PgBidOrderRepository {
     async fn insert(&self, order: &BidOrderModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO bid_order (id, account_id, asset_id, price, quantity, height, latest)
+            INSERT INTO bid_order ("ID", "ACCOUNT_ID", "ASSET_ID", "PRICE", "QUANTITY", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
         )
@@ -3290,7 +3290,7 @@ impl Repository<BidOrderModel> for PgBidOrderRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<BidOrderModel>> {
         let record = sqlx::query_as::<_, BidOrderModel>(
-            "SELECT * FROM bid_order WHERE db_id = $1"
+            r#"SELECT * FROM bid_order WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -3311,7 +3311,7 @@ impl Repository<BidOrderModel> for PgBidOrderRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, BidOrderModel>(
-            "SELECT * FROM bid_order WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM bid_order WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -3322,7 +3322,7 @@ impl Repository<BidOrderModel> for PgBidOrderRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM bid_order WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM bid_order WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -3344,7 +3344,7 @@ impl PgTaggedDataRepository {
 impl TaggedDataRepository for PgTaggedDataRepository {
     async fn find_by_data_id(&self, id: i64) -> RepositoryResult<Option<TaggedDataModel>> {
         let record = sqlx::query_as::<_, TaggedDataModel>(
-            "SELECT * FROM tagged_data WHERE id = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM tagged_data WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -3355,7 +3355,7 @@ impl TaggedDataRepository for PgTaggedDataRepository {
 
     async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
         let records = sqlx::query_as::<_, TaggedDataModel>(
-            "SELECT * FROM tagged_data WHERE account_id = $1 AND latest = TRUE ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM tagged_data WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(account_id)
         .bind(limit)
@@ -3367,7 +3367,7 @@ impl TaggedDataRepository for PgTaggedDataRepository {
 
     async fn find_by_type(&self, type_: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
         let records = sqlx::query_as::<_, TaggedDataModel>(
-            "SELECT * FROM tagged_data WHERE type = $1 AND latest = TRUE ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM tagged_data WHERE type = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(type_)
         .bind(limit)
@@ -3380,7 +3380,7 @@ impl TaggedDataRepository for PgTaggedDataRepository {
     async fn search_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
         let pattern = format!("%{}%", tag);
         let records = sqlx::query_as::<_, TaggedDataModel>(
-            "SELECT * FROM tagged_data WHERE (tags LIKE $1 OR parsed_tags LIKE $1) AND latest = TRUE ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM tagged_data WHERE ("TAGS" LIKE $1 OR "PARSED_TAGS" LIKE $1) AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(&pattern)
         .bind(limit)
@@ -3397,9 +3397,9 @@ impl Repository<TaggedDataModel> for PgTaggedDataRepository {
         sqlx::query(
             r#"
             INSERT INTO tagged_data (
-                id, account_id, name, description, tags, parsed_tags, type,
-                data, is_text, filename, channel, block_timestamp,
-                transaction_timestamp, height, latest
+                "ID", "ACCOUNT_ID", "NAME", "DESCRIPTION", "TAGS", "PARSED_TAGS", type,
+                "DATA", "IS_TEXT", "FILENAME", "CHANNEL", "BLOCK_TIMESTAMP",
+                "TRANSACTION_TIMESTAMP", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             "#,
         )
@@ -3425,7 +3425,7 @@ impl Repository<TaggedDataModel> for PgTaggedDataRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TaggedDataModel>> {
-        let record = sqlx::query_as::<_, TaggedDataModel>("SELECT * FROM tagged_data WHERE db_id = $1")
+        let record = sqlx::query_as::<_, TaggedDataModel>(r#"SELECT * FROM tagged_data WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -3445,7 +3445,7 @@ impl Repository<TaggedDataModel> for PgTaggedDataRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, TaggedDataModel>(
-            "SELECT * FROM tagged_data WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM tagged_data WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -3456,7 +3456,7 @@ impl Repository<TaggedDataModel> for PgTaggedDataRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tagged_data WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM tagged_data WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -3478,7 +3478,7 @@ impl PgPurchaseRepository {
 impl PurchaseRepository for PgPurchaseRepository {
     async fn find_by_purchase_id(&self, id: i64) -> RepositoryResult<Option<PurchaseModel>> {
         let record = sqlx::query_as::<_, PurchaseModel>(
-            "SELECT * FROM purchase WHERE id = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM purchase WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -3489,7 +3489,7 @@ impl PurchaseRepository for PgPurchaseRepository {
 
     async fn find_by_buyer(&self, buyer_id: i64, limit: i64) -> RepositoryResult<Vec<PurchaseModel>> {
         let records = sqlx::query_as::<_, PurchaseModel>(
-            "SELECT * FROM purchase WHERE buyer_id = $1 AND latest = TRUE ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM purchase WHERE "BUYER_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(buyer_id)
         .bind(limit)
@@ -3501,7 +3501,7 @@ impl PurchaseRepository for PgPurchaseRepository {
 
     async fn find_by_seller(&self, seller_id: i64, limit: i64) -> RepositoryResult<Vec<PurchaseModel>> {
         let records = sqlx::query_as::<_, PurchaseModel>(
-            "SELECT * FROM purchase WHERE seller_id = $1 AND latest = TRUE ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM purchase WHERE "SELLER_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(seller_id)
         .bind(limit)
@@ -3513,7 +3513,7 @@ impl PurchaseRepository for PgPurchaseRepository {
 
     async fn find_by_goods(&self, goods_id: i64, limit: i64) -> RepositoryResult<Vec<PurchaseModel>> {
         let records = sqlx::query_as::<_, PurchaseModel>(
-            "SELECT * FROM purchase WHERE goods_id = $1 AND latest = TRUE ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM purchase WHERE "GOODS_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(goods_id)
         .bind(limit)
@@ -3524,7 +3524,7 @@ impl PurchaseRepository for PgPurchaseRepository {
     }
 
     async fn update_pending(&self, purchase_id: i64, pending: bool) -> RepositoryResult<()> {
-        sqlx::query("UPDATE purchase SET pending = $1 WHERE id = $2 AND latest = TRUE")
+        sqlx::query(r#"UPDATE purchase SET "PENDING" = $1 WHERE "ID" = $2 AND "LATEST" = TRUE"#)
             .bind(pending)
             .bind(purchase_id)
             .execute(&self.pool)
@@ -3535,7 +3535,7 @@ impl PurchaseRepository for PgPurchaseRepository {
 
     async fn set_delivered(&self, purchase_id: i64, goods: &[u8], nonce: &[u8]) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE purchase SET goods = $1, goods_nonce = $2, pending = FALSE WHERE id = $3 AND latest = TRUE"
+            r#"UPDATE purchase SET goods = $1, "GOODS_NONCE" = $2, "PENDING" = FALSE WHERE "ID" = $3 AND "LATEST" = TRUE"#
         )
         .bind(goods)
         .bind(nonce)
@@ -3548,7 +3548,7 @@ impl PurchaseRepository for PgPurchaseRepository {
 
     async fn set_refund(&self, purchase_id: i64, refund: i64, note: &[u8], nonce: &[u8]) -> RepositoryResult<()> {
         sqlx::query(
-            "UPDATE purchase SET refund = $1, refund_note = $2, refund_nonce = $3 WHERE id = $4 AND latest = TRUE"
+            r#"UPDATE purchase SET "REFUND" = $1, "REFUND_NOTE" = $2, "REFUND_NONCE" = $3 WHERE "ID" = $4 AND "LATEST" = TRUE"#
         )
         .bind(refund)
         .bind(note)
@@ -3567,10 +3567,10 @@ impl Repository<PurchaseModel> for PgPurchaseRepository {
         sqlx::query(
             r#"
             INSERT INTO purchase (
-                id, buyer_id, goods_id, seller_id, quantity, price, deadline,
-                note, nonce, timestamp, pending, goods, goods_nonce, goods_is_text,
-                refund_note, refund_nonce, has_feedback_notes, has_public_feedbacks,
-                discount, refund, height, latest
+                "ID", "BUYER_ID", "GOODS_ID", "SELLER_ID", "QUANTITY", "PRICE", "DEADLINE",
+                "NOTE", "NONCE", timestamp, "PENDING", goods, "GOODS_NONCE", "GOODS_IS_TEXT",
+                "REFUND_NOTE", "REFUND_NONCE", "HAS_FEEDBACK_NOTES", "HAS_PUBLIC_FEEDBACKS",
+                "DISCOUNT", "REFUND", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
             "#,
         )
@@ -3603,7 +3603,7 @@ impl Repository<PurchaseModel> for PgPurchaseRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PurchaseModel>> {
-        let record = sqlx::query_as::<_, PurchaseModel>("SELECT * FROM purchase WHERE db_id = $1")
+        let record = sqlx::query_as::<_, PurchaseModel>(r#"SELECT * FROM purchase WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -3623,7 +3623,7 @@ impl Repository<PurchaseModel> for PgPurchaseRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, PurchaseModel>(
-            "SELECT * FROM purchase WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM purchase WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -3634,7 +3634,7 @@ impl Repository<PurchaseModel> for PgPurchaseRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM purchase WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM purchase WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -3656,7 +3656,7 @@ impl PgPollRepository {
 impl PollRepository for PgPollRepository {
     async fn find_by_poll_id(&self, id: i64) -> RepositoryResult<Option<PollModel>> {
         let record = sqlx::query_as::<_, PollModel>(
-            "SELECT * FROM poll WHERE id = $1 LIMIT 1"
+            r#"SELECT * FROM poll WHERE "ID" = $1 LIMIT 1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -3667,7 +3667,7 @@ impl PollRepository for PgPollRepository {
 
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<PollModel>> {
         let records = sqlx::query_as::<_, PollModel>(
-            "SELECT * FROM poll WHERE account_id = $1 ORDER BY height DESC"
+            r#"SELECT * FROM poll WHERE "ACCOUNT_ID" = $1 ORDER BY "HEIGHT" DESC"#
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -3678,7 +3678,7 @@ impl PollRepository for PgPollRepository {
 
     async fn find_active(&self, height: i32, limit: i64) -> RepositoryResult<Vec<PollModel>> {
         let records = sqlx::query_as::<_, PollModel>(
-            "SELECT * FROM poll WHERE finish_height > $1 ORDER BY finish_height ASC LIMIT $2"
+            r#"SELECT * FROM poll WHERE "FINISH_HEIGHT" > $1 ORDER BY "FINISH_HEIGHT" ASC LIMIT $2"#
         )
         .bind(height)
         .bind(limit)
@@ -3699,9 +3699,9 @@ impl Repository<PollModel> for PgPollRepository {
         sqlx::query(
             r#"
             INSERT INTO poll (
-                id, account_id, name, description, options, min_num_options, max_num_options,
-                min_range_value, max_range_value, timestamp, finish_height, voting_model,
-                min_balance, min_balance_model, holding_id, height
+                "ID", "ACCOUNT_ID", "NAME", "DESCRIPTION", "OPTIONS", "MIN_NUM_OPTIONS", "MAX_NUM_OPTIONS",
+                "MIN_RANGE_VALUE", "MAX_RANGE_VALUE", timestamp, "FINISH_HEIGHT", "VOTING_MODEL",
+                "MIN_BALANCE", "MIN_BALANCE_MODEL", "HOLDING_ID", "HEIGHT"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             "#,
         )
@@ -3728,7 +3728,7 @@ impl Repository<PollModel> for PgPollRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PollModel>> {
-        let record = sqlx::query_as::<_, PollModel>("SELECT * FROM poll WHERE db_id = $1")
+        let record = sqlx::query_as::<_, PollModel>(r#"SELECT * FROM poll WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -3748,7 +3748,7 @@ impl Repository<PollModel> for PgPollRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, PollModel>(
-            "SELECT * FROM poll ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM poll ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -3781,7 +3781,7 @@ impl PgVoteRepository {
 impl VoteRepository for PgVoteRepository {
     async fn find_by_poll(&self, poll_id: i64, limit: i64) -> RepositoryResult<Vec<VoteModel>> {
         let records = sqlx::query_as::<_, VoteModel>(
-            "SELECT * FROM vote WHERE poll_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM vote WHERE "POLL_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(poll_id)
         .bind(limit)
@@ -3793,7 +3793,7 @@ impl VoteRepository for PgVoteRepository {
 
     async fn find_by_voter(&self, voter_id: i64, limit: i64) -> RepositoryResult<Vec<VoteModel>> {
         let records = sqlx::query_as::<_, VoteModel>(
-            "SELECT * FROM vote WHERE voter_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM vote WHERE "VOTER_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(voter_id)
         .bind(limit)
@@ -3805,7 +3805,7 @@ impl VoteRepository for PgVoteRepository {
 
     async fn find_by_poll_and_voter(&self, poll_id: i64, voter_id: i64) -> RepositoryResult<Option<VoteModel>> {
         let record = sqlx::query_as::<_, VoteModel>(
-            "SELECT * FROM vote WHERE poll_id = $1 AND voter_id = $2 LIMIT 1"
+            r#"SELECT * FROM vote WHERE "POLL_ID" = $1 AND "VOTER_ID" = $2 LIMIT 1"#
         )
         .bind(poll_id)
         .bind(voter_id)
@@ -3821,7 +3821,7 @@ impl Repository<VoteModel> for PgVoteRepository {
     async fn insert(&self, vote: &VoteModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO vote (id, poll_id, voter_id, vote_bytes, height)
+            INSERT INTO vote ("ID", "POLL_ID", "VOTER_ID", "VOTE_BYTES", "HEIGHT")
             VALUES ($1, $2, $3, $4, $5)
             "#,
         )
@@ -3837,7 +3837,7 @@ impl Repository<VoteModel> for PgVoteRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<VoteModel>> {
-        let record = sqlx::query_as::<_, VoteModel>("SELECT * FROM vote WHERE db_id = $1")
+        let record = sqlx::query_as::<_, VoteModel>(r#"SELECT * FROM vote WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -3857,7 +3857,7 @@ impl Repository<VoteModel> for PgVoteRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, VoteModel>(
-            "SELECT * FROM vote ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM vote ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -3890,7 +3890,7 @@ impl PgShufflingRepository {
 impl ShufflingRepository for PgShufflingRepository {
     async fn find_by_shuffling_id(&self, id: i64) -> RepositoryResult<Option<ShufflingModel>> {
         let record = sqlx::query_as::<_, ShufflingModel>(
-            "SELECT * FROM shuffling WHERE id = $1 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM shuffling WHERE "ID" = $1 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -3901,7 +3901,7 @@ impl ShufflingRepository for PgShufflingRepository {
 
     async fn find_by_issuer(&self, issuer_id: i64) -> RepositoryResult<Vec<ShufflingModel>> {
         let records = sqlx::query_as::<_, ShufflingModel>(
-            "SELECT * FROM shuffling WHERE issuer_id = $1 AND latest = TRUE ORDER BY height DESC"
+            r#"SELECT * FROM shuffling WHERE "ISSUER_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC"#
         )
         .bind(issuer_id)
         .fetch_all(&self.pool)
@@ -3912,7 +3912,7 @@ impl ShufflingRepository for PgShufflingRepository {
 
     async fn find_active(&self, limit: i64) -> RepositoryResult<Vec<ShufflingModel>> {
         let records = sqlx::query_as::<_, ShufflingModel>(
-            "SELECT * FROM shuffling WHERE latest = TRUE AND stage < 5 ORDER BY height DESC LIMIT $1"
+            r#"SELECT * FROM shuffling WHERE "LATEST" = TRUE AND "STAGE" < 5 ORDER BY "HEIGHT" DESC LIMIT $1"#
         )
         .bind(limit)
         .fetch_all(&self.pool)
@@ -3922,7 +3922,7 @@ impl ShufflingRepository for PgShufflingRepository {
     }
 
     async fn update_stage(&self, shuffling_id: i64, stage: i32) -> RepositoryResult<()> {
-        sqlx::query("UPDATE shuffling SET stage = $1 WHERE id = $2 AND latest = TRUE")
+        sqlx::query(r#"UPDATE shuffling SET "STAGE" = $1 WHERE "ID" = $2 AND "LATEST" = TRUE"#)
             .bind(stage)
             .bind(shuffling_id)
             .execute(&self.pool)
@@ -3938,9 +3938,9 @@ impl Repository<ShufflingModel> for PgShufflingRepository {
         sqlx::query(
             r#"
             INSERT INTO shuffling (
-                id, holding_id, holding_type, issuer_id, amount, participant_count,
-                blocks_remaining, stage, assignee_account_id, registrant_count,
-                recipient_public_keys, height, latest
+                "ID", "HOLDING_ID", "HOLDING_TYPE", "ISSUER_ID", "AMOUNT", "PARTICIPANT_COUNT",
+                "BLOCKS_REMAINING", "STAGE", "ASSIGNEE_ACCOUNT_ID", "REGISTRANT_COUNT",
+                "RECIPIENT_PUBLIC_KEYS", "HEIGHT", "LATEST"
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             "#,
         )
@@ -3964,7 +3964,7 @@ impl Repository<ShufflingModel> for PgShufflingRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<ShufflingModel>> {
-        let record = sqlx::query_as::<_, ShufflingModel>("SELECT * FROM shuffling WHERE db_id = $1")
+        let record = sqlx::query_as::<_, ShufflingModel>(r#"SELECT * FROM shuffling WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -3984,7 +3984,7 @@ impl Repository<ShufflingModel> for PgShufflingRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, ShufflingModel>(
-            "SELECT * FROM shuffling WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM shuffling WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -3995,7 +3995,7 @@ impl Repository<ShufflingModel> for PgShufflingRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM shuffling WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM shuffling WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -4017,7 +4017,7 @@ impl PgAccountCurrencyRepository {
 impl AccountCurrencyRepository for PgAccountCurrencyRepository {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<AccountCurrencyModel>> {
         let records = sqlx::query_as::<_, AccountCurrencyModel>(
-            "SELECT * FROM account_currency WHERE account_id = $1 AND latest = TRUE"
+            r#"SELECT * FROM account_currency WHERE "ACCOUNT_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -4028,7 +4028,7 @@ impl AccountCurrencyRepository for PgAccountCurrencyRepository {
 
     async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<AccountCurrencyModel>> {
         let records = sqlx::query_as::<_, AccountCurrencyModel>(
-            "SELECT * FROM account_currency WHERE currency_id = $1 AND latest = TRUE"
+            r#"SELECT * FROM account_currency WHERE "CURRENCY_ID" = $1 AND "LATEST" = TRUE"#
         )
         .bind(currency_id)
         .fetch_all(&self.pool)
@@ -4039,7 +4039,7 @@ impl AccountCurrencyRepository for PgAccountCurrencyRepository {
 
     async fn find_by_account_and_currency(&self, account_id: i64, currency_id: i64) -> RepositoryResult<Option<AccountCurrencyModel>> {
         let record = sqlx::query_as::<_, AccountCurrencyModel>(
-            "SELECT * FROM account_currency WHERE account_id = $1 AND currency_id = $2 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM account_currency WHERE "ACCOUNT_ID" = $1 AND "CURRENCY_ID" = $2 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(account_id)
         .bind(currency_id)
@@ -4051,7 +4051,7 @@ impl AccountCurrencyRepository for PgAccountCurrencyRepository {
 
     async fn update_units(&self, account_id: i64, currency_id: i64, delta: i64) -> RepositoryResult<()> {
         let result = sqlx::query(
-            "UPDATE account_currency SET units = units + $1, latest = TRUE WHERE account_id = $2 AND currency_id = $3 AND latest = TRUE"
+            r#"UPDATE account_currency SET "UNITS" = "UNITS" + $1, "LATEST" = TRUE WHERE "ACCOUNT_ID" = $2 AND "CURRENCY_ID" = $3 AND "LATEST" = TRUE"#
         )
         .bind(delta)
         .bind(account_id)
@@ -4061,12 +4061,12 @@ impl AccountCurrencyRepository for PgAccountCurrencyRepository {
         .map_err(RepositoryError::DbError)?;
 
         if result.rows_affected() == 0 && delta != 0 {
-            let current_height: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(height), 0) FROM block")
+            let current_height: i32 = sqlx::query_scalar(r#"SELECT COALESCE(MAX("HEIGHT"), 0) FROM block"#)
                 .fetch_one(&self.pool)
                 .await
                 .unwrap_or(0);
             sqlx::query(
-                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES ($1, $2, $3, 0, $4, TRUE)"
+                r#"INSERT INTO account_currency ("ACCOUNT_ID", "CURRENCY_ID", "UNITS", "UNCONFIRMED_UNITS", "HEIGHT", "LATEST") VALUES ($1, $2, $3, 0, $4, TRUE)"#
             )
             .bind(account_id)
             .bind(currency_id)
@@ -4084,8 +4084,8 @@ impl AccountCurrencyRepository for PgAccountCurrencyRepository {
         let result = sqlx::query(
             r#"
             UPDATE account_currency
-            SET unconfirmed_units = unconfirmed_units + $1, latest = TRUE
-            WHERE account_id = $2 AND currency_id = $3
+            SET "UNCONFIRMED_UNITS" = "UNCONFIRMED_UNITS" + $1, "LATEST" = TRUE
+            WHERE "ACCOUNT_ID" = $2 AND "CURRENCY_ID" = $3
             "#,
         )
         .bind(delta)
@@ -4096,12 +4096,12 @@ impl AccountCurrencyRepository for PgAccountCurrencyRepository {
         .map_err(RepositoryError::DbError)?;
 
         if result.rows_affected() == 0 && delta != 0 {
-            let current_height: i32 = sqlx::query_scalar("SELECT COALESCE(MAX(height), 0) FROM block")
+            let current_height: i32 = sqlx::query_scalar(r#"SELECT COALESCE(MAX("HEIGHT"), 0) FROM block"#)
                 .fetch_one(&self.pool)
                 .await
                 .unwrap_or(0);
             sqlx::query(
-                "INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest) VALUES ($1, $2, 0, $3, $4, TRUE)"
+                r#"INSERT INTO account_currency ("ACCOUNT_ID", "CURRENCY_ID", "UNITS", "UNCONFIRMED_UNITS", "HEIGHT", "LATEST") VALUES ($1, $2, 0, $3, $4, TRUE)"#
             )
             .bind(account_id)
             .bind(currency_id)
@@ -4121,7 +4121,7 @@ impl Repository<AccountCurrencyModel> for PgAccountCurrencyRepository {
     async fn insert(&self, ac: &AccountCurrencyModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO account_currency (account_id, currency_id, units, unconfirmed_units, height, latest)
+            INSERT INTO account_currency ("ACCOUNT_ID", "CURRENCY_ID", "UNITS", "UNCONFIRMED_UNITS", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5, $6)
             "#,
         )
@@ -4138,7 +4138,7 @@ impl Repository<AccountCurrencyModel> for PgAccountCurrencyRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountCurrencyModel>> {
-        let record = sqlx::query_as::<_, AccountCurrencyModel>("SELECT * FROM account_currency WHERE db_id = $1")
+        let record = sqlx::query_as::<_, AccountCurrencyModel>(r#"SELECT * FROM account_currency WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -4158,7 +4158,7 @@ impl Repository<AccountCurrencyModel> for PgAccountCurrencyRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, AccountCurrencyModel>(
-            "SELECT * FROM account_currency WHERE latest = TRUE LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM account_currency WHERE "LATEST" = TRUE LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -4169,7 +4169,7 @@ impl Repository<AccountCurrencyModel> for PgAccountCurrencyRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM account_currency WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM account_currency WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -4191,7 +4191,7 @@ impl PgCurrencyTransferRepository {
 impl CurrencyTransferRepository for PgCurrencyTransferRepository {
     async fn find_by_currency(&self, currency_id: i64, limit: i64) -> RepositoryResult<Vec<CurrencyTransferModel>> {
         let records = sqlx::query_as::<_, CurrencyTransferModel>(
-            "SELECT * FROM currency_transfer WHERE currency_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM currency_transfer WHERE "CURRENCY_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(currency_id)
         .bind(limit)
@@ -4203,7 +4203,7 @@ impl CurrencyTransferRepository for PgCurrencyTransferRepository {
 
     async fn find_by_sender(&self, sender_id: i64, limit: i64) -> RepositoryResult<Vec<CurrencyTransferModel>> {
         let records = sqlx::query_as::<_, CurrencyTransferModel>(
-            "SELECT * FROM currency_transfer WHERE sender_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM currency_transfer WHERE "SENDER_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(sender_id)
         .bind(limit)
@@ -4215,7 +4215,7 @@ impl CurrencyTransferRepository for PgCurrencyTransferRepository {
 
     async fn find_by_recipient(&self, recipient_id: i64, limit: i64) -> RepositoryResult<Vec<CurrencyTransferModel>> {
         let records = sqlx::query_as::<_, CurrencyTransferModel>(
-            "SELECT * FROM currency_transfer WHERE recipient_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM currency_transfer WHERE "RECIPIENT_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(recipient_id)
         .bind(limit)
@@ -4231,7 +4231,7 @@ impl Repository<CurrencyTransferModel> for PgCurrencyTransferRepository {
     async fn insert(&self, transfer: &CurrencyTransferModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO currency_transfer (id, currency_id, sender_id, recipient_id, units, timestamp, height)
+            INSERT INTO currency_transfer ("ID", "CURRENCY_ID", "SENDER_ID", "RECIPIENT_ID", "UNITS", timestamp, "HEIGHT")
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
         )
@@ -4249,7 +4249,7 @@ impl Repository<CurrencyTransferModel> for PgCurrencyTransferRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<CurrencyTransferModel>> {
-        let record = sqlx::query_as::<_, CurrencyTransferModel>("SELECT * FROM currency_transfer WHERE db_id = $1")
+        let record = sqlx::query_as::<_, CurrencyTransferModel>(r#"SELECT * FROM currency_transfer WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -4269,7 +4269,7 @@ impl Repository<CurrencyTransferModel> for PgCurrencyTransferRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, CurrencyTransferModel>(
-            "SELECT * FROM currency_transfer ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM currency_transfer ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -4302,7 +4302,7 @@ impl PgContractReferenceRepository {
 impl ContractReferenceRepository for PgContractReferenceRepository {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<ContractReferenceModel>> {
         let records = sqlx::query_as::<_, ContractReferenceModel>(
-            "SELECT * FROM contract_reference WHERE account_id = $1 ORDER BY height DESC"
+            r#"SELECT * FROM contract_reference WHERE "ACCOUNT_ID" = $1 ORDER BY "HEIGHT" DESC"#
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -4313,7 +4313,7 @@ impl ContractReferenceRepository for PgContractReferenceRepository {
 
     async fn find_by_contract_name(&self, name: &str) -> RepositoryResult<Option<ContractReferenceModel>> {
         let record = sqlx::query_as::<_, ContractReferenceModel>(
-            "SELECT * FROM contract_reference WHERE contract_name = $1 LIMIT 1"
+            r#"SELECT * FROM contract_reference WHERE "CONTRACT_NAME" = $1 LIMIT 1"#
         )
         .bind(name)
         .fetch_optional(&self.pool)
@@ -4323,7 +4323,7 @@ impl ContractReferenceRepository for PgContractReferenceRepository {
     }
 
     async fn delete_by_account_and_name(&self, account_id: i64, name: &str) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM contract_reference WHERE account_id = $1 AND contract_name = $2")
+        sqlx::query(r#"DELETE FROM contract_reference WHERE "ACCOUNT_ID" = $1 AND "CONTRACT_NAME" = $2"#)
             .bind(account_id)
             .bind(name)
             .execute(&self.pool)
@@ -4338,7 +4338,7 @@ impl Repository<ContractReferenceModel> for PgContractReferenceRepository {
     async fn insert(&self, cr: &ContractReferenceModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO contract_reference (id, account_id, contract_name, contract_params, contract_transaction_chain_id, contract_transaction_full_hash, height, latest)
+            INSERT INTO contract_reference ("ID", "ACCOUNT_ID", "CONTRACT_NAME", "CONTRACT_PARAMS", "CONTRACT_TRANSACTION_CHAIN_ID", "CONTRACT_TRANSACTION_FULL_HASH", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
@@ -4357,7 +4357,7 @@ impl Repository<ContractReferenceModel> for PgContractReferenceRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<ContractReferenceModel>> {
-        let record = sqlx::query_as::<_, ContractReferenceModel>("SELECT * FROM contract_reference WHERE db_id = $1")
+        let record = sqlx::query_as::<_, ContractReferenceModel>(r#"SELECT * FROM contract_reference WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -4370,7 +4370,7 @@ impl Repository<ContractReferenceModel> for PgContractReferenceRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM contract_reference WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM contract_reference WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -4382,7 +4382,7 @@ impl Repository<ContractReferenceModel> for PgContractReferenceRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, ContractReferenceModel>(
-            "SELECT * FROM contract_reference ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM contract_reference ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -4415,7 +4415,7 @@ impl PgAssetPropertyRepository {
 impl AssetPropertyRepository for PgAssetPropertyRepository {
     async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetPropertyModel>> {
         let records = sqlx::query_as::<_, AssetPropertyModel>(
-            "SELECT * FROM asset_property WHERE asset_id = $1 AND latest = TRUE ORDER BY height DESC"
+            r#"SELECT * FROM asset_property WHERE "ASSET_ID" = $1 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC"#
         )
         .bind(asset_id)
         .fetch_all(&self.pool)
@@ -4426,7 +4426,7 @@ impl AssetPropertyRepository for PgAssetPropertyRepository {
 
     async fn find_by_asset_and_account(&self, asset_id: i64, setter_id: i64) -> RepositoryResult<Vec<AssetPropertyModel>> {
         let records = sqlx::query_as::<_, AssetPropertyModel>(
-            "SELECT * FROM asset_property WHERE asset_id = $1 AND setter_id = $2 AND latest = TRUE ORDER BY height DESC"
+            r#"SELECT * FROM asset_property WHERE "ASSET_ID" = $1 AND "SETTER_ID" = $2 AND "LATEST" = TRUE ORDER BY "HEIGHT" DESC"#
         )
         .bind(asset_id)
         .bind(setter_id)
@@ -4438,7 +4438,7 @@ impl AssetPropertyRepository for PgAssetPropertyRepository {
 
     async fn find_by_asset_account_property(&self, asset_id: i64, setter_id: i64, property: &str) -> RepositoryResult<Option<AssetPropertyModel>> {
         let record = sqlx::query_as::<_, AssetPropertyModel>(
-            "SELECT * FROM asset_property WHERE asset_id = $1 AND setter_id = $2 AND property = $3 AND latest = TRUE LIMIT 1"
+            r#"SELECT * FROM asset_property WHERE "ASSET_ID" = $1 AND "SETTER_ID" = $2 AND "PROPERTY" = $3 AND "LATEST" = TRUE LIMIT 1"#
         )
         .bind(asset_id)
         .bind(setter_id)
@@ -4450,7 +4450,7 @@ impl AssetPropertyRepository for PgAssetPropertyRepository {
     }
 
     async fn delete_by_asset_account_property(&self, asset_id: i64, setter_id: i64, property: &str) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM asset_property WHERE asset_id = $1 AND setter_id = $2 AND property = $3")
+        sqlx::query(r#"DELETE FROM asset_property WHERE "ASSET_ID" = $1 AND "SETTER_ID" = $2 AND "PROPERTY" = $3"#)
             .bind(asset_id)
             .bind(setter_id)
             .bind(property)
@@ -4466,7 +4466,7 @@ impl Repository<AssetPropertyModel> for PgAssetPropertyRepository {
     async fn insert(&self, prop: &AssetPropertyModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO asset_property (id, asset_id, setter_id, property, value, height, latest)
+            INSERT INTO asset_property ("ID", "ASSET_ID", "SETTER_ID", "PROPERTY", "VALUE", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5, $6, $7)
             "#,
         )
@@ -4484,7 +4484,7 @@ impl Repository<AssetPropertyModel> for PgAssetPropertyRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetPropertyModel>> {
-        let record = sqlx::query_as::<_, AssetPropertyModel>("SELECT * FROM asset_property WHERE db_id = $1")
+        let record = sqlx::query_as::<_, AssetPropertyModel>(r#"SELECT * FROM asset_property WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -4504,7 +4504,7 @@ impl Repository<AssetPropertyModel> for PgAssetPropertyRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, AssetPropertyModel>(
-            "SELECT * FROM asset_property WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM asset_property WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -4515,7 +4515,7 @@ impl Repository<AssetPropertyModel> for PgAssetPropertyRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM asset_property WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM asset_property WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -4537,7 +4537,7 @@ impl PgAssetHistoryRepository {
 impl AssetHistoryRepository for PgAssetHistoryRepository {
     async fn find_by_asset(&self, asset_id: i64, limit: i64) -> RepositoryResult<Vec<AssetHistoryModel>> {
         let records = sqlx::query_as::<_, AssetHistoryModel>(
-            "SELECT * FROM asset_history WHERE asset_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM asset_history WHERE "ASSET_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(asset_id)
         .bind(limit)
@@ -4549,7 +4549,7 @@ impl AssetHistoryRepository for PgAssetHistoryRepository {
 
     async fn find_by_asset_and_account(&self, asset_id: i64, account_id: i64, limit: i64) -> RepositoryResult<Vec<AssetHistoryModel>> {
         let records = sqlx::query_as::<_, AssetHistoryModel>(
-            "SELECT * FROM asset_history WHERE asset_id = $1 AND account_id = $2 ORDER BY height DESC LIMIT $3"
+            r#"SELECT * FROM asset_history WHERE "ASSET_ID" = $1 AND "ACCOUNT_ID" = $2 ORDER BY "HEIGHT" DESC LIMIT $3"#
         )
         .bind(asset_id)
         .bind(account_id)
@@ -4566,7 +4566,7 @@ impl Repository<AssetHistoryModel> for PgAssetHistoryRepository {
     async fn insert(&self, history: &AssetHistoryModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO asset_history (id, full_hash, asset_id, account_id, quantity, timestamp, chain_id, height)
+            INSERT INTO asset_history ("ID", "FULL_HASH", "ASSET_ID", "ACCOUNT_ID", "QUANTITY", timestamp, "CHAIN_ID", "HEIGHT")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
@@ -4585,7 +4585,7 @@ impl Repository<AssetHistoryModel> for PgAssetHistoryRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetHistoryModel>> {
-        let record = sqlx::query_as::<_, AssetHistoryModel>("SELECT * FROM asset_history WHERE db_id = $1")
+        let record = sqlx::query_as::<_, AssetHistoryModel>(r#"SELECT * FROM asset_history WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -4605,7 +4605,7 @@ impl Repository<AssetHistoryModel> for PgAssetHistoryRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, AssetHistoryModel>(
-            "SELECT * FROM asset_history ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM asset_history ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -4638,7 +4638,7 @@ impl PgTaggedDataTagRepository {
 impl TaggedDataTagRepository for PgTaggedDataTagRepository {
     async fn find_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataTagModel>> {
         let records = sqlx::query_as::<_, TaggedDataTagModel>(
-            "SELECT * FROM tagged_data_tag WHERE tag = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM tagged_data_tag WHERE "TAG" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(tag)
         .bind(limit)
@@ -4650,7 +4650,7 @@ impl TaggedDataTagRepository for PgTaggedDataTagRepository {
 
     async fn find_by_data_id(&self, id: i64) -> RepositoryResult<Vec<TaggedDataTagModel>> {
         let records = sqlx::query_as::<_, TaggedDataTagModel>(
-            "SELECT * FROM tagged_data_tag WHERE id = $1 ORDER BY height DESC"
+            r#"SELECT * FROM tagged_data_tag WHERE "ID" = $1 ORDER BY "HEIGHT" DESC"#
         )
         .bind(id)
         .fetch_all(&self.pool)
@@ -4665,7 +4665,7 @@ impl Repository<TaggedDataTagModel> for PgTaggedDataTagRepository {
     async fn insert(&self, tag: &TaggedDataTagModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO tagged_data_tag (id, tag, height, latest)
+            INSERT INTO tagged_data_tag ("ID", "TAG", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4)
             "#,
         )
@@ -4680,7 +4680,7 @@ impl Repository<TaggedDataTagModel> for PgTaggedDataTagRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TaggedDataTagModel>> {
-        let record = sqlx::query_as::<_, TaggedDataTagModel>("SELECT * FROM tagged_data_tag WHERE db_id = $1")
+        let record = sqlx::query_as::<_, TaggedDataTagModel>(r#"SELECT * FROM tagged_data_tag WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -4700,7 +4700,7 @@ impl Repository<TaggedDataTagModel> for PgTaggedDataTagRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, TaggedDataTagModel>(
-            "SELECT * FROM tagged_data_tag WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM tagged_data_tag WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -4711,7 +4711,7 @@ impl Repository<TaggedDataTagModel> for PgTaggedDataTagRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tagged_data_tag WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM tagged_data_tag WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -4733,7 +4733,7 @@ impl PgTaggedTimestampRepository {
 impl TaggedTimestampRepository for PgTaggedTimestampRepository {
     async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<TaggedTimestampModel>> {
         let records = sqlx::query_as::<_, TaggedTimestampModel>(
-            "SELECT * FROM tagged_timestamp WHERE account_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM tagged_timestamp WHERE "ACCOUNT_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(account_id)
         .bind(limit)
@@ -4745,7 +4745,7 @@ impl TaggedTimestampRepository for PgTaggedTimestampRepository {
 
     async fn find_by_tag(&self, tag: &str, limit: i64) -> RepositoryResult<Vec<TaggedTimestampModel>> {
         let records = sqlx::query_as::<_, TaggedTimestampModel>(
-            "SELECT * FROM tagged_timestamp WHERE tag = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM tagged_timestamp WHERE "TAG" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(tag)
         .bind(limit)
@@ -4757,7 +4757,7 @@ impl TaggedTimestampRepository for PgTaggedTimestampRepository {
 
     async fn find_by_account_and_tag(&self, account_id: i64, tag: &str) -> RepositoryResult<Option<TaggedTimestampModel>> {
         let record = sqlx::query_as::<_, TaggedTimestampModel>(
-            "SELECT * FROM tagged_timestamp WHERE account_id = $1 AND tag = $2 LIMIT 1"
+            r#"SELECT * FROM tagged_timestamp WHERE "ACCOUNT_ID" = $1 AND "TAG" = $2 LIMIT 1"#
         )
         .bind(account_id)
         .bind(tag)
@@ -4773,7 +4773,7 @@ impl Repository<TaggedTimestampModel> for PgTaggedTimestampRepository {
     async fn insert(&self, ts: &TaggedTimestampModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO tagged_timestamp (id, account_id, tag, timestamp, height, latest)
+            INSERT INTO tagged_timestamp ("ID", "ACCOUNT_ID", "TAG", timestamp, "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5, $6)
             "#,
         )
@@ -4790,7 +4790,7 @@ impl Repository<TaggedTimestampModel> for PgTaggedTimestampRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TaggedTimestampModel>> {
-        let record = sqlx::query_as::<_, TaggedTimestampModel>("SELECT * FROM tagged_timestamp WHERE db_id = $1")
+        let record = sqlx::query_as::<_, TaggedTimestampModel>(r#"SELECT * FROM tagged_timestamp WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -4810,7 +4810,7 @@ impl Repository<TaggedTimestampModel> for PgTaggedTimestampRepository {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, TaggedTimestampModel>(
-            "SELECT * FROM tagged_timestamp WHERE latest = TRUE ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM tagged_timestamp WHERE "LATEST" = TRUE ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -4821,7 +4821,7 @@ impl Repository<TaggedTimestampModel> for PgTaggedTimestampRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tagged_timestamp WHERE latest = TRUE")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM tagged_timestamp WHERE "LATEST" = TRUE"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -4844,7 +4844,7 @@ impl Repository<AccountGuaranteedBalanceModel> for PgAccountGuaranteedBalanceRep
     async fn insert(&self, item: &AccountGuaranteedBalanceModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO account_guaranteed_balance (account_id, additions, height)
+            INSERT INTO account_guaranteed_balance ("ACCOUNT_ID", "ADDITIONS", "HEIGHT")
             VALUES ($1, $2, $3)
             "#,
         )
@@ -4859,7 +4859,7 @@ impl Repository<AccountGuaranteedBalanceModel> for PgAccountGuaranteedBalanceRep
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AccountGuaranteedBalanceModel>> {
         let record = sqlx::query_as::<_, AccountGuaranteedBalanceModel>(
-            "SELECT * FROM account_guaranteed_balance WHERE db_id = $1"
+            r#"SELECT * FROM account_guaranteed_balance WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -4872,8 +4872,8 @@ impl Repository<AccountGuaranteedBalanceModel> for PgAccountGuaranteedBalanceRep
         sqlx::query(
             r#"
             UPDATE account_guaranteed_balance
-            SET account_id = $1, additions = $2, height = $3
-            WHERE db_id = $4
+            SET "ACCOUNT_ID" = $1, "ADDITIONS" = $2, "HEIGHT" = $3
+            WHERE "DB_ID" = $4
             "#,
         )
         .bind(item.account_id)
@@ -4887,7 +4887,7 @@ impl Repository<AccountGuaranteedBalanceModel> for PgAccountGuaranteedBalanceRep
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM account_guaranteed_balance WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM account_guaranteed_balance WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -4899,7 +4899,7 @@ impl Repository<AccountGuaranteedBalanceModel> for PgAccountGuaranteedBalanceRep
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, AccountGuaranteedBalanceModel>(
-            "SELECT * FROM account_guaranteed_balance ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM account_guaranteed_balance ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit)
         .bind(offset)
@@ -4922,7 +4922,7 @@ impl Repository<AccountGuaranteedBalanceModel> for PgAccountGuaranteedBalanceRep
 impl AccountGuaranteedBalanceRepository for PgAccountGuaranteedBalanceRepository {
     async fn find_by_account_and_height(&self, account_id: i64, height: i32) -> RepositoryResult<Option<AccountGuaranteedBalanceModel>> {
         let record = sqlx::query_as::<_, AccountGuaranteedBalanceModel>(
-            "SELECT * FROM account_guaranteed_balance WHERE account_id = $1 AND height = $2"
+            r#"SELECT * FROM account_guaranteed_balance WHERE "ACCOUNT_ID" = $1 AND "HEIGHT" = $2"#
         )
         .bind(account_id)
         .bind(height)
@@ -4985,7 +4985,7 @@ impl Repository<ExchangeRequestModel> for PgExchangeRequestRepository {
     async fn insert(&self, request: &ExchangeRequestModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO exchange_request (id, account_id, currency_id, units, rate, is_buy, timestamp, height)
+            INSERT INTO exchange_request ("ID", "ACCOUNT_ID", "CURRENCY_ID", "UNITS", "RATE", "IS_BUY", timestamp, "HEIGHT")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
@@ -5005,7 +5005,7 @@ impl Repository<ExchangeRequestModel> for PgExchangeRequestRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<ExchangeRequestModel>> {
         let record = sqlx::query_as::<_, ExchangeRequestModel>(
-            "SELECT * FROM exchange_request WHERE db_id = $1"
+            r#"SELECT * FROM exchange_request WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5018,9 +5018,9 @@ impl Repository<ExchangeRequestModel> for PgExchangeRequestRepository {
         sqlx::query(
             r#"
             UPDATE exchange_request SET
-                account_id = $1, currency_id = $2, units = $3, rate = $4,
-                is_buy = $5, timestamp = $6, height = $7
-            WHERE db_id = $8
+                "ACCOUNT_ID" = $1, "CURRENCY_ID" = $2, "UNITS" = $3, "RATE" = $4,
+                "IS_BUY" = $5, timestamp = $6, "HEIGHT" = $7
+            WHERE "DB_ID" = $8
             "#,
         )
         .bind(request.account_id)
@@ -5038,7 +5038,7 @@ impl Repository<ExchangeRequestModel> for PgExchangeRequestRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM exchange_request WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM exchange_request WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -5048,7 +5048,7 @@ impl Repository<ExchangeRequestModel> for PgExchangeRequestRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<ExchangeRequestModel>> {
         let records = sqlx::query_as::<_, ExchangeRequestModel>(
-            "SELECT * FROM exchange_request ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM exchange_request ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -5082,7 +5082,7 @@ impl Repository<CurrencyMintModel> for PgCurrencyMintRepository {
     async fn insert(&self, mint: &CurrencyMintModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO currency_mint (currency_id, account_id, counter, height, latest)
+            INSERT INTO currency_mint ("CURRENCY_ID", "ACCOUNT_ID", "COUNTER", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4, $5)
             "#,
         )
@@ -5099,7 +5099,7 @@ impl Repository<CurrencyMintModel> for PgCurrencyMintRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<CurrencyMintModel>> {
         let record = sqlx::query_as::<_, CurrencyMintModel>(
-            "SELECT * FROM currency_mint WHERE db_id = $1"
+            r#"SELECT * FROM currency_mint WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5112,9 +5112,9 @@ impl Repository<CurrencyMintModel> for PgCurrencyMintRepository {
         sqlx::query(
             r#"
             UPDATE currency_mint SET
-                currency_id = $1, account_id = $2, counter = $3,
-                height = $4, latest = $5
-            WHERE db_id = $6
+                "CURRENCY_ID" = $1, "ACCOUNT_ID" = $2, "COUNTER" = $3,
+                "HEIGHT" = $4, "LATEST" = $5
+            WHERE "DB_ID" = $6
             "#,
         )
         .bind(mint.currency_id)
@@ -5130,7 +5130,7 @@ impl Repository<CurrencyMintModel> for PgCurrencyMintRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM currency_mint WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM currency_mint WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -5140,7 +5140,7 @@ impl Repository<CurrencyMintModel> for PgCurrencyMintRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<CurrencyMintModel>> {
         let records = sqlx::query_as::<_, CurrencyMintModel>(
-            "SELECT * FROM currency_mint ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM currency_mint ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -5174,7 +5174,7 @@ impl Repository<AssetDeleteModel> for PgAssetDeleteRepository {
     async fn insert(&self, model: &AssetDeleteModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO asset_delete (asset_id, account_id, quantity, height)
+            INSERT INTO asset_delete ("ASSET_ID", "ACCOUNT_ID", "QUANTITY", "HEIGHT")
             VALUES ($1, $2, $3, $4)
             "#,
         )
@@ -5190,7 +5190,7 @@ impl Repository<AssetDeleteModel> for PgAssetDeleteRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetDeleteModel>> {
         let record = sqlx::query_as::<_, AssetDeleteModel>(
-            "SELECT * FROM asset_delete WHERE db_id = $1"
+            r#"SELECT * FROM asset_delete WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5209,7 +5209,7 @@ impl Repository<AssetDeleteModel> for PgAssetDeleteRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AssetDeleteModel>> {
         let records = sqlx::query_as::<_, AssetDeleteModel>(
-            "SELECT * FROM asset_delete ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM asset_delete ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -5232,7 +5232,7 @@ impl Repository<AssetDeleteModel> for PgAssetDeleteRepository {
 impl AssetDeleteRepository for PgAssetDeleteRepository {
     async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetDeleteModel>> {
         let records = sqlx::query_as::<_, AssetDeleteModel>(
-            "SELECT * FROM asset_delete WHERE asset_id = $1 ORDER BY height DESC"
+            r#"SELECT * FROM asset_delete WHERE "ASSET_ID" = $1 ORDER BY "HEIGHT" DESC"#
         )
         .bind(asset_id)
         .fetch_all(&self.pool)
@@ -5257,7 +5257,7 @@ impl Repository<PhasingPollResultModel> for PgPhasingPollResultRepository {
     async fn insert(&self, model: &PhasingPollResultModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO phasing_poll_result (id, result, approved, height)
+            INSERT INTO phasing_poll_result ("ID", "RESULT", "APPROVED", "HEIGHT")
             VALUES ($1, $2, $3, $4)
             "#,
         )
@@ -5273,7 +5273,7 @@ impl Repository<PhasingPollResultModel> for PgPhasingPollResultRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingPollResultModel>> {
         let record = sqlx::query_as::<_, PhasingPollResultModel>(
-            "SELECT * FROM phasing_poll_result WHERE db_id = $1"
+            r#"SELECT * FROM phasing_poll_result WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5286,8 +5286,8 @@ impl Repository<PhasingPollResultModel> for PgPhasingPollResultRepository {
         sqlx::query(
             r#"
             UPDATE phasing_poll_result SET
-                id = $1, result = $2, approved = $3, height = $4
-            WHERE db_id = $5
+                "ID" = $1, "RESULT" = $2, "APPROVED" = $3, "HEIGHT" = $4
+            WHERE "DB_ID" = $5
             "#,
         )
         .bind(model.id)
@@ -5302,7 +5302,7 @@ impl Repository<PhasingPollResultModel> for PgPhasingPollResultRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM phasing_poll_result WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM phasing_poll_result WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -5312,7 +5312,7 @@ impl Repository<PhasingPollResultModel> for PgPhasingPollResultRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingPollResultModel>> {
         let records = sqlx::query_as::<_, PhasingPollResultModel>(
-            "SELECT * FROM phasing_poll_result ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM phasing_poll_result ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -5335,7 +5335,7 @@ impl Repository<PhasingPollResultModel> for PgPhasingPollResultRepository {
 impl PhasingPollResultRepository for PgPhasingPollResultRepository {
     async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Option<PhasingPollResultModel>> {
         let record = sqlx::query_as::<_, PhasingPollResultModel>(
-            "SELECT * FROM phasing_poll_result WHERE id = $1"
+            r#"SELECT * FROM phasing_poll_result WHERE "ID" = $1"#
         )
         .bind(poll_id)
         .fetch_optional(&self.pool)
@@ -5372,7 +5372,7 @@ impl Repository<CoinOrderFxtModel> for PgCoinOrderFxtRepository {
     async fn insert(&self, model: &CoinOrderFxtModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO coin_order_fxt (id, account_id, chain_id, exchange_id, full_hash, amount, quantity, bid_price, ask_price, creation_height, height, transaction_height, transaction_index, latest)
+            INSERT INTO coin_order_fxt ("ID", "ACCOUNT_ID", "CHAIN_ID", "EXCHANGE_ID", "FULL_HASH", "AMOUNT", "QUANTITY", "BID_PRICE", "ASK_PRICE", "CREATION_HEIGHT", "HEIGHT", "TRANSACTION_HEIGHT", "TRANSACTION_INDEX", "LATEST")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             "#,
         )
@@ -5398,7 +5398,7 @@ impl Repository<CoinOrderFxtModel> for PgCoinOrderFxtRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<CoinOrderFxtModel>> {
         let record = sqlx::query_as::<_, CoinOrderFxtModel>(
-            "SELECT * FROM coin_order_fxt WHERE db_id = $1"
+            r#"SELECT * FROM coin_order_fxt WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5411,10 +5411,10 @@ impl Repository<CoinOrderFxtModel> for PgCoinOrderFxtRepository {
         sqlx::query(
             r#"
             UPDATE coin_order_fxt SET
-                id = $1, account_id = $2, chain_id = $3, exchange_id = $4, full_hash = $5,
-                amount = $6, quantity = $7, bid_price = $8, ask_price = $9,
-                creation_height = $10, height = $11, transaction_height = $12, transaction_index = $13, latest = $14
-            WHERE db_id = $15
+                "ID" = $1, "ACCOUNT_ID" = $2, "CHAIN_ID" = $3, "EXCHANGE_ID" = $4, "FULL_HASH" = $5,
+                "AMOUNT" = $6, "QUANTITY" = $7, "BID_PRICE" = $8, "ASK_PRICE" = $9,
+                "CREATION_HEIGHT" = $10, "HEIGHT" = $11, "TRANSACTION_HEIGHT" = $12, "TRANSACTION_INDEX" = $13, "LATEST" = $14
+            WHERE "DB_ID" = $15
             "#,
         )
         .bind(model.id)
@@ -5439,7 +5439,7 @@ impl Repository<CoinOrderFxtModel> for PgCoinOrderFxtRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM coin_order_fxt WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM coin_order_fxt WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -5451,7 +5451,7 @@ impl Repository<CoinOrderFxtModel> for PgCoinOrderFxtRepository {
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, CoinOrderFxtModel>(
-            "SELECT * FROM coin_order_fxt ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM coin_order_fxt ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(lim)
         .bind(off)
@@ -5474,7 +5474,7 @@ impl Repository<CoinOrderFxtModel> for PgCoinOrderFxtRepository {
 impl CoinOrderFxtRepository for PgCoinOrderFxtRepository {
     async fn find_by_exchange(&self, exchange_id: i32) -> RepositoryResult<Vec<CoinOrderFxtModel>> {
         let records = sqlx::query_as::<_, CoinOrderFxtModel>(
-            "SELECT * FROM coin_order_fxt WHERE exchange_id = $1 AND latest = true"
+            r#"SELECT * FROM coin_order_fxt WHERE "EXCHANGE_ID" = $1 AND "LATEST" = true"#
         )
         .bind(exchange_id)
         .fetch_all(&self.pool)
@@ -5485,7 +5485,7 @@ impl CoinOrderFxtRepository for PgCoinOrderFxtRepository {
 
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Vec<CoinOrderFxtModel>> {
         let records = sqlx::query_as::<_, CoinOrderFxtModel>(
-            "SELECT * FROM coin_order_fxt WHERE account_id = $1 AND latest = true"
+            r#"SELECT * FROM coin_order_fxt WHERE "ACCOUNT_ID" = $1 AND "LATEST" = true"#
         )
         .bind(account_id)
         .fetch_all(&self.pool)
@@ -5510,7 +5510,7 @@ impl Repository<CoinTradeFxtModel> for PgCoinTradeFxtRepository {
     async fn insert(&self, model: &CoinTradeFxtModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO coin_trade_fxt (chain_id, exchange_id, account_id, block_id, height, timestamp, exchange_quantity, exchange_price, order_id)
+            INSERT INTO coin_trade_fxt ("CHAIN_ID", "EXCHANGE_ID", "ACCOUNT_ID", "BLOCK_ID", "HEIGHT", timestamp, "EXCHANGE_QUANTITY", "EXCHANGE_PRICE", "ORDER_ID")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
@@ -5531,7 +5531,7 @@ impl Repository<CoinTradeFxtModel> for PgCoinTradeFxtRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<CoinTradeFxtModel>> {
         let record = sqlx::query_as::<_, CoinTradeFxtModel>(
-            "SELECT * FROM coin_trade_fxt WHERE db_id = $1"
+            r#"SELECT * FROM coin_trade_fxt WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5544,9 +5544,9 @@ impl Repository<CoinTradeFxtModel> for PgCoinTradeFxtRepository {
         sqlx::query(
             r#"
             UPDATE coin_trade_fxt SET
-                chain_id = $1, exchange_id = $2, account_id = $3, block_id = $4,
-                height = $5, timestamp = $6, exchange_quantity = $7, exchange_price = $8, order_id = $9
-            WHERE db_id = $10
+                "CHAIN_ID" = $1, "EXCHANGE_ID" = $2, "ACCOUNT_ID" = $3, "BLOCK_ID" = $4,
+                "HEIGHT" = $5, timestamp = $6, "EXCHANGE_QUANTITY" = $7, "EXCHANGE_PRICE" = $8, "ORDER_ID" = $9
+            WHERE "DB_ID" = $10
             "#,
         )
         .bind(model.chain_id)
@@ -5566,7 +5566,7 @@ impl Repository<CoinTradeFxtModel> for PgCoinTradeFxtRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM coin_trade_fxt WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM coin_trade_fxt WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -5578,7 +5578,7 @@ impl Repository<CoinTradeFxtModel> for PgCoinTradeFxtRepository {
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, CoinTradeFxtModel>(
-            "SELECT * FROM coin_trade_fxt ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM coin_trade_fxt ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(lim)
         .bind(off)
@@ -5601,7 +5601,7 @@ impl Repository<CoinTradeFxtModel> for PgCoinTradeFxtRepository {
 impl CoinTradeFxtRepository for PgCoinTradeFxtRepository {
     async fn find_by_exchange(&self, exchange_id: i32, limit: i64) -> RepositoryResult<Vec<CoinTradeFxtModel>> {
         let records = sqlx::query_as::<_, CoinTradeFxtModel>(
-            "SELECT * FROM coin_trade_fxt WHERE exchange_id = $1 ORDER BY height DESC LIMIT $2"
+            r#"SELECT * FROM coin_trade_fxt WHERE "EXCHANGE_ID" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
         )
         .bind(exchange_id)
         .bind(limit)
@@ -5613,7 +5613,7 @@ impl CoinTradeFxtRepository for PgCoinTradeFxtRepository {
 
     async fn find_by_order(&self, order_id: i64) -> RepositoryResult<Vec<CoinTradeFxtModel>> {
         let records = sqlx::query_as::<_, CoinTradeFxtModel>(
-            "SELECT * FROM coin_trade_fxt WHERE order_id = $1"
+            r#"SELECT * FROM coin_trade_fxt WHERE "ORDER_ID" = $1"#
         )
         .bind(order_id)
         .fetch_all(&self.pool)
@@ -5638,7 +5638,7 @@ impl Repository<PhasingPollVoterModel> for PgPhasingPollVoterRepository {
     async fn insert(&self, model: &PhasingPollVoterModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO phasing_poll_voter (transaction_id, voter_id, height)
+            INSERT INTO phasing_poll_voter ("TRANSACTION_ID", "VOTER_ID", "HEIGHT")
             VALUES ($1, $2, $3)
             "#,
         )
@@ -5653,7 +5653,7 @@ impl Repository<PhasingPollVoterModel> for PgPhasingPollVoterRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingPollVoterModel>> {
         let record = sqlx::query_as::<_, PhasingPollVoterModel>(
-            "SELECT * FROM phasing_poll_voter WHERE db_id = $1"
+            r#"SELECT * FROM phasing_poll_voter WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5672,7 +5672,7 @@ impl Repository<PhasingPollVoterModel> for PgPhasingPollVoterRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingPollVoterModel>> {
         let records = sqlx::query_as::<_, PhasingPollVoterModel>(
-            "SELECT * FROM phasing_poll_voter ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM phasing_poll_voter ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -5695,7 +5695,7 @@ impl Repository<PhasingPollVoterModel> for PgPhasingPollVoterRepository {
 impl PhasingPollVoterRepository for PgPhasingPollVoterRepository {
     async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingPollVoterModel>> {
         let records = sqlx::query_as::<_, PhasingPollVoterModel>(
-            "SELECT * FROM phasing_poll_voter WHERE transaction_id = $1"
+            r#"SELECT * FROM phasing_poll_voter WHERE "TRANSACTION_ID" = $1"#
         )
         .bind(poll_id)
         .fetch_all(&self.pool)
@@ -5720,8 +5720,8 @@ impl Repository<PhasingPollModel> for PgPhasingPollRepository {
     async fn insert(&self, model: &PhasingPollModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO phasing_poll (id, account_id, whitelist_size, finish_height, voting_model, quorum,
-                min_balance, holding_id, min_balance_model, hashed_secret, algorithm, height)
+            INSERT INTO phasing_poll ("ID", "ACCOUNT_ID", "WHITELIST_SIZE", "FINISH_HEIGHT", "VOTING_MODEL", "QUORUM",
+                "MIN_BALANCE", "HOLDING_ID", "MIN_BALANCE_MODEL", "HASHED_SECRET", "ALGORITHM", "HEIGHT")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
         )
@@ -5745,7 +5745,7 @@ impl Repository<PhasingPollModel> for PgPhasingPollRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingPollModel>> {
         let record = sqlx::query_as::<_, PhasingPollModel>(
-            "SELECT * FROM phasing_poll WHERE db_id = $1"
+            r#"SELECT * FROM phasing_poll WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5758,10 +5758,10 @@ impl Repository<PhasingPollModel> for PgPhasingPollRepository {
         sqlx::query(
             r#"
             UPDATE phasing_poll SET
-                account_id = $1, whitelist_size = $2, finish_height = $3, voting_model = $4, quorum = $5,
-                min_balance = $6, holding_id = $7, min_balance_model = $8,
-                hashed_secret = $9, algorithm = $10, height = $11
-            WHERE db_id = $12
+                "ACCOUNT_ID" = $1, "WHITELIST_SIZE" = $2, "FINISH_HEIGHT" = $3, "VOTING_MODEL" = $4, "QUORUM" = $5,
+                "MIN_BALANCE" = $6, "HOLDING_ID" = $7, "MIN_BALANCE_MODEL" = $8,
+                "HASHED_SECRET" = $9, "ALGORITHM" = $10, "HEIGHT" = $11
+            WHERE "DB_ID" = $12
             "#,
         )
         .bind(model.account_id)
@@ -5783,7 +5783,7 @@ impl Repository<PhasingPollModel> for PgPhasingPollRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM phasing_poll WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM phasing_poll WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -5793,7 +5793,7 @@ impl Repository<PhasingPollModel> for PgPhasingPollRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingPollModel>> {
         let records = sqlx::query_as::<_, PhasingPollModel>(
-            "SELECT * FROM phasing_poll ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM phasing_poll ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -5816,7 +5816,7 @@ impl Repository<PhasingPollModel> for PgPhasingPollRepository {
 impl PhasingPollRepository for PgPhasingPollRepository {
     async fn find_by_poll_id(&self, id: i64) -> RepositoryResult<Option<PhasingPollModel>> {
         let record = sqlx::query_as::<_, PhasingPollModel>(
-            "SELECT * FROM phasing_poll WHERE id = $1"
+            r#"SELECT * FROM phasing_poll WHERE "ID" = $1"#
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -5841,7 +5841,7 @@ impl Repository<PhasingPollLinkedTransactionModel> for PgPhasingPollLinkedTransa
     async fn insert(&self, model: &PhasingPollLinkedTransactionModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO phasing_poll_linked_transaction (transaction_id, linked_full_hash, linked_transaction_id, height)
+            INSERT INTO phasing_poll_linked_transaction ("TRANSACTION_ID", "LINKED_FULL_HASH", "LINKED_TRANSACTION_ID", "HEIGHT")
             VALUES ($1, $2, $3, $4)
             "#,
         )
@@ -5857,7 +5857,7 @@ impl Repository<PhasingPollLinkedTransactionModel> for PgPhasingPollLinkedTransa
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingPollLinkedTransactionModel>> {
         let record = sqlx::query_as::<_, PhasingPollLinkedTransactionModel>(
-            "SELECT * FROM phasing_poll_linked_transaction WHERE db_id = $1"
+            r#"SELECT * FROM phasing_poll_linked_transaction WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5876,7 +5876,7 @@ impl Repository<PhasingPollLinkedTransactionModel> for PgPhasingPollLinkedTransa
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingPollLinkedTransactionModel>> {
         let records = sqlx::query_as::<_, PhasingPollLinkedTransactionModel>(
-            "SELECT * FROM phasing_poll_linked_transaction ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM phasing_poll_linked_transaction ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -5899,7 +5899,7 @@ impl Repository<PhasingPollLinkedTransactionModel> for PgPhasingPollLinkedTransa
 impl PhasingPollLinkedTransactionRepository for PgPhasingPollLinkedTransactionRepository {
     async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingPollLinkedTransactionModel>> {
         let records = sqlx::query_as::<_, PhasingPollLinkedTransactionModel>(
-            "SELECT * FROM phasing_poll_linked_transaction WHERE transaction_id = $1"
+            r#"SELECT * FROM phasing_poll_linked_transaction WHERE "TRANSACTION_ID" = $1"#
         )
         .bind(poll_id)
         .fetch_all(&self.pool)
@@ -5924,7 +5924,7 @@ impl Repository<AssetDividendModel> for PgAssetDividendRepository {
     async fn insert(&self, model: &AssetDividendModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO asset_dividend (id, asset_id, amount, dividend_height, total_dividend, num_accounts, timestamp, height)
+            INSERT INTO asset_dividend ("ID", "ASSET_ID", "AMOUNT", "DIVIDEND_HEIGHT", "TOTAL_DIVIDEND", "NUM_ACCOUNTS", timestamp, "HEIGHT")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
@@ -5944,7 +5944,7 @@ impl Repository<AssetDividendModel> for PgAssetDividendRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<AssetDividendModel>> {
         let record = sqlx::query_as::<_, AssetDividendModel>(
-            "SELECT * FROM asset_dividend WHERE db_id = $1"
+            r#"SELECT * FROM asset_dividend WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -5963,7 +5963,7 @@ impl Repository<AssetDividendModel> for PgAssetDividendRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AssetDividendModel>> {
         let records = sqlx::query_as::<_, AssetDividendModel>(
-            "SELECT * FROM asset_dividend ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM asset_dividend ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -5986,7 +5986,7 @@ impl Repository<AssetDividendModel> for PgAssetDividendRepository {
 impl AssetDividendRepository for PgAssetDividendRepository {
     async fn find_by_asset(&self, asset_id: i64) -> RepositoryResult<Vec<AssetDividendModel>> {
         let records = sqlx::query_as::<_, AssetDividendModel>(
-            "SELECT * FROM asset_dividend WHERE asset_id = $1 ORDER BY height DESC"
+            r#"SELECT * FROM asset_dividend WHERE "ASSET_ID" = $1 ORDER BY "HEIGHT" DESC"#
         )
         .bind(asset_id)
         .fetch_all(&self.pool)
@@ -6011,7 +6011,7 @@ impl Repository<PhasingVoteModel> for PgPhasingVoteRepository {
     async fn insert(&self, model: &PhasingVoteModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO phasing_vote (vote_id, transaction_id, voter_id, height)
+            INSERT INTO phasing_vote ("VOTE_ID", "TRANSACTION_ID", "VOTER_ID", "HEIGHT")
             VALUES ($1, $2, $3, $4)
             "#,
         )
@@ -6027,7 +6027,7 @@ impl Repository<PhasingVoteModel> for PgPhasingVoteRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingVoteModel>> {
         let record = sqlx::query_as::<_, PhasingVoteModel>(
-            "SELECT * FROM phasing_vote WHERE db_id = $1"
+            r#"SELECT * FROM phasing_vote WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -6046,7 +6046,7 @@ impl Repository<PhasingVoteModel> for PgPhasingVoteRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PhasingVoteModel>> {
         let records = sqlx::query_as::<_, PhasingVoteModel>(
-            "SELECT * FROM phasing_vote ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM phasing_vote ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -6069,7 +6069,7 @@ impl Repository<PhasingVoteModel> for PgPhasingVoteRepository {
 impl PhasingVoteRepository for PgPhasingVoteRepository {
     async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingVoteModel>> {
         let records = sqlx::query_as::<_, PhasingVoteModel>(
-            "SELECT * FROM phasing_vote WHERE transaction_id = $1"
+            r#"SELECT * FROM phasing_vote WHERE "TRANSACTION_ID" = $1"#
         )
         .bind(poll_id)
         .fetch_all(&self.pool)
@@ -6094,7 +6094,7 @@ impl Repository<PollResultModel> for PgPollResultRepository {
     async fn insert(&self, model: &PollResultModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO poll_result (poll_id, result, weight, height)
+            INSERT INTO poll_result ("POLL_ID", "RESULT", "WEIGHT", "HEIGHT")
             VALUES ($1, $2, $3, $4)
             "#,
         )
@@ -6110,7 +6110,7 @@ impl Repository<PollResultModel> for PgPollResultRepository {
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PollResultModel>> {
         let record = sqlx::query_as::<_, PollResultModel>(
-            "SELECT * FROM poll_result WHERE db_id = $1"
+            r#"SELECT * FROM poll_result WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -6123,8 +6123,8 @@ impl Repository<PollResultModel> for PgPollResultRepository {
         sqlx::query(
             r#"
             UPDATE poll_result SET
-                poll_id = $1, result = $2, height = $3
-            WHERE db_id = $4
+                "POLL_ID" = $1, "RESULT" = $2, "HEIGHT" = $3
+            WHERE "DB_ID" = $4
             "#,
         )
         .bind(model.poll_id)
@@ -6138,7 +6138,7 @@ impl Repository<PollResultModel> for PgPollResultRepository {
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM poll_result WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM poll_result WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -6148,7 +6148,7 @@ impl Repository<PollResultModel> for PgPollResultRepository {
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PollResultModel>> {
         let records = sqlx::query_as::<_, PollResultModel>(
-            "SELECT * FROM poll_result ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM poll_result ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(limit.unwrap_or(100))
         .bind(offset.unwrap_or(0))
@@ -6171,7 +6171,7 @@ impl Repository<PollResultModel> for PgPollResultRepository {
 impl PollResultRepository for PgPollResultRepository {
     async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PollResultModel>> {
         let records = sqlx::query_as::<_, PollResultModel>(
-            "SELECT * FROM poll_result WHERE poll_id = $1"
+            r#"SELECT * FROM poll_result WHERE "POLL_ID" = $1"#
         )
         .bind(poll_id)
         .fetch_all(&self.pool)
@@ -6182,7 +6182,7 @@ impl PollResultRepository for PgPollResultRepository {
 
     async fn upsert(&self, model: &PollResultModel) -> RepositoryResult<()> {
         let existing = sqlx::query_as::<_, PollResultModel>(
-            "SELECT * FROM poll_result WHERE poll_id = $1 AND result = $2"
+            r#"SELECT * FROM poll_result WHERE "POLL_ID" = $1 AND "RESULT" = $2"#
         )
         .bind(model.poll_id)
         .bind(&model.result)
@@ -6219,7 +6219,7 @@ impl Repository<PhasingPollHashedSecretModel> for PgPhasingPollHashedSecretRepos
     async fn insert(&self, model: &PhasingPollHashedSecretModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO phasing_poll_hashed_secret (hashed_secret, hashed_secret_id, algorithm, transaction_full_hash, transaction_id, chain_id, finish_height, height)
+            INSERT INTO phasing_poll_hashed_secret ("HASHED_SECRET", "HASHED_SECRET_ID", "ALGORITHM", "TRANSACTION_FULL_HASH", "TRANSACTION_ID", "CHAIN_ID", "FINISH_HEIGHT", "HEIGHT")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             "#,
         )
@@ -6239,7 +6239,7 @@ impl Repository<PhasingPollHashedSecretModel> for PgPhasingPollHashedSecretRepos
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<PhasingPollHashedSecretModel>> {
         let record = sqlx::query_as::<_, PhasingPollHashedSecretModel>(
-            "SELECT * FROM phasing_poll_hashed_secret WHERE db_id = $1"
+            r#"SELECT * FROM phasing_poll_hashed_secret WHERE "DB_ID" = $1"#
         )
         .bind(db_id)
         .fetch_optional(&self.pool)
@@ -6252,10 +6252,10 @@ impl Repository<PhasingPollHashedSecretModel> for PgPhasingPollHashedSecretRepos
         sqlx::query(
             r#"
             UPDATE phasing_poll_hashed_secret SET
-                hashed_secret = $1, hashed_secret_id = $2, algorithm = $3,
-                transaction_full_hash = $4, transaction_id = $5,
-                chain_id = $6, finish_height = $7, height = $8
-            WHERE db_id = $9
+                "HASHED_SECRET" = $1, "HASHED_SECRET_ID" = $2, "ALGORITHM" = $3,
+                "TRANSACTION_FULL_HASH" = $4, "TRANSACTION_ID" = $5,
+                "CHAIN_ID" = $6, "FINISH_HEIGHT" = $7, "HEIGHT" = $8
+            WHERE "DB_ID" = $9
             "#,
         )
         .bind(&model.hashed_secret)
@@ -6274,7 +6274,7 @@ impl Repository<PhasingPollHashedSecretModel> for PgPhasingPollHashedSecretRepos
     }
 
     async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM phasing_poll_hashed_secret WHERE db_id = $1")
+        sqlx::query(r#"DELETE FROM phasing_poll_hashed_secret WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .execute(&self.pool)
             .await
@@ -6286,7 +6286,7 @@ impl Repository<PhasingPollHashedSecretModel> for PgPhasingPollHashedSecretRepos
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, PhasingPollHashedSecretModel>(
-            "SELECT * FROM phasing_poll_hashed_secret ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM phasing_poll_hashed_secret ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(lim)
         .bind(off)
@@ -6309,7 +6309,7 @@ impl Repository<PhasingPollHashedSecretModel> for PgPhasingPollHashedSecretRepos
 impl PhasingPollHashedSecretRepository for PgPhasingPollHashedSecretRepository {
     async fn find_by_poll(&self, poll_id: i64) -> RepositoryResult<Vec<PhasingPollHashedSecretModel>> {
         let records = sqlx::query_as::<_, PhasingPollHashedSecretModel>(
-            "SELECT * FROM phasing_poll_hashed_secret WHERE hashed_secret_id = $1"
+            r#"SELECT * FROM phasing_poll_hashed_secret WHERE "HASHED_SECRET_ID" = $1"#
         )
         .bind(poll_id)
         .fetch_all(&self.pool)
@@ -6334,29 +6334,29 @@ impl PgHubRepository {
 #[async_trait]
 impl Repository<HubModel> for PgHubRepository {
     async fn insert(&self, m: &HubModel) -> RepositoryResult<()> {
-        sqlx::query("INSERT INTO hub (account_id, uris, min_fee_per_byte, height) VALUES ($1, $2, $3, $4)")
+        sqlx::query(r#"INSERT INTO hub ("ACCOUNT_ID", "URIS", "MIN_FEE_PER_BYTE", "HEIGHT") VALUES ($1, $2, $3, $4)"#)
             .bind(m.account_id).bind(&m.uris).bind(m.min_fee_per_byte).bind(m.height)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<HubModel>> {
-        sqlx::query_as::<_, HubModel>("SELECT * FROM hub WHERE db_id = $1").bind(id)
+        sqlx::query_as::<_, HubModel>(r#"SELECT * FROM hub WHERE "DB_ID" = $1"#).bind(id)
             .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn update(&self, m: &HubModel) -> RepositoryResult<()> {
-        sqlx::query("UPDATE hub SET account_id=$1, uris=$2, min_fee_per_byte=$3, height=$4 WHERE db_id=$5")
+        sqlx::query(r#"UPDATE hub SET "ACCOUNT_ID"=$1, "URIS"=$2, "MIN_FEE_PER_BYTE"=$3, "HEIGHT"=$4 WHERE "DB_ID"=$5"#)
             .bind(m.account_id).bind(&m.uris).bind(m.min_fee_per_byte).bind(m.height).bind(m.db_id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn delete(&self, id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM hub WHERE db_id=$1").bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        sqlx::query(r#"DELETE FROM hub WHERE "DB_ID"=$1"#).bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<HubModel>> {
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
-        sqlx::query_as::<_, HubModel>("SELECT * FROM hub ORDER BY height DESC LIMIT $1 OFFSET $2")
+        sqlx::query_as::<_, HubModel>(r#"SELECT * FROM hub ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#)
             .bind(lim).bind(off).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn count(&self) -> RepositoryResult<i64> {
@@ -6368,7 +6368,7 @@ impl Repository<HubModel> for PgHubRepository {
 #[async_trait]
 impl HubRepository for PgHubRepository {
     async fn find_by_account(&self, account_id: i64) -> RepositoryResult<Option<HubModel>> {
-        sqlx::query_as::<_, HubModel>("SELECT * FROM hub WHERE account_id = $1 LIMIT 1").bind(account_id)
+        sqlx::query_as::<_, HubModel>(r#"SELECT * FROM hub WHERE "ACCOUNT_ID" = $1 LIMIT 1"#).bind(account_id)
             .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
     }
 }
@@ -6388,29 +6388,29 @@ impl PgCurrencyFounderRepository {
 #[async_trait]
 impl Repository<CurrencyFounderModel> for PgCurrencyFounderRepository {
     async fn insert(&self, m: &CurrencyFounderModel) -> RepositoryResult<()> {
-        sqlx::query("INSERT INTO currency_founder (currency_id, account_id, amount, height) VALUES ($1, $2, $3, $4)")
+        sqlx::query(r#"INSERT INTO currency_founder ("CURRENCY_ID", "ACCOUNT_ID", "AMOUNT", "HEIGHT") VALUES ($1, $2, $3, $4)"#)
             .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<CurrencyFounderModel>> {
-        sqlx::query_as::<_, CurrencyFounderModel>("SELECT * FROM currency_founder WHERE db_id = $1").bind(id)
+        sqlx::query_as::<_, CurrencyFounderModel>(r#"SELECT * FROM currency_founder WHERE "DB_ID" = $1"#).bind(id)
             .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn update(&self, m: &CurrencyFounderModel) -> RepositoryResult<()> {
-        sqlx::query("UPDATE currency_founder SET currency_id=$1, account_id=$2, amount=$3, height=$4 WHERE db_id=$5")
+        sqlx::query(r#"UPDATE currency_founder SET "CURRENCY_ID"=$1, "ACCOUNT_ID"=$2, "AMOUNT"=$3, "HEIGHT"=$4 WHERE "DB_ID"=$5"#)
             .bind(m.currency_id).bind(m.account_id).bind(m.amount).bind(m.height).bind(m.db_id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn delete(&self, id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM currency_founder WHERE db_id=$1").bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        sqlx::query(r#"DELETE FROM currency_founder WHERE "DB_ID"=$1"#).bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<CurrencyFounderModel>> {
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
-        sqlx::query_as::<_, CurrencyFounderModel>("SELECT * FROM currency_founder ORDER BY height DESC LIMIT $1 OFFSET $2")
+        sqlx::query_as::<_, CurrencyFounderModel>(r#"SELECT * FROM currency_founder ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#)
             .bind(lim).bind(off).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn count(&self) -> RepositoryResult<i64> {
@@ -6422,7 +6422,7 @@ impl Repository<CurrencyFounderModel> for PgCurrencyFounderRepository {
 #[async_trait]
 impl CurrencyFounderRepository for PgCurrencyFounderRepository {
     async fn find_by_currency(&self, currency_id: i64) -> RepositoryResult<Vec<CurrencyFounderModel>> {
-        sqlx::query_as::<_, CurrencyFounderModel>("SELECT * FROM currency_founder WHERE currency_id = $1")
+        sqlx::query_as::<_, CurrencyFounderModel>(r#"SELECT * FROM currency_founder WHERE "CURRENCY_ID" = $1"#)
             .bind(currency_id).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
     }
 }
@@ -6443,7 +6443,7 @@ impl PgPrunableMessageRepository {
 impl Repository<PrunableMessageModel> for PgPrunableMessageRepository {
     async fn insert(&self, m: &PrunableMessageModel) -> RepositoryResult<()> {
         sqlx::query(
-            r#"INSERT INTO prunable_message (id, sender_id, recipient_id, message, message_is_text, is_compressed, encrypted_message, encrypted_is_text, block_timestamp, transaction_timestamp, height)
+            r#"INSERT INTO prunable_message ("ID", "SENDER_ID", "RECIPIENT_ID", "MESSAGE", "MESSAGE_IS_TEXT", "IS_COMPRESSED", "ENCRYPTED_MESSAGE", "ENCRYPTED_IS_TEXT", "BLOCK_TIMESTAMP", "TRANSACTION_TIMESTAMP", "HEIGHT")
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)"#)
             .bind(m.id).bind(m.sender_id).bind(m.recipient_id).bind(&m.message)
             .bind(m.message_is_text).bind(m.is_compressed).bind(&m.encrypted_message)
@@ -6452,14 +6452,14 @@ impl Repository<PrunableMessageModel> for PgPrunableMessageRepository {
         Ok(())
     }
     async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<PrunableMessageModel>> {
-        sqlx::query_as::<_, PrunableMessageModel>("SELECT * FROM prunable_message WHERE db_id = $1").bind(id)
+        sqlx::query_as::<_, PrunableMessageModel>(r#"SELECT * FROM prunable_message WHERE "DB_ID" = $1"#).bind(id)
             .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn update(&self, m: &PrunableMessageModel) -> RepositoryResult<()> {
         sqlx::query(
-            r#"UPDATE prunable_message SET id=$1, sender_id=$2, recipient_id=$3, message=$4, message_is_text=$5,
-               is_compressed=$6, encrypted_message=$7, encrypted_is_text=$8, block_timestamp=$9, transaction_timestamp=$10, height=$11
-            WHERE db_id=$12"#)
+            r#"UPDATE prunable_message SET "ID"=$1, "SENDER_ID"=$2, "RECIPIENT_ID"=$3, "MESSAGE"=$4, "MESSAGE_IS_TEXT"=$5,
+               "IS_COMPRESSED"=$6, "ENCRYPTED_MESSAGE"=$7, "ENCRYPTED_IS_TEXT"=$8, "BLOCK_TIMESTAMP"=$9, "TRANSACTION_TIMESTAMP"=$10, "HEIGHT"=$11
+            WHERE "DB_ID"=$12"#)
             .bind(m.id).bind(m.sender_id).bind(m.recipient_id).bind(&m.message)
             .bind(m.message_is_text).bind(m.is_compressed).bind(&m.encrypted_message)
             .bind(m.encrypted_is_text).bind(m.block_timestamp).bind(m.transaction_timestamp).bind(m.height).bind(m.db_id)
@@ -6467,13 +6467,13 @@ impl Repository<PrunableMessageModel> for PgPrunableMessageRepository {
         Ok(())
     }
     async fn delete(&self, id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM prunable_message WHERE db_id=$1").bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        sqlx::query(r#"DELETE FROM prunable_message WHERE "DB_ID"=$1"#).bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PrunableMessageModel>> {
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
-        sqlx::query_as::<_, PrunableMessageModel>("SELECT * FROM prunable_message ORDER BY height DESC LIMIT $1 OFFSET $2")
+        sqlx::query_as::<_, PrunableMessageModel>(r#"SELECT * FROM prunable_message ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#)
             .bind(lim).bind(off).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn count(&self) -> RepositoryResult<i64> {
@@ -6497,29 +6497,29 @@ impl PgPurchaseFeedbackRepository {
 #[async_trait]
 impl Repository<PurchaseFeedbackModel> for PgPurchaseFeedbackRepository {
     async fn insert(&self, m: &PurchaseFeedbackModel) -> RepositoryResult<()> {
-        sqlx::query("INSERT INTO purchase_feedback (purchase_id, feedback_data, feedback_nonce, height) VALUES ($1, $2, $3, $4)")
+        sqlx::query(r#"INSERT INTO purchase_feedback (purchase_id, "FEEDBACK_DATA", "FEEDBACK_NONCE", "HEIGHT") VALUES ($1, $2, $3, $4)"#)
             .bind(m.id).bind(&m.feedback_data).bind(&m.feedback_nonce).bind(m.height)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<PurchaseFeedbackModel>> {
-        sqlx::query_as::<_, PurchaseFeedbackModel>("SELECT * FROM purchase_feedback WHERE db_id = $1").bind(id)
+        sqlx::query_as::<_, PurchaseFeedbackModel>(r#"SELECT * FROM purchase_feedback WHERE "DB_ID" = $1"#).bind(id)
             .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn update(&self, m: &PurchaseFeedbackModel) -> RepositoryResult<()> {
-        sqlx::query("UPDATE purchase_feedback SET id=$1, feedback_data=$2, feedback_nonce=$3, height=$4 WHERE db_id=$5")
+        sqlx::query(r#"UPDATE purchase_feedback SET "ID"=$1, "FEEDBACK_DATA"=$2, "FEEDBACK_NONCE"=$3, "HEIGHT"=$4 WHERE "DB_ID"=$5"#)
             .bind(m.id).bind(&m.feedback_data).bind(&m.feedback_nonce).bind(m.height).bind(m.db_id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn delete(&self, id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM purchase_feedback WHERE db_id=$1").bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
+        sqlx::query(r#"DELETE FROM purchase_feedback WHERE "DB_ID"=$1"#).bind(id).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<PurchaseFeedbackModel>> {
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
-        sqlx::query_as::<_, PurchaseFeedbackModel>("SELECT * FROM purchase_feedback ORDER BY height DESC LIMIT $1 OFFSET $2")
+        sqlx::query_as::<_, PurchaseFeedbackModel>(r#"SELECT * FROM purchase_feedback ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#)
             .bind(lim).bind(off).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
     }
     async fn count(&self) -> RepositoryResult<i64> {
@@ -6551,26 +6551,26 @@ impl PgReferencedTransactionRepository {
 #[async_trait]
 impl Repository<ReferencedTransactionModel> for PgReferencedTransactionRepository {
     async fn insert(&self, m: &ReferencedTransactionModel) -> RepositoryResult<()> {
-        sqlx::query("INSERT INTO referenced_transaction (transaction_id, referenced_transaction_id) VALUES ($1, $2)")
+        sqlx::query(r#"INSERT INTO referenced_transaction ("TRANSACTION_ID", "REFERENCED_TRANSACTION_ID") VALUES ($1, $2)"#)
             .bind(m.transaction_id).bind(m.referenced_transaction_id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
 
     async fn find_by_id(&self, id: i64) -> RepositoryResult<Option<ReferencedTransactionModel>> {
-        sqlx::query_as::<_, ReferencedTransactionModel>("SELECT * FROM referenced_transaction WHERE db_id = $1").bind(id)
+        sqlx::query_as::<_, ReferencedTransactionModel>(r#"SELECT * FROM referenced_transaction WHERE "DB_ID" = $1"#).bind(id)
             .fetch_optional(&self.pool).await.map_err(RepositoryError::DbError)
     }
 
     async fn update(&self, m: &ReferencedTransactionModel) -> RepositoryResult<()> {
-        sqlx::query("UPDATE referenced_transaction SET transaction_id=$1, referenced_transaction_id=$2 WHERE db_id=$3")
+        sqlx::query(r#"UPDATE referenced_transaction SET "TRANSACTION_ID"=$1, "REFERENCED_TRANSACTION_ID"=$2 WHERE "DB_ID"=$3"#)
             .bind(m.transaction_id).bind(m.referenced_transaction_id).bind(m.db_id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
 
     async fn delete(&self, id: i64) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM referenced_transaction WHERE db_id=$1").bind(id)
+        sqlx::query(r#"DELETE FROM referenced_transaction WHERE "DB_ID"=$1"#).bind(id)
             .execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(())
     }
@@ -6578,7 +6578,7 @@ impl Repository<ReferencedTransactionModel> for PgReferencedTransactionRepositor
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<ReferencedTransactionModel>> {
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
-        sqlx::query_as::<_, ReferencedTransactionModel>("SELECT * FROM referenced_transaction ORDER BY db_id DESC LIMIT $1 OFFSET $2")
+        sqlx::query_as::<_, ReferencedTransactionModel>(r#"SELECT * FROM referenced_transaction ORDER BY "DB_ID" DESC LIMIT $1 OFFSET $2"#)
             .bind(lim).bind(off).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
     }
 
@@ -6592,7 +6592,7 @@ impl Repository<ReferencedTransactionModel> for PgReferencedTransactionRepositor
 #[async_trait]
 impl ReferencedTransactionRepository for PgReferencedTransactionRepository {
     async fn find_by_transaction(&self, transaction_id: i64) -> RepositoryResult<Vec<ReferencedTransactionModel>> {
-        sqlx::query_as::<_, ReferencedTransactionModel>("SELECT * FROM referenced_transaction WHERE transaction_id = $1")
+        sqlx::query_as::<_, ReferencedTransactionModel>(r#"SELECT * FROM referenced_transaction WHERE "TRANSACTION_ID" = $1"#)
             .bind(transaction_id).fetch_all(&self.pool).await.map_err(RepositoryError::DbError)
     }
 }
@@ -6616,7 +6616,7 @@ impl Repository<TaggedDataExtendModel> for PgTaggedDataExtendRepository {
     async fn insert(&self, model: &TaggedDataExtendModel) -> RepositoryResult<()> {
         sqlx::query(
             r#"
-            INSERT INTO tagged_data_extend (id, extend_id, height, latest)
+            INSERT INTO tagged_data_extend ("ID", "EXTEND_ID", "HEIGHT", "LATEST")
             VALUES ($1, $2, $3, $4)
             "#,
         )
@@ -6631,7 +6631,7 @@ impl Repository<TaggedDataExtendModel> for PgTaggedDataExtendRepository {
     }
 
     async fn find_by_id(&self, db_id: i64) -> RepositoryResult<Option<TaggedDataExtendModel>> {
-        let record = sqlx::query_as::<_, TaggedDataExtendModel>("SELECT * FROM tagged_data_extend WHERE db_id = $1")
+        let record = sqlx::query_as::<_, TaggedDataExtendModel>(r#"SELECT * FROM tagged_data_extend WHERE "DB_ID" = $1"#)
             .bind(db_id)
             .fetch_optional(&self.pool)
             .await
@@ -6651,7 +6651,7 @@ impl Repository<TaggedDataExtendModel> for PgTaggedDataExtendRepository {
         let lim = limit.unwrap_or(100);
         let off = offset.unwrap_or(0);
         let records = sqlx::query_as::<_, TaggedDataExtendModel>(
-            "SELECT * FROM tagged_data_extend WHERE latest = true ORDER BY height DESC LIMIT $1 OFFSET $2"
+            r#"SELECT * FROM tagged_data_extend WHERE "LATEST" = true ORDER BY "HEIGHT" DESC LIMIT $1 OFFSET $2"#
         )
         .bind(lim)
         .bind(off)
@@ -6662,7 +6662,7 @@ impl Repository<TaggedDataExtendModel> for PgTaggedDataExtendRepository {
     }
 
     async fn count(&self) -> RepositoryResult<i64> {
-        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tagged_data_extend WHERE latest = true")
+        let (count,): (i64,) = sqlx::query_as(r#"SELECT COUNT(*) FROM tagged_data_extend WHERE "LATEST" = true"#)
             .fetch_one(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
@@ -6674,7 +6674,7 @@ impl Repository<TaggedDataExtendModel> for PgTaggedDataExtendRepository {
 impl TaggedDataExtendRepository for PgTaggedDataExtendRepository {
     async fn find_by_extend_id(&self, extend_id: i64) -> RepositoryResult<Vec<TaggedDataExtendModel>> {
         let records = sqlx::query_as::<_, TaggedDataExtendModel>(
-            "SELECT * FROM tagged_data_extend WHERE extend_id = $1 AND latest = true ORDER BY height DESC"
+            r#"SELECT * FROM tagged_data_extend WHERE "EXTEND_ID" = $1 AND "LATEST" = true ORDER BY "HEIGHT" DESC"#
         )
         .bind(extend_id)
         .fetch_all(&self.pool)
