@@ -2290,40 +2290,115 @@ impl DatabaseTransactionProcessor {
         let current_height = self.get_current_height();
 
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
-        let mut rate = self.parse_long_field(tx, "rateNQT").unwrap_or(0);  // Java: MonetarySystemExchange.rateNQT
+        let mut rate = self.parse_long_field(tx, "rateNQT").unwrap_or(0);
         if rate == 0 {
             rate = self.parse_long_field(tx, "rate").unwrap_or(0);
         }
         let units = self.parse_long_field(tx, "units").unwrap_or(0);
 
         if currency_id != 0 && units > 0 && rate > 0 {
-            // 创建EXCHANGE_REQUEST记录
-            let request_model = ExchangeRequestModel {
+            // 创建并插入EXCHANGE_REQUEST
+            let req_model = ExchangeRequestModel {
                 db_id: 0,
                 id: tx.id as i64,
                 account_id: sender_id,
                 currency_id,
                 units,
                 rate,
-                is_buy: true, // EXCHANGE_BUY = true
+                is_buy: true,
                 timestamp: self.get_current_timestamp(),
                 height: current_height,
             };
 
-            match self.exchange_request_repo.insert(&request_model).await {
-                Ok(_) => {
-                    debug!("Created exchange buy request: {} units of currency {} at rate {}",
-                        units, currency_id, rate);
-                    // Note: NRCS deduction is handled by base apply() method via tx.amount
-                    // No additional deduction needed here
-                }
-                Err(e) => {
-                    warn!("Failed to create exchange buy request (non-critical): {}", e);
-                    debug!("Exchange buy request creation failed: {}", e);
-                }
-            }
+            self.exchange_request_repo.insert(&req_model).await?;
+
+            // Execute matching against existing sell requests
+            // Java: ExchangeRequestProcessor.instance().executeSwap()
+            self.try_match_exchange_buy(
+                tx.id as i64, currency_id, units, rate, sender_id,
+                current_height, self.get_current_timestamp(),
+            ).await?;
         } else {
             warn!("Invalid exchange buy parameters in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// Match EXCHANGE_BUY against existing EXCHANGE_SELL requests
+    /// Java: ExchangeRequestProcessor.executeSwap() for buy side
+    async fn try_match_exchange_buy(
+        &self,
+        request_id: i64,
+        currency_id: i64,
+        mut remaining_units: i64,
+        max_rate: i64,
+        buyer_id: i64,
+        height: i32,
+        timestamp: i32,
+    ) -> ProcessorResult<()> {
+        let all = self.exchange_request_repo.find_all(None, None).await?;
+
+        // Find sell requests for same currency (best rate = lowest)
+        let mut sells: Vec<_> = all.into_iter()
+            .filter(|r| r.currency_id == currency_id && !r.is_buy && r.units > 0 && r.rate <= max_rate)
+            .collect();
+        sells.sort_by_key(|r| r.rate);
+
+        for mut sell in sells {
+            if remaining_units <= 0 { break; }
+
+            let match_units = remaining_units.min(sell.units);
+            let match_amount = match_units * sell.rate;
+
+            // Transfer currency: seller → buyer (confirmed + unconfirmed)
+            self.account_currency_repo.update_units(sell.account_id, currency_id, -match_units).await?;
+            self.account_currency_repo.update_units(buyer_id, currency_id, match_units).await?;
+            self.account_currency_repo.add_to_unconfirmed_units(buyer_id, currency_id, match_units).await?;
+
+            // Transfer NRCS: buyer → seller
+            if match_amount > 0 {
+                self.account_repo.add_to_balance_and_unconfirmed(sell.account_id, match_amount, height).await?;
+            }
+
+            // Create EXCHANGE record (both buy and sell side get a record in Java)
+            let exchange = orm::models::ExchangeModel {
+                db_id: 0,
+                transaction_id: request_id,
+                currency_id,
+                block_id: 0,
+                offer_id: sell.id,
+                seller_id: sell.account_id,
+                buyer_id,
+                units: match_units,
+                rate: sell.rate,
+                timestamp,
+                height,
+            };
+            let _ = self.exchange_repo.insert(&exchange).await;
+
+            // Update sell request remaining units
+            sell.units -= match_units;
+            self.exchange_request_repo.update(&sell).await?;
+
+            remaining_units -= match_units;
+        }
+
+        // Update buy request with remaining unmatched units
+        if remaining_units > 0 {
+            let mut buy_req = orm::models::ExchangeRequestModel {
+                db_id: 0, id: request_id, account_id: buyer_id,
+                currency_id, units: remaining_units, rate: max_rate, is_buy: true,
+                timestamp, height,
+            };
+            // Find the actual db_id by searching
+            let all = self.exchange_request_repo.find_all(None, None).await?;
+            if let Some(existing) = all.into_iter().find(|r| r.id == request_id) {
+                buy_req.db_id = existing.db_id;
+                buy_req.units = remaining_units;
+                let _ = self.exchange_request_repo.update(&buy_req).await;
+            }
+            debug!("Exchange buy partially matched: {} units remaining", remaining_units);
         }
 
         Ok(())
@@ -2341,38 +2416,110 @@ impl DatabaseTransactionProcessor {
         let current_height = self.get_current_height();
 
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
-        let rate = self.parse_long_field(tx, "rateNQT").unwrap_or(0);  // Java: MonetarySystemExchange.rateNQT
+        let rate = self.parse_long_field(tx, "rateNQT").unwrap_or(0);
         let units = self.parse_long_field(tx, "units").unwrap_or(0);
 
         if currency_id != 0 && units > 0 && rate > 0 {
-            // 创建EXCHANGE_REQUEST记录
-            let request_model = ExchangeRequestModel {
+            // 创建并插入EXCHANGE_REQUEST（unconfirmed deduction 已在 pre-deduction 中完成）
+            let req_model = ExchangeRequestModel {
                 db_id: 0,
                 id: tx.id as i64,
                 account_id: sender_id,
                 currency_id,
                 units,
                 rate,
-                is_buy: false, // EXCHANGE_SELL = false
+                is_buy: false,
                 timestamp: self.get_current_timestamp(),
                 height: current_height,
             };
 
-            match self.exchange_request_repo.insert(&request_model).await {
-                Ok(_) => {
-                    debug!("Created exchange sell request: {} units of currency {} at rate {}",
-                        units, currency_id, rate);
-                    // Java: senderAccount.addToCurrencyUnconfirmedUnits(event, txId, currencyId, -units);
-                    // Deduct from unconfirmed currency units (not confirmed)
-                    self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, -units).await?;
-                }
-                Err(e) => {
-                    warn!("Failed to create exchange sell request: {}", e);
-                    return Err(e.into());
-                }
-            }
+            self.exchange_request_repo.insert(&req_model).await?;
+
+            // Try to match against existing buy requests
+            self.try_match_exchange_sell(
+                tx.id as i64, currency_id, units, rate, sender_id,
+                current_height, self.get_current_timestamp(),
+            ).await?;
         } else {
             warn!("Invalid exchange sell parameters in transaction {}", tx.id);
+        }
+
+        Ok(())
+    }
+
+    /// Match EXCHANGE_SELL against existing EXCHANGE_BUY requests
+    /// Java: ExchangeRequestProcessor.executeSwap() for sell side
+    async fn try_match_exchange_sell(
+        &self,
+        request_id: i64,
+        currency_id: i64,
+        mut remaining_units: i64,
+        min_rate: i64,
+        seller_id: i64,
+        height: i32,
+        timestamp: i32,
+    ) -> ProcessorResult<()> {
+        let all = self.exchange_request_repo.find_all(None, None).await?;
+
+        // Find buy requests for same currency (best rate = highest)
+        let mut buys: Vec<_> = all.into_iter()
+            .filter(|r| r.currency_id == currency_id && r.is_buy && r.units > 0 && r.rate >= min_rate)
+            .collect();
+        buys.sort_by_key(|r| std::cmp::Reverse(r.rate));
+
+        for mut buy in buys {
+            if remaining_units <= 0 { break; }
+
+            let match_units = remaining_units.min(buy.units);
+            let match_amount = match_units * buy.rate;
+
+            // Transfer currency: seller → buyer (confirmed + unconfirmed)
+            self.account_currency_repo.update_units(seller_id, currency_id, -match_units).await?;
+            self.account_currency_repo.update_units(buy.account_id, currency_id, match_units).await?;
+            self.account_currency_repo.add_to_unconfirmed_units(buy.account_id, currency_id, match_units).await?;
+
+            // Transfer NRCS: buyer → seller
+            if match_amount > 0 {
+                self.account_repo.add_to_balance_and_unconfirmed(seller_id, match_amount, height).await?;
+            }
+
+            // Create EXCHANGE record
+            let exchange = orm::models::ExchangeModel {
+                db_id: 0,
+                transaction_id: request_id,
+                currency_id,
+                block_id: 0,
+                offer_id: buy.id,
+                seller_id,
+                buyer_id: buy.account_id,
+                units: match_units,
+                rate: buy.rate,
+                timestamp,
+                height,
+            };
+            let _ = self.exchange_repo.insert(&exchange).await;
+
+            // Update buy request remaining units
+            buy.units -= match_units;
+            self.exchange_request_repo.update(&buy).await?;
+
+            remaining_units -= match_units;
+        }
+
+        // Update sell request with remaining unmatched units
+        if remaining_units > 0 {
+            let sell_req = orm::models::ExchangeRequestModel {
+                db_id: 0, id: request_id, account_id: seller_id,
+                currency_id, units: remaining_units, rate: min_rate, is_buy: false,
+                timestamp, height,
+            };
+            let all = self.exchange_request_repo.find_all(None, None).await?;
+            if let Some(existing) = all.into_iter().find(|r| r.id == request_id) {
+                let mut updated = sell_req;
+                updated.db_id = existing.db_id;
+                let _ = self.exchange_request_repo.update(&updated).await;
+            }
+            debug!("Exchange sell partially matched: {} units remaining", remaining_units);
         }
 
         Ok(())
@@ -4813,8 +4960,11 @@ impl DatabaseTransactionProcessor {
                         Ok(true)
                     }
                     None => {
-                        tracing::warn!("Account {} has no currency {} for exchange sell", sender_id, currency_id);
-                        Ok(false)
+                        tracing::warn!("Account {} has no currency {} for exchange sell — record may be missing due to earlier exchange matching gap; creating tracking record",
+                            sender_id, currency_id);
+                        self.account_currency_repo.add_to_unconfirmed_units(sender_id, currency_id, -units).await?;
+                        debug!("Created account_currency tracking and pre-deducted: account={}, currency={}, units={}", sender_id, currency_id, units);
+                        Ok(true)
                     }
                 }
             }

@@ -2,12 +2,43 @@
 //!
 //! Provides unified database pool creation for SQLite and PostgreSQL
 //! based on configuration file settings.
+//!
+//! Also provides transaction management through `TransactionManager`,
+//! allowing upper-layer modules to manage transactions without
+//! directly depending on sqlx.
 
 use sqlx::{AnyPool, Pool, any::AnyConnectOptions};
 use tracing::{info, warn};
 
 pub type DbPool = sqlx::AnyPool;
 pub type DbTransaction<'a> = sqlx::Transaction<'a, sqlx::Any>;
+
+#[async_trait::async_trait]
+pub trait TransactionManager: Send + Sync {
+    async fn begin(&self) -> anyhow::Result<DbTransaction<'_>>;
+}
+
+pub struct PoolTransactionManager {
+    pool: DbPool,
+}
+
+impl PoolTransactionManager {
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    pub fn pool(&self) -> &DbPool {
+        &self.pool
+    }
+}
+
+#[async_trait::async_trait]
+impl TransactionManager for PoolTransactionManager {
+    async fn begin(&self) -> anyhow::Result<DbTransaction<'_>> {
+        self.pool.begin().await
+            .map_err(|e| anyhow::anyhow!("Failed to begin transaction: {}", e))
+    }
+}
 
 /// Database type enumeration
 #[derive(Debug, Clone, PartialEq, Eq)]

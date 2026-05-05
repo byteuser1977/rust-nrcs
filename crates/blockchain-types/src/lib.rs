@@ -38,7 +38,7 @@ pub mod genesis;
 pub mod sync;
 pub mod fork;
 pub mod validation;
-pub mod processor;
+// pub mod processor; // 已废弃：硬编码 SQL 违反架构规范，功能已迁移至 p2p/verifier.rs
 
 pub mod prelude {
     pub use crate::block::*;

@@ -498,13 +498,13 @@ pub fn detect_appendix_flags(
         None => return (false, false, false, false, false, false, false, false),
     };
 
-    has_message = att_map.get("message").is_some();
-    has_encrypted_message = att_map.get("encryptedMessage").is_some();
-    has_public_key_announcement = att_map.get("recipientPublicKey").is_some();
-    has_encrypttoself_message = att_map.get("encryptToSelfMessage").is_some();
-    has_phasing = att_map.get("phasing").is_some()
-        || att_map.get("phased").is_some()
-        || att_map.get("phasingFinishHeight").is_some();
+    // Java NRS 按 version.xxx 键判断 appendix 是否存在
+    // 不能用数据字段名（如 "message"），因为 PPM 的 message 字段也会被误判为普通 Message appendix
+    has_message = att_map.get("version.Message").is_some();
+    has_encrypted_message = att_map.get("version.EncryptedMessage").is_some();
+    has_public_key_announcement = att_map.get("version.PublicKeyAnnouncement").is_some();
+    has_encrypttoself_message = att_map.get("version.EncryptToSelfMessage").is_some();
+    has_phasing = att_map.get("version.Phasing").is_some();
 
     // PrunablePlainMessage: 仅当 message 数据被真正裁剪时才为 true
     // 即：有 messageHash 但 message 缺失（对应 Java IPrunable && !hasPrunableData()）

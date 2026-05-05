@@ -15,7 +15,7 @@ use blockchain_types::block::{Block, PreviousBlockData, calculate_base_target_an
 use blockchain_types::transaction::Transaction;
 
 use crate::handlers::BlockVerifier;
-use orm::{BlockRepository, TransactionRepository, BlockModel, TransactionModel, DbPool, DbTransaction};
+use orm::{BlockRepository, TransactionRepository, BlockModel, TransactionModel, DbPool, DbTransaction, TransactionManager, PoolTransactionManager};
 
 use crate::block_apply::BlockRewardApplicator;
 use tx_engine::TransactionProcessor;
@@ -37,7 +37,7 @@ pub struct BlockchainVerifier {
     tx_repo: Arc<dyn TransactionRepository>,
     tx_processor: Arc<dyn TransactionProcessor>,
     block_reward_applicator: Arc<BlockRewardApplicator>,
-    pool: DbPool,
+    tx_manager: Arc<dyn TransactionManager>,
     state: Arc<Mutex<()>>,
 }
 
@@ -54,7 +54,7 @@ impl BlockchainVerifier {
             tx_repo,
             tx_processor,
             block_reward_applicator,
-            pool,
+            tx_manager: Arc::new(PoolTransactionManager::new(pool)),
             state: Arc::new(Mutex::new(())),
         }
     }
@@ -469,8 +469,7 @@ impl BlockchainVerifier {
     }
 
     async fn cleanup_inserted_block(&self, height: i32) -> anyhow::Result<()> {
-        let mut db_tx = self.pool.begin().await
-            .map_err(|e| anyhow::anyhow!("Failed to begin cleanup transaction: {}", e))?;
+        let mut db_tx = self.tx_manager.begin().await?;
 
         if let Some(block_model) = self.block_repo.find_by_height(height).await
             .map_err(|e| anyhow::anyhow!("Failed to find block at height {}: {}", height, e))?
@@ -665,8 +664,7 @@ impl BlockVerifier for BlockchainVerifier {
         //   - accept_block 内部调用 tx_processor.apply_unconfirmed() 使用 tx_processor 自有的 pool 连接
         //   - SQLite 不允许两个不同连接同时持有写锁（SQLITE_BUSY, error code 5）
         {
-            let mut insert_tx = self.pool.begin().await
-                .map_err(|e| anyhow::anyhow!("Failed to begin insert transaction: {}", e))?;
+            let mut insert_tx = self.tx_manager.begin().await?;
 
             match self.insert_block_tx(&block, &mut insert_tx).await {
                 Ok(()) => {
@@ -798,8 +796,7 @@ impl BlockVerifier for BlockchainVerifier {
         );
 
         // Step 2: Wrap in database transaction for atomicity
-        let db_tx = self.pool.begin().await
-            .map_err(|e| anyhow::anyhow!("Failed to begin database transaction: {}", e))?;
+        let db_tx = self.tx_manager.begin().await?;
 
         // Step 3: Collect all transaction IDs to delete
         let mut all_tx_ids: Vec<i64> = Vec::new();
