@@ -517,9 +517,21 @@ pub fn detect_appendix_flags(
         && (att_map.get("messageHash").is_some()
             || att_map.get("version.PrunablePlainMessage").is_some());
 
-    // PrunableEncryptedMessage: 检测 encryptedMessageHash 或 version.PrunableEncryptedMessage
-    has_prunable_encrypted_message = att_map.get("encryptedMessageHash").is_some()
-        || att_map.get("version.PrunableEncryptedMessage").is_some();
+    // PrunableEncryptedMessage: 仅当 encrypted 数据被真正裁剪时才为 true
+    // 检查 encryptedMessage.data 或 encryptedData 是否实际存在
+    let has_enc_data = att_map.get("encryptedMessage")
+        .and_then(|v| v.as_object())
+        .and_then(|obj| obj.get("data"))
+        .and_then(|v| v.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false)
+        || att_map.get("encryptedData")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+    has_prunable_encrypted_message = !has_enc_data
+        && (att_map.get("encryptedMessageHash").is_some()
+            || att_map.get("version.PrunableEncryptedMessage").is_some());
 
     // 对应 Java IPrunable 接口的其他实现：
     // - TaggedDataUpload (type=6, subtype=0): 检测 "version.TaggedDataUpload"

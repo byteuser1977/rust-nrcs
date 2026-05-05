@@ -72,7 +72,8 @@ impl BlockchainVerifier {
     /// 验证区块内所有交易
     ///
     /// 对应 Java: BlockchainProcessor.validateTransactions()
-    fn validate_transactions(&self, block: &Block) -> Result<()> {
+    /// Returns Ok(has_pruned_transactions) on success
+    fn validate_transactions(&self, block: &Block) -> Result<bool> {
         let mut total_amount: u64 = 0;
         let mut total_fee: u64 = 0;
         let mut total_payload_length: u32 = 0;
@@ -230,7 +231,7 @@ impl BlockchainVerifier {
             );
         }
 
-        Ok(())
+        Ok(has_pruned_transactions)
     }
 
     /// 检测交易是否包含被裁剪的 prunable attachment 数据
@@ -550,7 +551,7 @@ impl BlockVerifier for BlockchainVerifier {
 
         // Step 2.6: Validate all transactions in the block
         // 对应 Java: BlockchainProcessor.validateTransactions()
-        self.validate_transactions(&block)?;
+        let has_pruned_transactions = self.validate_transactions(&block)?;
 
         // Step 3: Check if block already exists
         if let Ok(Some(_)) = self.block_repo.find_by_height(block_height as i32).await {
@@ -559,13 +560,40 @@ impl BlockVerifier for BlockchainVerifier {
         }
 
         // Step 4: Validate payload hash
-        // Reference: Java BlockchainProcessor - validates payload hash
-        let computed_payload_hash = self.compute_payload_hash(&block.transactions)?;
-        if computed_payload_hash != block.payload_hash {
-            return Err(anyhow::anyhow!(
-                "Payload hash mismatch at height {}: computed {:?} != block {:?}",
-                block_height, computed_payload_hash, block.payload_hash
-            ));
+        // 对应 Java: BlockchainProcessor.validateTransactions() 中的 payload hash 验证
+        // Java 逻辑：如果有 pruned transactions，跳过 payload hash 验证
+        // （因为区块头中的 payload_hash 是用完整数据计算的，但 P2P 中 attachment 已被裁剪）
+        if has_pruned_transactions {
+            debug!(
+                "Skipping payload hash validation at height {}: {} pruned transactions",
+                block_height,
+                block.transactions.iter().filter(|tx| Self::is_transaction_pruned(tx)).count()
+            );
+        } else {
+            let computed_payload_hash = self.compute_payload_hash(&block.transactions)?;
+            if computed_payload_hash != block.payload_hash {
+                // 逐笔打印每笔交易的 get_bytes() SHA256，用于与 Java 对比排查
+                for (i, tx) in block.transactions.iter().enumerate() {
+                    let tx_gb = tx.get_bytes();
+                    let tx_hash = sha2::Sha256::digest(&tx_gb);
+                    warn!(
+                        "  tx[{}]: id={}, type={:?}, subtype={}, version={}, flags={:#010X}, get_bytes_len={}, sha256={}",
+                        i, tx.id, tx.type_id, tx.subtype, tx.version, tx.get_flags(),
+                        tx_gb.len(), hex::encode(&tx_hash)
+                    );
+                    warn!(
+                        "  tx[{}]: attachment_bytes_len={}, pruned_att_bytes={}, has_msg={}, has_enc_msg={}, has_pk={}, has_enc2self={}, phased={}, has_prun_msg={}, has_prun_enc={}, has_prun_att={}",
+                        i, tx.attachment_bytes.len(), tx.pruned_attachment_bytes,
+                        tx.has_message, tx.has_encrypted_message, tx.has_public_key_announcement,
+                        tx.has_encrypttoself_message, tx.phased, tx.has_prunable_message,
+                        tx.has_prunable_encrypted_message, tx.has_prunable_attachment
+                    );
+                }
+                return Err(anyhow::anyhow!(
+                    "Payload hash mismatch at height {}: computed {:?} != block {:?}",
+                    block_height, computed_payload_hash, block.payload_hash
+                ));
+            }
         }
 
         if block_height > 0 {
