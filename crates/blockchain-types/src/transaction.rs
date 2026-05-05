@@ -654,7 +654,7 @@ impl Transaction {
 
         let mut buf = Vec::with_capacity(96);
         buf.extend_from_slice(&self.type_id.to_byte().to_le_bytes());
-        buf.extend_from_slice(&(((self.subtype & 0x0f) << 4) | (self.version & 0x0f)).to_le_bytes());
+        buf.extend_from_slice(&((self.subtype & 0x0f) | (self.version << 4)).to_le_bytes());
         buf.extend_from_slice(&self.timestamp.to_le_bytes());
         buf.extend_from_slice(&(self.deadline as i16).to_le_bytes());
         buf.extend_from_slice(&self.sender_public_key.0);
