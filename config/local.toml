@@ -17,8 +17,8 @@ cors_allowed_origins = ["*"]
 debug = true
 
 [database]
-#url = "sqlite://./nrcs.db?mode=rwc"
-url = "postgres://nrcs_user:password@localhost:5432/nrcs_db"
+url = "sqlite://./nrcs.db?mode=rwc"
+#url = "postgres://nrcs_user:password@localhost:5432/nrcs_db"
 pool_size = 10
 
 [mining]

@@ -2998,10 +2998,11 @@ impl DatabaseTransactionProcessor {
 
                 if !alias_name.is_empty() {
                     match self.alias_repo.find_by_name(&alias_name.to_lowercase()).await {
-                        Ok(Some(alias)) => {
+                        Ok(Some(mut alias)) => {
                             // 验证删除权限：只有owner可以删除
                             if alias.account_id == sender_id {
-                                if let Err(e) = self.alias_repo.delete(alias.db_id).await {
+                                alias.latest = false;
+                                if let Err(e) = self.alias_repo.update(&alias).await {
                                     warn!("Failed to delete alias '{}': {}", alias_name, e);
                                 } else {
                                     debug!("Alias '{}' deleted by owner account {}", alias_name, sender_id);
@@ -4289,9 +4290,10 @@ impl DatabaseTransactionProcessor {
                 let alias_name = self.parse_string_field(tx, "alias").unwrap_or_default();
 
                 if !alias_name.is_empty() {
-                    if let Ok(Some(alias)) = self.alias_repo.find_by_name(&alias_name.to_lowercase()).await {
+                    if let Ok(Some(mut alias)) = self.alias_repo.find_by_name(&alias_name.to_lowercase()).await {
                         if alias.account_id == sender_id {
-                            let _ = self.alias_repo.delete(alias.db_id).await;
+                            alias.latest = false;
+                            let _ = self.alias_repo.update(&alias).await;
                             debug!("ALIAS_DELETE: '{}' deleted", alias_name);
                         }
                     }
