@@ -191,6 +191,8 @@ impl BlockchainSyncDaemon {
                 state.errors_count = 0;
             }
 
+            info!("Starting blockchain sync from height {}", block_verifier.get_height().await.unwrap_or(0));
+
             let mut consecutive_empty = 0u32;
             let mut total_processed = 0usize;
             
