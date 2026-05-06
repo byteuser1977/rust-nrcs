@@ -13,7 +13,7 @@ use serde_json::Map;
 
 /// 获取 attachment 的版本号
 /// 从 JSON 中读取 `version.{AttachmentName}` 字段
-/// 如果没有找到，返回默认版本 1
+/// 如果没有找到，返回默认版本 0（对应 Java AbstractAppendix.java:23）
 fn get_attachment_version(type_byte: u8, subtype: u8, att_map: &Map<String, serde_json::Value>) -> u8 {
     let version_key = match type_byte {
         TYPE_PAYMENT => match subtype {
@@ -32,6 +32,8 @@ fn get_attachment_version(type_byte: u8, subtype: u8, att_map: &Map<String, serd
             SUBTYPE_MESSAGING_ALIAS_DELETE => "version.AliasDelete",
             SUBTYPE_MESSAGING_PHASING_VOTE_CASTING => "version.PhasingVoteCasting",
             SUBTYPE_MESSAGING_ACCOUNT_PROPERTY => "version.AccountProperty",
+            SUBTYPE_MESSAGING_ACCOUNT_PROPERTY_DELETE => "version.AccountPropertyDelete",
+            SUBTYPE_MESSAGING_ACCOUNT_LONG_VALUE_PROPERTY => "version.AccountLongValueProperty",
             _ => "version.Messaging",
         },
         TYPE_COLORED_COINS => match subtype {
@@ -44,7 +46,10 @@ fn get_attachment_version(type_byte: u8, subtype: u8, att_map: &Map<String, serd
             SUBTYPE_COLORED_COINS_DIVIDEND_PAYMENT => "version.DividendPayment",
             SUBTYPE_COLORED_COINS_ASSET_DELETE => "version.AssetDelete",
             SUBTYPE_COLORED_COINS_ASSET_INCREASE => "version.AssetIncrease",
+            SUBTYPE_COLORED_COINS_SET_PHASING_CONTROL => "version.SetPhasingAssetControl",
             SUBTYPE_COLORED_COINS_PROPERTY_SET => "version.AssetProperty",
+            SUBTYPE_COLORED_COINS_PROPERTY_DELETE => "version.AssetPropertyDelete",
+            SUBTYPE_COLORED_COINS_LONG_VALUE_PROPERTY_SET => "version.AssetLongValueProperty",
             _ => "version.ColoredCoins",
         },
         TYPE_DIGITAL_GOODS => match subtype {
@@ -96,6 +101,8 @@ fn get_attachment_version(type_byte: u8, subtype: u8, att_map: &Map<String, serd
         },
         TYPE_ACCOUNT_PROPERTY => match subtype {
             SUBTYPE_ACCOUNT_PROPERTY_SET => "version.AccountProperty",
+            SUBTYPE_ACCOUNT_PROPERTY_DELETE => "version.AccountPropertyDelete",
+            SUBTYPE_ACCOUNT_PROPERTY_LONG_VALUE_SET => "version.AccountLongValueProperty",
             _ => "version.AccountProperty",
         },
         TYPE_COIN_EXCHANGE => match subtype {
@@ -114,15 +121,14 @@ fn get_attachment_version(type_byte: u8, subtype: u8, att_map: &Map<String, serd
     att_map.get(version_key)
         .and_then(|v| v.as_u64())
         .map(|v| v as u8)
-        .unwrap_or(1)
+        .unwrap_or(0)
 }
 
-/// 获取 appendix 的版本号
 fn get_appendix_version(version_key: &str, att_map: &Map<String, serde_json::Value>) -> u8 {
     att_map.get(version_key)
         .and_then(|v| v.as_u64())
         .map(|v| v as u8)
-        .unwrap_or(1)
+        .unwrap_or(0)
 }
 
 /// 从 JSON attachment 对象构建完整的二进制 attachment_bytes
@@ -149,20 +155,56 @@ pub fn build_attachment_bytes_from_json(
     // 从 JSON 中读取 attachment 的版本号
     let att_version = get_attachment_version(type_byte, subtype, att_map);
     let att_bytes = serialize_attachment(type_byte, subtype, att_version, att_obj);
-    if !att_bytes.is_empty() {
+    if att_version > 0 || !att_bytes.is_empty() {
         put_version_and_data(&mut result, att_version, |buf| {
             put_bytes(buf, &att_bytes);
         });
     }
 
+    // 检测 TaggedDataUpload/TaggedDataExtend 的 pruned 数据
+    // 对应 Java: TaggedDataAttachment implements IPrunable
+    // P2P 同步时 tagged data 的真实数据(name/description/tags/data等)可能被裁剪，
+    // JSON 只保留 hash 字段。需要标记为 pruned 以触发 verifier 的 <= 比较。
+    if type_byte == TYPE_DATA {
+        match subtype {
+            SUBTYPE_DATA_TAGGED_DATA_UPLOAD => {
+                // 有 hash 但没有 data 字段 → 数据被裁剪
+                let has_data = att_map.get("data").is_some()
+                    || att_map.get("filename").is_some()
+                    || att_map.get("name").is_some();
+                if att_map.get("hash").is_some() && !has_data {
+                    *pruned_bytes = pruned_bytes.saturating_add(1);
+                }
+            }
+            SUBTYPE_DATA_TAGGED_DATA_EXTEND => {
+                // 有 hash 但没有 data 字段 → 数据被裁剪
+                let has_data = att_map.get("data").is_some();
+                if !has_data {
+                    *pruned_bytes = pruned_bytes.saturating_add(1);
+                }
+            }
+            _ => {}
+        }
+    }
+
     // === 2. 序列化各 Appendix 部分（从 attachment JSON 中检测） ===
+    // 对应 Java: AbstractAppendix.hasAppendix() 通过 "version.{AppendixName}" 键判断
 
     // Message appendix（对应 Java: AppendixMessage）
-    if let Some(msg_val) = att_map.get("message") {
+    // Java: hasAppendix("Message", attachmentData) → attachmentData.get("version.Message") != null
+    if att_map.get("version.Message").is_some() {
         let msg_version = get_appendix_version("version.Message", att_map);
-        let message_str = msg_val.as_str().unwrap_or("");
-        let message_bytes = message_str.as_bytes();
-        let is_text = true;
+        let message_str = att_map.get("message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let is_text = att_map.get("messageIsText")
+            .and_then(|v| parse_json_bool(v))
+            .unwrap_or(true);
+        let message_bytes = if is_text {
+            message_str.as_bytes().to_vec()
+        } else {
+            hex::decode(message_str).unwrap_or_default()
+        };
         let len_with_flag = if is_text {
             (message_bytes.len() as i32) | (0x80000000u32 as i32)
         } else {
@@ -170,44 +212,47 @@ pub fn build_attachment_bytes_from_json(
         };
         put_version_and_data(&mut result, msg_version, |buf| {
             put_i32(buf, len_with_flag);
-            put_bytes(buf, message_bytes);
+            put_bytes(buf, &message_bytes);
         });
     }
 
     // EncryptedMessage appendix（对应 Java: EncryptedMessage）
-    if let Some(enc_msg) = att_map.get("encryptedMessage") {
-        if let Some(enc_obj) = enc_msg.as_object() {
-            let enc_version = get_appendix_version("version.EncryptedMessage", att_map);
-            let data_hex = enc_obj.get("data")
-                .and_then(|v| v.as_str())
-                .and_then(|s| hex::decode(s).ok())
-                .unwrap_or_default();
-            let nonce_hex = enc_obj.get("nonce")
-                .and_then(|v| v.as_str())
-                .and_then(|s| hex::decode(s).ok())
-                .unwrap_or_default();
-            let is_text = enc_obj.get("isText")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-            let len_with_flag = if is_text {
-                (data_hex.len() as i32) | (0x80000000u32 as i32)
-            } else {
-                data_hex.len() as i32
-            };
-            put_version_and_data(&mut result, enc_version, |buf| {
-                put_i32(buf, len_with_flag);
-                put_bytes(buf, &data_hex);
-                put_bytes(buf, &nonce_hex);
-            });
+    // Java: hasAppendix("EncryptedMessage", attachmentData) → attachmentData.get("version.EncryptedMessage") != null
+    if att_map.get("version.EncryptedMessage").is_some() {
+        let enc_version = get_appendix_version("version.EncryptedMessage", att_map);
+        if let Some(enc_msg) = att_map.get("encryptedMessage") {
+            if let Some(enc_obj) = enc_msg.as_object() {
+                let data_hex = enc_obj.get("data")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| hex::decode(s).ok())
+                    .unwrap_or_default();
+                let nonce_hex = enc_obj.get("nonce")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| hex::decode(s).ok())
+                    .unwrap_or_default();
+                let is_text = enc_obj.get("isText")
+                    .and_then(|v| parse_json_bool(v))
+                    .unwrap_or(true);
+                let len_with_flag = if is_text {
+                    (data_hex.len() as i32) | (0x80000000u32 as i32)
+                } else {
+                    data_hex.len() as i32
+                };
+                put_version_and_data(&mut result, enc_version, |buf| {
+                    put_i32(buf, len_with_flag);
+                    put_bytes(buf, &data_hex);
+                    put_bytes(buf, &nonce_hex);
+                });
+            }
         }
     }
 
     // PublicKeyAnnouncement appendix（对应 Java: PublicKeyAnnouncement）
-    // 注意：Java 中顺序是 message -> encryptedMessage -> publicKeyAnnouncement -> encryptToSelfMessage
-    if let Some(pk_val) = att_map.get("recipientPublicKey") {
-        if let Some(pk_str) = pk_val.as_str() {
+    // Java: hasAppendix("PublicKeyAnnouncement", attachmentData) → attachmentData.get("version.PublicKeyAnnouncement") != null
+    if att_map.get("version.PublicKeyAnnouncement").is_some() {
+        let pk_version = get_appendix_version("version.PublicKeyAnnouncement", att_map);
+        if let Some(pk_str) = att_map.get("recipientPublicKey").and_then(|v| v.as_str()) {
             if let Ok(pk_bytes) = hex::decode(pk_str) {
-                let pk_version = get_appendix_version("version.PublicKeyAnnouncement", att_map);
                 put_version_and_data(&mut result, pk_version, |buf| {
                     put_bytes(buf, &pk_bytes);
                 });
@@ -216,89 +261,84 @@ pub fn build_attachment_bytes_from_json(
     }
 
     // EncryptToSelfMessage appendix（对应 Java: EncryptToSelfMessage）
-    if let Some(ets_msg) = att_map.get("encryptToSelfMessage") {
-        if let Some(ets_obj) = ets_msg.as_object() {
-            let ets_version = get_appendix_version("version.EncryptToSelfMessage", att_map);
-            let data_hex = ets_obj.get("data")
-                .and_then(|v| v.as_str())
-                .and_then(|s| hex::decode(s).ok())
-                .unwrap_or_default();
-            let nonce_hex = ets_obj.get("nonce")
-                .and_then(|v| v.as_str())
-                .and_then(|s| hex::decode(s).ok())
-                .unwrap_or_default();
-            let is_text = ets_obj.get("isText")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-            let len_with_flag = if is_text {
-                (data_hex.len() as i32) | (0x80000000u32 as i32)
-            } else {
-                data_hex.len() as i32
-            };
-            put_version_and_data(&mut result, ets_version, |buf| {
-                put_i32(buf, len_with_flag);
-                put_bytes(buf, &data_hex);
-                put_bytes(buf, &nonce_hex);
-            });
+    // Java: hasAppendix("EncryptToSelfMessage", attachmentData) → attachmentData.get("version.EncryptToSelfMessage") != null
+    if att_map.get("version.EncryptToSelfMessage").is_some() {
+        let ets_version = get_appendix_version("version.EncryptToSelfMessage", att_map);
+        if let Some(ets_msg) = att_map.get("encryptToSelfMessage") {
+            if let Some(ets_obj) = ets_msg.as_object() {
+                let data_hex = ets_obj.get("data")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| hex::decode(s).ok())
+                    .unwrap_or_default();
+                let nonce_hex = ets_obj.get("nonce")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| hex::decode(s).ok())
+                    .unwrap_or_default();
+                let is_text = ets_obj.get("isText")
+                    .and_then(|v| parse_json_bool(v))
+                    .unwrap_or(true);
+                let len_with_flag = if is_text {
+                    (data_hex.len() as i32) | (0x80000000u32 as i32)
+                } else {
+                    data_hex.len() as i32
+                };
+                put_version_and_data(&mut result, ets_version, |buf| {
+                    put_i32(buf, len_with_flag);
+                    put_bytes(buf, &data_hex);
+                    put_bytes(buf, &nonce_hex);
+                });
+            }
         }
     }
 
     // Phasing appendix（对应 Java: AppendixPhasing）
-    // 检测条件: 有 phasingFinishHeight 或 phased=true
-    if att_map.get("phasingFinishHeight").is_some()
-        || att_map.get("phased").and_then(|v| v.as_bool()).unwrap_or(false)
-    {
+    // Java: hasAppendix("Phasing", attachmentData) → attachmentData.get("version.Phasing") != null
+    if att_map.get("version.Phasing").is_some() {
         let phasing_version = get_appendix_version("version.Phasing", att_map);
         serialize_phasing_appendix(&mut result, phasing_version, att_map);
     }
 
     // PrunablePlainMessage appendix（对应 Java: PrunablePlainMessage）
-    // Java 源码 (PrunablePlainMessage.java:106-108): buffer.put(getHash())
-    // getBytes() 始终包含 PrunablePlainMessage 字节（用于 payload_hash 计算）
-    // 但 getFullSize() 在 pruned 时排除该附录（用于 payload length 检查）
-    //
-    // 仅当 message 数据被真正裁剪时（有 messageHash 但无 message）才构建 PPM 附录。
-    // 若 message 数据完整存在，则不应额外构建 PPM，否则 get_bytes() 会多出 PPM 字节，
-    // 导致 payload_hash 不匹配，区块被拒绝。
-    let ppm_has_message = att_map.get("message")
-        .and_then(|v| v.as_str())
-        .map(|s| !s.is_empty())
-        .unwrap_or(false);
-    let ppm_is_pruned = !ppm_has_message;
-
-    let ppm_hash = att_map.get("messageHash")
-        .and_then(|v| v.as_str())
-        .and_then(|s| hex::decode(s).ok());
-
-    if let Some(hash_bytes) = ppm_hash {
-        if ppm_is_pruned {
-            let ppm_version = get_appendix_version("version.PrunablePlainMessage", att_map);
-            let before = result.len();
-            put_version_and_data(&mut result, ppm_version, |buf| {
-                put_bytes(buf, &hash_bytes);
-            });
-            let data_len = (result.len() - before) as u32;
-            *pruned_bytes += data_len;
-        }
-        // 如果 message 数据完整存在，PPM 无需构建（get_bytes 中已有 message 附录）
-    } else if att_map.get("version.PrunablePlainMessage").is_some() && ppm_is_pruned {
+    // Java: hasAppendix("PrunablePlainMessage", attachmentData) → attachmentData.get("version.PrunablePlainMessage") != null
+    // Java PrunablePlainMessage.putMyBytes(): buffer.put(getHash()) — 始终写 32 字节 hash
+    // Java PrunablePlainMessage.getMySize(): return 32 — 始终 32 字节
+    // 无论 message 数据是否被裁剪，getBytes() 中都包含 PPM 的 hash 字节
+    if att_map.get("version.PrunablePlainMessage").is_some() {
         let ppm_version = get_appendix_version("version.PrunablePlainMessage", att_map);
+        let ppm_hash = att_map.get("messageHash")
+            .and_then(|v| v.as_str())
+            .and_then(|s| hex::decode(s).ok())
+            .unwrap_or_else(|| vec![0u8; 32]);
         put_version_and_data(&mut result, ppm_version, |buf| {
-            put_bytes(buf, &[0u8; 32]);
+            put_bytes(buf, &ppm_hash);
         });
+
+        let ppm_has_message = att_map.get("message")
+            .and_then(|v| v.as_str())
+            .map(|s| !s.is_empty())
+            .unwrap_or(false);
+        if !ppm_has_message {
+            // Java getFullSize() for pruned PPM = version_byte(1 if version>0) + 0 (no message)
+            // Java getSize() for PPM = version_byte(1 if version>0) + 32 (hash)
+            // pruned_bytes = getSize() - getFullSize() = 32 (hash bytes only)
+            *pruned_bytes += 32;
+        }
     }
 
     // PrunableEncryptedMessage appendix（对应 Java: PrunableEncryptedMessage）
-    let pem_hash = att_map.get("encryptedMessageHash")
-        .and_then(|v| v.as_str())
-        .and_then(|s| hex::decode(s).ok());
-
-    if let Some(hash_bytes) = pem_hash {
+    // Java: hasAppendix("PrunableEncryptedMessage", attachmentData) → attachmentData.get("version.PrunableEncryptedMessage") != null
+    // Java PrunableEncryptedMessage.putMyBytes(): buffer.put(getHash()) — 始终写 32 字节 hash
+    // 无论 encryptedMessage 数据是否被裁剪，getBytes() 中都包含 PEM 的 hash 字节
+    if att_map.get("version.PrunableEncryptedMessage").is_some() {
         let pem_version = get_appendix_version("version.PrunableEncryptedMessage", att_map);
-        let before = result.len();
+        let pem_hash = att_map.get("encryptedMessageHash")
+            .and_then(|v| v.as_str())
+            .and_then(|s| hex::decode(s).ok())
+            .unwrap_or_else(|| vec![0u8; 32]);
         put_version_and_data(&mut result, pem_version, |buf| {
-            put_bytes(buf, &hash_bytes);
+            put_bytes(buf, &pem_hash);
         });
+
         let pem_has_data = att_map.get("encryptedMessage")
             .and_then(|v| v.as_object())
             .and_then(|obj| obj.get("data"))
@@ -310,14 +350,11 @@ pub fn build_attachment_bytes_from_json(
                 .map(|s| !s.is_empty())
                 .unwrap_or(false);
         if !pem_has_data {
-            let data_len = (result.len() - before) as u32;
-            *pruned_bytes += data_len;
+            // Java getFullSize() for pruned PEM = version_byte(1 if version>0) + 0 (no data)
+            // Java getSize() for PEM = version_byte(1 if version>0) + 32 (hash)
+            // pruned_bytes = getSize() - getFullSize() = 32 (hash bytes only)
+            *pruned_bytes += 32;
         }
-    } else if att_map.get("version.PrunableEncryptedMessage").is_some() {
-        let pem_version = get_appendix_version("version.PrunableEncryptedMessage", att_map);
-        put_version_and_data(&mut result, pem_version, |buf| {
-            put_bytes(buf, &[0u8; 32]);
-        });
     }
 
     result
@@ -506,32 +543,13 @@ pub fn detect_appendix_flags(
     has_encrypttoself_message = att_map.get("version.EncryptToSelfMessage").is_some();
     has_phasing = att_map.get("version.Phasing").is_some();
 
-    // PrunablePlainMessage: 仅当 message 数据被真正裁剪时才为 true
-    // 即：有 messageHash 但 message 缺失（对应 Java IPrunable && !hasPrunableData()）
-    // 若 message 和 messageHash 同时存在，说明数据完整未被裁剪
-    let has_message_data = att_map.get("message")
-        .and_then(|v| v.as_str())
-        .map(|s| !s.is_empty())
-        .unwrap_or(false);
-    has_prunable_message = !has_message_data
-        && (att_map.get("messageHash").is_some()
-            || att_map.get("version.PrunablePlainMessage").is_some());
+    // Java Transaction.getFlags(): if (prunablePlainMessage != null) flags |= position
+    // 只要 PrunablePlainMessage appendix 存在就设置 flag，不管数据是否被裁剪
+    has_prunable_message = att_map.get("version.PrunablePlainMessage").is_some();
 
-    // PrunableEncryptedMessage: 仅当 encrypted 数据被真正裁剪时才为 true
-    // 检查 encryptedMessage.data 或 encryptedData 是否实际存在
-    let has_enc_data = att_map.get("encryptedMessage")
-        .and_then(|v| v.as_object())
-        .and_then(|obj| obj.get("data"))
-        .and_then(|v| v.as_str())
-        .map(|s| !s.is_empty())
-        .unwrap_or(false)
-        || att_map.get("encryptedData")
-            .and_then(|v| v.as_str())
-            .map(|s| !s.is_empty())
-            .unwrap_or(false);
-    has_prunable_encrypted_message = !has_enc_data
-        && (att_map.get("encryptedMessageHash").is_some()
-            || att_map.get("version.PrunableEncryptedMessage").is_some());
+    // Java Transaction.getFlags(): if (prunableEncryptedMessage != null) flags |= position
+    // 只要 PrunableEncryptedMessage appendix 存在就设置 flag，不管数据是否被裁剪
+    has_prunable_encrypted_message = att_map.get("version.PrunableEncryptedMessage").is_some();
 
     // 对应 Java IPrunable 接口的其他实现：
     // - TaggedDataUpload (type=6, subtype=0): 检测 "version.TaggedDataUpload"
@@ -600,6 +618,21 @@ where
         put_byte(buf, version);
     }
     put_fn(buf);
+}
+
+/// 从 JSON Value 中解析 bool 值（兼容多种类型）
+/// 对应 Java: Boolean.valueOf / JSONObject.getBoolean
+fn parse_json_bool(value: &serde_json::Value) -> Option<bool> {
+    match value {
+        serde_json::Value::Bool(b) => Some(*b),
+        serde_json::Value::Number(n) => n.as_i64().map(|v| v != 0),
+        serde_json::Value::String(s) => match s.as_str() {
+            "true" | "1" | "yes" => Some(true),
+            "false" | "0" | "no" => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// 从 JSON Value 中解析可能超出 i64 范围的 u64 值

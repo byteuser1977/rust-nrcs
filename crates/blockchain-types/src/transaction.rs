@@ -106,6 +106,11 @@ pub const SUBTYPE_COIN_EXCHANGE_ORDER_CANCEL: u8 = 1;
 pub const SUBTYPE_LIGHT_CONTRACT_REFERENCE_SET: u8 = 0;
 pub const SUBTYPE_LIGHT_CONTRACT_REFERENCE_DELETE: u8 = 1;
 
+// AccountProperty subtypes (same values as Messaging subtypes 10-12)
+pub const SUBTYPE_ACCOUNT_PROPERTY_SET: u8 = 0;
+pub const SUBTYPE_ACCOUNT_PROPERTY_DELETE: u8 = 1;
+pub const SUBTYPE_ACCOUNT_PROPERTY_LONG_VALUE_SET: u8 = 2;
+
 pub const TRANSACTION_VERSION: u8 = 1;
 
 /// 交易类型枚举
@@ -468,7 +473,7 @@ impl Transaction {
         let version = obj.get("version")
             .and_then(|v| v.as_u64())
             .map(|v| v as u8)
-            .unwrap_or(1);
+            .unwrap_or(0);
 
         let sender_public_key = get_hash256("senderPublicKey")?;
         let sender_id = Self::public_key_to_account_id(&sender_public_key.0);
@@ -762,9 +767,8 @@ impl Transaction {
     }
 
     pub fn validate_basic(&self) -> Result<()> {
-        if self.version < 1 {
-            return Err(BlockchainError::InvalidTransaction("invalid transaction version".to_string()));
-        }
+        // 注意：version 可以合法为 0（Java NRS 早期交易）
+        // 对应 Java AbstractAppendix.java:23 默认版本 0
 
         if self.id == 0 {
             return Err(BlockchainError::InvalidTransaction("invalid transaction id 0".to_string()));

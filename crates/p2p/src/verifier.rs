@@ -185,10 +185,17 @@ impl BlockchainVerifier {
                 ))?;
 
             // 5. 累加 payload 长度（对应 Java: payloadLength += transaction.getFullSize()）
-            // 基础大小 176 = signatureOffset(96) + signature(64) + version扩展(16)
+            // Java Transaction.getSize():
+            //   signatureOffset(96) + signature(64) + (version > 0 ? 16 : 0) + appendagesSize
             // attachment_bytes 包含 prunable 附录（用于 payload_hash），
             // 但 Java getFullSize() 排除 pruned 数据，故减去 pruned_attachment_bytes
-            let tx_payload_len = 176 + tx.attachment_bytes.len() as u32 - tx.pruned_attachment_bytes;
+            let base_size: u32 = if tx.version > 0 { 176 } else { 160 };
+            let tx_payload_len = base_size + tx.attachment_bytes.len() as u32 - tx.pruned_attachment_bytes;
+            debug!(
+                "tx[{}] id={} type={:?}/{} v={} att_bytes={} pruned={} payload_len={}",
+                idx, tx.id, tx.type_id, tx.subtype, tx.version,
+                tx.attachment_bytes.len(), tx.pruned_attachment_bytes, tx_payload_len
+            );
             total_payload_length = total_payload_length.checked_add(tx_payload_len)
                 .ok_or_else(|| BlockchainError::InvalidTransaction(
                     format!("transaction {} payload length overflow", tx.id)
@@ -241,7 +248,7 @@ impl BlockchainVerifier {
     /// P2P GetNextBlocks 返回的 JSON 中，prunable attachment 的实际数据可能被裁剪，
     /// 只保留 hash 用于验证。这导致从 JSON 重建的 attachment_bytes 比原始数据短。
     fn is_transaction_pruned(tx: &Transaction) -> bool {
-        tx.has_prunable_message || tx.has_prunable_encrypted_message || tx.has_prunable_attachment
+        tx.has_prunable_message || tx.has_prunable_encrypted_message || tx.has_prunable_attachment || tx.pruned_attachment_bytes > 0
     }
 
     /// 计算区块的 Payload Hash
@@ -712,8 +719,7 @@ impl BlockVerifier for BlockchainVerifier {
         match self.accept_block(&block).await {
             Ok(()) => {
                 if block_height.is_multiple_of(5000) {
-                    info!("Block accepted: height={}, id={}, txs={}", block_height, block_id, block.transactions.len());
-                } else {
+
                     debug!("Block accepted: height={}, id={}, txs={}", block_height, block_id, block.transactions.len());
                 }
                 Ok(())

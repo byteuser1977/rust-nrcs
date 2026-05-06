@@ -77,10 +77,10 @@ pub struct PaymentAttachment {
 }
 
 impl PaymentAttachment {
-    pub fn new(message: Option<String>) -> Self {
+    pub fn new(message: Option<String>, is_text: bool) -> Self {
         Self {
             message,
-            message_is_text: true,
+            message_is_text: is_text,
         }
     }
     
@@ -483,7 +483,7 @@ mod tests {
 
     #[test]
     fn test_payment_attachment() {
-        let attachment = PaymentAttachment::new(Some("test message".to_string()));
+        let attachment = PaymentAttachment::new(Some("test message".to_string()), true);
         assert!(attachment.validate().is_ok());
         
         let attachment_enum = Attachment::Payment(attachment);
@@ -521,7 +521,7 @@ mod tests {
 
     #[test]
     fn test_attachment_pack_unpack() {
-        let attachment = Attachment::Payment(PaymentAttachment::new(Some("hello".to_string())));
+        let attachment = Attachment::Payment(PaymentAttachment::new(Some("hello".to_string()), true));
         
         let packed = attachment.pack().unwrap();
         let unpacked = Attachment::unpack(&packed).unwrap();

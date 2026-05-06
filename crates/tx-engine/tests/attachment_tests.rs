@@ -90,13 +90,13 @@ fn test_message_attachment_pack_unpack() {
 
 #[test]
 fn test_payment_attachment_with_message() {
-    let attachment = PaymentAttachment::new(Some("payment note".to_string()));
+    let attachment = PaymentAttachment::new(Some("payment note".to_string()), true);
     assert!(attachment.validate().is_ok());
 }
 
 #[test]
 fn test_payment_attachment_no_message() {
-    let attachment = PaymentAttachment::new(None);
+    let attachment = PaymentAttachment::new(None, true);
     assert!(attachment.validate().is_ok());
 }
 

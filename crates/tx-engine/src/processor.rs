@@ -2976,8 +2976,18 @@ impl DatabaseTransactionProcessor {
                 //   attachment fields: { "message": String, "messageIsText": boolean, "encryptedMessage": String, ... }
                 //   DB operation: INSERT PRUNABLE_MESSAGE table
 
-                let message = self.parse_string_field(tx, "message");
+                let message_str = self.parse_string_field(tx, "message");
                 let message_is_text = self.parse_bool_field(tx, "messageIsText").unwrap_or(true);
+                // 对应 Java AppendixMessage.java:52-53
+                // isText=true: Convert.toBytes → UTF-8 编码
+                // isText=false: Convert.parseHexString → hex 解码
+                let message = message_str.map(|m| {
+                    if message_is_text {
+                        m.into_bytes()
+                    } else {
+                        hex::decode(&m).unwrap_or_else(|_| m.into_bytes())
+                    }
+                });
                 let enc_result = self.parse_encrypted_message(tx);
                 let encrypted_message = enc_result.as_ref().map(|(data, _, _, _)| data.clone());
                 let encrypted_is_text = enc_result.as_ref().map(|(_, _, is_text, _)| *is_text).unwrap_or(true);
@@ -2990,7 +3000,7 @@ impl DatabaseTransactionProcessor {
                         id: tx.id as i64,
                         sender_id,
                         recipient_id: if recipient_id != 0 { Some(recipient_id) } else { None },
-                        message: message.map(|m| m.into_bytes()),
+                        message,
                         message_is_text,
                         is_compressed,
                         encrypted_message: encrypted_message.clone(),
@@ -3695,7 +3705,7 @@ impl DatabaseTransactionProcessor {
                 // Parse isText from attachment JSON (default true)
                 let is_text = tx.attachment_json.as_ref()
                     .and_then(|v| v.get("isText"))
-                    .and_then(|b| b.as_bool())
+                    .and_then(|b| Self::parse_bool_value(b))
                     .unwrap_or(true);
 
                 // 对应 Java: TaggedData.add() 允许空名称（使用 transaction id 作为回退标识）
@@ -4695,23 +4705,22 @@ impl DatabaseTransactionProcessor {
         self.parse_long_field(tx, field_name)
     }
 
-    fn parse_bool_field(&self, tx: &Transaction, field_name: &str) -> Option<bool> {
-        let att_map = tx.attachment_json.as_ref()?;
-
-        match att_map.get(field_name) {
-            Some(serde_json::Value::Bool(b)) => Some(*b),
-            Some(serde_json::Value::Number(n)) => {
-                n.as_i64().map(|v| v != 0)
-            }
-            Some(serde_json::Value::String(s)) => {
-                match s.as_str() {
-                    "true" | "1" | "yes" => Some(true),
-                    "false" | "0" | "no" => Some(false),
-                    _ => None,
-                }
-            }
+    fn parse_bool_value(value: &serde_json::Value) -> Option<bool> {
+        match value {
+            serde_json::Value::Bool(b) => Some(*b),
+            serde_json::Value::Number(n) => n.as_i64().map(|v| v != 0),
+            serde_json::Value::String(s) => match s.as_str() {
+                "true" | "1" | "yes" => Some(true),
+                "false" | "0" | "no" => Some(false),
+                _ => None,
+            },
             _ => None,
         }
+    }
+
+    fn parse_bool_field(&self, tx: &Transaction, field_name: &str) -> Option<bool> {
+        let att_map = tx.attachment_json.as_ref()?;
+        Self::parse_bool_value(att_map.get(field_name)?)
     }
 
     /// 从 attachment JSON 对象中解析加密消息（EncryptedMessage）
@@ -4723,8 +4732,12 @@ impl DatabaseTransactionProcessor {
         let enc_obj = att_map.get("encryptedMessage")?.as_object()?;
         let data = enc_obj.get("data")?.as_str().and_then(|s| hex::decode(s).ok())?;
         let nonce = enc_obj.get("nonce")?.as_str().and_then(|s| hex::decode(s).ok())?;
-        let is_text = enc_obj.get("isText").and_then(|v| v.as_bool()).unwrap_or(true);
-        let is_compressed = enc_obj.get("isCompressed").and_then(|v| v.as_bool()).unwrap_or(false);
+        let is_text = enc_obj.get("isText")
+            .and_then(|v| Self::parse_bool_value(v))
+            .unwrap_or(true);
+        let is_compressed = enc_obj.get("isCompressed")
+            .and_then(|v| Self::parse_bool_value(v))
+            .unwrap_or(false);
         Some((data, nonce, is_text, is_compressed))
     }
 

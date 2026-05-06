@@ -25,6 +25,7 @@ const SEGMENT_SIZE: usize = 36;
 const MAX_BLOCKS_BATCH: usize = 720;
 const MAX_BLOCKS_LIMIT: usize = 1440;
 const SYNC_INTERVAL_SECS: u64 = 1;
+const SYNC_EMPTY_RETRY: u32 = 3;
 
 #[derive(Debug, Clone, Default)]
 pub struct SyncState {
@@ -179,42 +180,69 @@ impl BlockchainSyncDaemon {
                 break;
             }
 
-            let chain_height = block_verifier.get_height().await.unwrap_or(0);
-
-            match Self::download_peer(&peers, &is_downloading, &sync_state, &block_verifier).await {
-                Ok(downloaded) => {
-                    if downloaded > 0 {
-                        let current_height = block_verifier.get_height().await.unwrap_or(0);
-                        Self::update_sync_progress(&sync_state, current_height, downloaded).await;
-                        continue;
-                    }
-                }
-                Err(e) => {
-                    debug!("Sync error: {}", e);
-                    {
-                        let mut state = sync_state.write().await;
-                        state.errors_count += 1;
-                    }
-                }
+            {
+                let mut state = sync_state.write().await;
+                state.is_syncing = true;
+                state.start_time = Some(Instant::now());
+                state.start_height = block_verifier.get_height().await.unwrap_or(0);
+                state.current_height = state.start_height;
+                state.blocks_downloaded = 0;
+                state.blocks_processed = 0;
+                state.errors_count = 0;
             }
 
-            if block_verifier.get_height().await.unwrap_or(0) == chain_height {
-                let was_downloading = *is_downloading.read().await;
-                if was_downloading {
-                    info!("Finished blockchain download");
-                    *is_downloading.write().await = false;
+            let mut consecutive_empty = 0u32;
+            let mut total_processed = 0usize;
+            
+            loop {
+                if !*running.read().await {
+                    break;
                 }
 
-                {
-                    let mut state = sync_state.write().await;
-                    state.is_syncing = false;
-                    state.last_sync_time = Some(Instant::now());
+                match Self::download_peer(&peers, &is_downloading, &sync_state, &block_verifier).await {
+                    Ok(downloaded) => {
+                        if downloaded == 0 {
+                            consecutive_empty += 1;
+                            if consecutive_empty >= SYNC_EMPTY_RETRY {
+                                debug!("No more blocks to download after {} attempts", SYNC_EMPTY_RETRY);
+                                break;
+                            }
+                        } else {
+                            consecutive_empty = 0;
+                            total_processed += downloaded;
+                            info!("Downloaded {} blocks (total: {}), continuing sync...", downloaded, total_processed);
+                            
+                            let current_height = block_verifier.get_height().await.unwrap_or(0);
+                            Self::update_sync_progress(&sync_state, current_height, total_processed).await;
+                        }
+                    }
+                    Err(e) => {
+                        debug!("Sync error: {}", e);
+                        consecutive_empty += 1;
+                        {
+                            let mut state = sync_state.write().await;
+                            state.errors_count += 1;
+                        }
+                        if consecutive_empty >= SYNC_EMPTY_RETRY {
+                            break;
+                        }
+                    }
                 }
 
-                Self::log_sync_summary(&sync_state).await;
-
-                tokio::time::sleep(Duration::from_secs(SYNC_INTERVAL_SECS)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
+
+            {
+                let mut state = sync_state.write().await;
+                state.is_syncing = false;
+                state.last_sync_time = Some(Instant::now());
+            }
+
+            Self::log_sync_summary(&sync_state).await;
+
+            *is_downloading.write().await = false;
+
+            tokio::time::sleep(Duration::from_secs(SYNC_INTERVAL_SECS)).await;
         }
     }
 
@@ -343,17 +371,6 @@ impl BlockchainSyncDaemon {
         if !*is_downloading.read().await && blocks_to_download > 10 {
             info!("Blockchain download in progress");
             *is_downloading.write().await = true;
-
-            {
-                let mut state = sync_state.write().await;
-                state.is_syncing = true;
-                state.start_time = Some(Instant::now());
-                state.start_height = block_verifier.get_height().await.unwrap_or(0);
-                state.current_height = state.start_height;
-                state.blocks_downloaded = 0;
-                state.blocks_processed = 0;
-                state.errors_count = 0;
-            }
         }
 
         let downloaded = Self::download_blocks_multi_peer(
