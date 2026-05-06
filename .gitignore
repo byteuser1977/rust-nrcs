@@ -87,3 +87,4 @@ test_db_connection.sh
 .env
 nrcs.db-journal
 .claude/settings.local.json
+.env

@@ -210,9 +210,9 @@ impl BlockchainSyncDaemon {
                         } else {
                             consecutive_empty = 0;
                             total_processed += downloaded;
-                            info!("Downloaded {} blocks (total: {}), continuing sync...", downloaded, total_processed);
                             
                             let current_height = block_verifier.get_height().await.unwrap_or(0);
+                            info!("Downloaded {} blocks (total: {}), continuing sync... | Height: {}", downloaded, total_processed, current_height);
                             Self::update_sync_progress(&sync_state, current_height, total_processed).await;
                         }
                     }
