@@ -393,8 +393,9 @@ fn is_overflow(x: &Long10) -> bool {
 }
 
 fn pack(x: &Long10, m: &mut [u8; 32]) {
-    let ld = if is_overflow(x) { 1 } else if x._9 < 0 { -1 } else { 0 };
-    let ud = ld * -(P25 + 1);
+    //let ld = if is_overflow(x) { 1 } else if x._9 < 0 { -1 } else { 0 };
+  let ld = (if is_overflow(x) { 1 } else { 0 }) - (if x._9 < 0 { 1 } else { 0 });
+  let ud = ld * -(P25 + 1);
     let ld = ld * 19;
 
     let mut t = ld + x._0 + (x._1 << 26);
