@@ -36,14 +36,13 @@ fn load_genesis_config() -> RepositoryResult<(i64, Vec<(i64, i64)>)> {
             .ok_or_else(|| crate::RepositoryError::Validation("recipient not a string".to_string()))?;
         
         let recipient_id: i64 = if recipient.starts_with('-') {
-            let unsigned_val: u64 = recipient.parse()
-                .map_err(|e| crate::RepositoryError::Validation(format!("invalid recipient: {}", e)))?;
-            unsigned_val as i64
+            recipient.parse::<i64>()
+                .map_err(|e| crate::RepositoryError::Validation(format!("invalid recipient: {}", e)))?
         } else {
             match recipient.parse::<u64>() {
                 Ok(unsigned_val) => unsigned_val as i64,
                 Err(_) => {
-                    recipient.parse()
+                    recipient.parse::<i64>()
                         .map_err(|e| crate::RepositoryError::Validation(format!("invalid recipient: {}", e)))?
                 }
             }
@@ -187,21 +186,6 @@ pub async fn ensure_genesis(
         if balance_nqt > 0 {
             guaranteed_balance_repo.upsert_additions(account_id, height, balance_nqt).await?;
         }
-
-        let ledger_model = AccountLedgerModel {
-            db_id: 0,
-            account_id,
-            event_type: 3, // LedgerEvent.ORDINARY_PAYMENT
-            event_id: 1,
-            holding_type: 2, // LedgerHolding.NRCS_BALANCE
-            holding_id: None,
-            change: balance_nqt,
-            balance: balance_nqt,
-            block_id,
-            height,
-            timestamp,
-        };
-        ledger_repo.insert(&ledger_model).await?;
     }
 
     let genesis_tx_ids: Vec<i64> = vec![
@@ -228,6 +212,16 @@ pub async fn ensure_genesis(
         "182dd1a3abb456961ac0d7852a0892bfa57e306f727f00a7dce6c0ce7bd53d09f0a7be7bd5c25ff172e17133646f8afae51d",
         "a8745bcf08a361a6baed9611df10bafd037051b26c9b8167bf1cbb3a357ddb072adfd1d43bf93bb9379446ed5aa7ecbb21ae",
     ];
+
+    // 为 Genesis 区块的所有交易生成完整的账户账本记录
+    //
+    // 每笔交易生成 3 条 account_ledger 记录：
+    // 1. Generator 手续费扣减记录 (event_type=50)
+    // 2. Generator 金额扣减记录 (event_type=3)
+    // 3. Recipient 金额接收记录 (event_type=3)
+    //
+    // 对于默认的 2 笔 genesis 交易，共生成 6 条账本记录
+    let mut gen_cumulative_balance: i64 = 0;
 
     for idx in 0..genesis_tx_ids.len() {
         let tx_id = genesis_tx_ids[idx];
@@ -272,6 +266,71 @@ pub async fn ensure_genesis(
         };
 
         tx_repo.insert(&tx_model).await?;
+
+        // 生成 Generator 的手续费扣除账本记录
+        //
+        // - event_type: 50 (TRANSACTION_FEE)
+        // - holding_type: 1 (UNCONFIRMED_NRCS_BALANCE)
+        // - change: 负数表示扣减
+        // - balance: 累计余额（反映所有交易的累计扣减）
+        gen_cumulative_balance -= fee;
+        let gen_fee_ledger = AccountLedgerModel {
+            db_id: 0,
+            account_id: generator_id,
+            event_type: 50,
+            event_id: tx_id,
+            holding_type: 1,
+            holding_id: None,
+            change: -fee,
+            balance: gen_cumulative_balance,
+            block_id,
+            height,
+            timestamp,
+        };
+        ledger_repo.insert(&gen_fee_ledger).await?;
+
+        // 生成 Generator 的金额扣除账本记录
+        //
+        // - event_type: 3 (ORDINARY_PAYMENT)
+        // - holding_type: 1 (UNCONFIRMED_NRCS_BALANCE)
+        // - change: 负数表示扣减
+        // - balance: 累计余额（包含本次 fee 和 amount 扣减）
+        gen_cumulative_balance -= amount;
+        let gen_amount_ledger = AccountLedgerModel {
+            db_id: 0,
+            account_id: generator_id,
+            event_type: 3,
+            event_id: tx_id,
+            holding_type: 1,
+            holding_id: None,
+            change: -amount,
+            balance: gen_cumulative_balance,
+            block_id,
+            height,
+            timestamp,
+        };
+        ledger_repo.insert(&gen_amount_ledger).await?;
+
+        // 生成 Recipient 的金额接收账本记录
+        //
+        // - event_type: 3 (ORDINARY_PAYMENT)
+        // - holding_type: 1 (UNCONFIRMED_NRCS_BALANCE)
+        // - change: 正数表示增加
+        // - balance: 接收者收到的金额
+        let recipient_ledger = AccountLedgerModel {
+            db_id: 0,
+            account_id: recipient_id,
+            event_type: 3,
+            event_id: tx_id,
+            holding_type: 1,
+            holding_id: None,
+            change: amount,
+            balance: amount,
+            block_id,
+            height,
+            timestamp,
+        };
+        ledger_repo.insert(&recipient_ledger).await?;
     }
 
     Ok(())
@@ -517,8 +576,163 @@ mod tests {
         let block = block_repo.find_latest().await.expect("Failed to get latest block");
         assert!(block.is_some());
         let block = block.unwrap();
-        assert_eq!(block.base_target, blockchain_types::constants::INITIAL_BASE_TARGET as i64, 
+        assert_eq!(block.base_target, blockchain_types::constants::INITIAL_BASE_TARGET as i64,
             "Genesis block base_target should be INITIAL_BASE_TARGET");
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn test_genesis_account_ledger_records_complete() {
+        let (block_repo, account_repo, tx_repo, ledger_repo, guaranteed_balance_repo) = setup_repos().await;
+
+        let genesis_config = r#"{
+            "genesis_time": "2024-1-1 00:00:00.000",
+            "transactions": [
+                {"recipient": "2794603741293765856", "amount": 999999999},
+                {"recipient": "-891382425467438890", "amount": 1}
+            ]
+        }"#;
+
+        let temp_dir = std::env::temp_dir().join("nrcs_test_config_ledger");
+        let config_dir = temp_dir.join("config");
+        std::fs::create_dir_all(&config_dir).ok();
+        let config_path = config_dir.join("genesis.json");
+        std::fs::write(&config_path, genesis_config).ok();
+
+        let original_dir = std::env::current_dir().ok();
+        std::env::set_current_dir(&temp_dir).ok();
+
+        let result = ensure_genesis(&block_repo, &account_repo, &tx_repo, &ledger_repo, &guaranteed_balance_repo).await;
+
+        if let Some(dir) = original_dir {
+            std::env::set_current_dir(dir).ok();
+        }
+
+        result.expect("Genesis creation failed");
+
+        let all_ledgers = ledger_repo.find_all(None, None)
+            .await
+            .expect("Failed to fetch all account_ledger records");
+
+        assert_eq!(all_ledgers.len(), 6,
+            "Expected 6 account_ledger records (2 txs × 3 records each), got {}", all_ledgers.len());
+
+        let generator_id: i64 = 18365787021584764528u64 as i64;
+        let tx1_id: i64 = -6309664432798542337;
+        let tx2_id: i64 = 2830446832482296829;
+        let recipient1_id: i64 = 2794603741293765856;
+        let recipient2_id: i64 = -891382425467438890;
+        let one_nrcs_nqt: i64 = 100_000_000;
+        let fee: i64 = 100_000_000;
+        let tx1_amount: i64 = 999999999 * one_nrcs_nqt;
+        let tx2_amount: i64 = 1 * one_nrcs_nqt;
+
+        let gen_records: Vec<&AccountLedgerModel> = all_ledgers.iter()
+            .filter(|l| l.account_id == generator_id)
+            .collect();
+        assert_eq!(gen_records.len(), 4,
+            "Generator should have 4 ledger records (fee + amount for each of 2 txs), got {}", gen_records.len());
+
+        let gen_fee_tx1 = gen_records.iter()
+            .find(|l| l.event_id == tx1_id && l.event_type == 50)
+            .expect("Should find Generator TX1 FEE record (event_type=50)");
+        assert_eq!(gen_fee_tx1.holding_type, 1,
+            "Generator TX1 FEE holding_type should be 1 (UNCONFIRMED_NRCS_BALANCE)");
+        assert_eq!(gen_fee_tx1.change, -fee,
+            "Generator TX1 FEE change should be -{}", fee);
+        assert_eq!(gen_fee_tx1.balance, -fee,
+            "Generator TX1 FEE balance should be -{} (cumulative after first fee)", fee);
+
+        let gen_amt_tx1 = gen_records.iter()
+            .find(|l| l.event_id == tx1_id && l.event_type == 3)
+            .expect("Should find Generator TX1 AMOUNT record (event_type=3)");
+        assert_eq!(gen_amt_tx1.holding_type, 1,
+            "Generator TX1 AMOUNT holding_type should be 1 (UNCONFIRMED_NRCS_BALANCE)");
+        assert_eq!(gen_amt_tx1.change, -tx1_amount,
+            "Generator TX1 AMOUNT change should be -{}", tx1_amount);
+        assert_eq!(gen_amt_tx1.balance, -(fee + tx1_amount),
+            "Generator TX1 AMOUNT balance should be -{} (cumulative after fee+amount)", fee + tx1_amount);
+
+        let gen_fee_tx2 = gen_records.iter()
+            .find(|l| l.event_id == tx2_id && l.event_type == 50)
+            .expect("Should find Generator TX2 FEE record (event_type=50)");
+        assert_eq!(gen_fee_tx2.holding_type, 1,
+            "Generator TX2 FEE holding_type should be 1 (UNCONFIRMED_NRCS_BALANCE)");
+        assert_eq!(gen_fee_tx2.change, -fee,
+            "Generator TX2 FEE change should be -{}", fee);
+        assert_eq!(gen_fee_tx2.balance, -(fee + tx1_amount + fee),
+            "Generator TX2 FEE balance should be cumulative after TX1+TX2_fee");
+
+        let gen_amt_tx2 = gen_records.iter()
+            .find(|l| l.event_id == tx2_id && l.event_type == 3)
+            .expect("Should find Generator TX2 AMOUNT record (event_type=3)");
+        assert_eq!(gen_amt_tx2.holding_type, 1,
+            "Generator TX2 AMOUNT holding_type should be 1 (UNCONFIRMED_NRCS_BALANCE)");
+        assert_eq!(gen_amt_tx2.change, -tx2_amount,
+            "Generator TX2 AMOUNT change should be -{}", tx2_amount);
+        assert_eq!(gen_amt_tx2.balance, -(fee + tx1_amount + fee + tx2_amount),
+            "Generator TX2 AMOUNT balance should be final cumulative balance");
+
+        for record in &gen_records {
+            assert!(record.change < 0,
+                "Generator record change should be negative, got {} for event_id={} event_type={}",
+                record.change, record.event_id, record.event_type);
+        }
+
+        let recip1_records: Vec<&AccountLedgerModel> = all_ledgers.iter()
+            .filter(|l| l.account_id == recipient1_id)
+            .collect();
+        assert_eq!(recip1_records.len(), 1,
+            "Recipient1 should have exactly 1 ledger record, got {}", recip1_records.len());
+        let r1 = &recip1_records[0];
+        assert_eq!(r1.event_id, tx1_id,
+            "Recipient1 event_id should be TX1 id ({})", tx1_id);
+        assert_eq!(r1.event_type, 3,
+            "Recipient1 event_type should be 3 (ORDINARY_PAYMENT)");
+        assert_eq!(r1.holding_type, 1,
+            "Recipient1 holding_type should be 1 (UNCONFIRMED_NRCS_BALANCE)");
+        assert_eq!(r1.change, tx1_amount,
+            "Recipient1 change should be +{}", tx1_amount);
+        assert_eq!(r1.balance, tx1_amount,
+            "Recipient1 balance should be {}", tx1_amount);
+        assert!(r1.change > 0,
+            "Recipient1 change should be positive");
+
+        let recip2_records: Vec<&AccountLedgerModel> = all_ledgers.iter()
+            .filter(|l| l.account_id == recipient2_id)
+            .collect();
+        assert_eq!(recip2_records.len(), 1,
+            "Recipient2 should have exactly 1 ledger record, got {}", recip2_records.len());
+        let r2 = &recip2_records[0];
+        assert_eq!(r2.event_id, tx2_id,
+            "Recipient2 event_id should be TX2 id ({})", tx2_id);
+        assert_eq!(r2.event_type, 3,
+            "Recipient2 event_type should be 3 (ORDINARY_PAYMENT)");
+        assert_eq!(r2.holding_type, 1,
+            "Recipient2 holding_type should be 1 (UNCONFIRMED_NRCS_BALANCE)");
+        assert_eq!(r2.change, tx2_amount,
+            "Recipient2 change should be +{}", tx2_amount);
+        assert_eq!(r2.balance, tx2_amount,
+            "Recipient2 balance should be {}", tx2_amount);
+        assert!(r2.change > 0,
+            "Recipient2 change should be positive");
+
+        for record in &all_ledgers {
+            assert_eq!(record.holding_type, 1,
+                "All records should have holding_type=1 (UNCONFIRMED_NRCS_BALANCE), got {} for account_id={}",
+                record.holding_type, record.account_id);
+            assert_eq!(record.block_id, blockchain_types::constants::GENESIS_BLOCK_ID as i64,
+                "All records should reference genesis block_id");
+            assert_eq!(record.height, 0,
+                "All records should have height=0 (genesis block)");
+        }
+
+        let total_change: i64 = all_ledgers.iter().map(|l| l.change).sum();
+        let expected_total = -2 * fee;
+        assert_eq!(total_change, expected_total,
+            "Sum of all changes should be {} (negative total fees, fees are consumed by system), got {}",
+            expected_total, total_change);
 
         std::fs::remove_dir_all(&temp_dir).ok();
     }
