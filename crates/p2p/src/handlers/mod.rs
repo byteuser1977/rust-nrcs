@@ -24,9 +24,11 @@ pub use get_next_block_ids::GetNextBlockIdsHandler;
 pub use bundler_rate::BundlerRateHandler;
 pub use unknown::UnknownHandler;
 
-use crate::{peer::Peers, protocol::PeerRequest, config::P2PConfig};
+use crate::{peer::Peers, protocol::PeerRequest, config::P2PConfig, peer::{PeerState, current_timestamp}};
 use std::sync::Arc;
-use tracing::warn;
+use std::net::SocketAddr;
+use tokio::sync::RwLock;
+use tracing::{debug, warn};
 use anyhow::Result;
 use async_trait::async_trait;
 use blockchain_types::prelude::*;
@@ -68,6 +70,8 @@ pub struct Handler {
     pub process_block: Arc<ProcessBlockHandler>,
     pub process_transactions: Arc<ProcessTransactionsHandler>,
     pub bundler_rate: Arc<BundlerRateHandler>,
+    p2p_config: Arc<P2PConfig>,
+    is_downloading: Arc<RwLock<bool>>,
 }
 
 impl Handler {
@@ -82,9 +86,11 @@ impl Handler {
             get_next_blocks: Arc::new(GetNextBlocksHandler::new(Arc::clone(&peers))),
             get_transactions: Arc::new(GetTransactionsHandler::new()),
             get_unconfirmed_transactions: Arc::new(GetTransactionsHandler::new()),
-            process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier, p2p_config)),
+            process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier, Arc::clone(&p2p_config))),
             process_transactions: Arc::new(ProcessTransactionsHandler::new(Arc::clone(&peers))),
             bundler_rate: Arc::new(BundlerRateHandler::new()),
+            p2p_config,
+            is_downloading: Arc::new(RwLock::new(false)),
         }
     }
 
@@ -109,13 +115,123 @@ impl Handler {
             process_block: Arc::new(ProcessBlockHandler::new(Arc::clone(&peers), block_verifier, Arc::clone(&p2p_config))),
             process_transactions: Arc::new(ProcessTransactionsHandler::with_tx_processor(Arc::clone(&peers), tx_processor)),
             bundler_rate: Arc::new(BundlerRateHandler::new()),
+            p2p_config,
+            is_downloading: Arc::new(RwLock::new(false)),
         }
     }
 
-    pub async fn handle(&self, request: PeerRequest, peers: Arc<Peers>) -> serde_json::Value {
+    /// Set downloading state (called by BlockchainSyncDaemon when sync starts/stops)
+    pub fn set_downloading(&self, downloading: bool) {
+        // We can't block on async write here, so spawn
+        let flag = Arc::clone(&self.is_downloading);
+        tokio::spawn(async move {
+            *flag.write().await = downloading;
+        });
+    }
+
+    /// Check if currently downloading
+    pub async fn is_downloading(&self) -> bool {
+        *self.is_downloading.read().await
+    }
+
+    /// Whether a request type should be rejected while blockchain is downloading
+    ///
+    /// 对应 Java: PeerRequestHandler.rejectWhileDownloading()
+    fn reject_while_downloading(&self, request_type: &crate::protocol::RequestType) -> bool {
+        use crate::protocol::RequestType;
+        !matches!(request_type,
+            RequestType::GetInfo
+            | RequestType::GetPeers
+            | RequestType::AddPeers
+            | RequestType::BundlerRate
+        )
+    }
+
+    /// Full request processing with security checks (P2P dispatch entry point)
+    ///
+    /// 对应 Java: PeerServlet.process(IPeer peer, Reader reader)
+    ///
+    /// Performs all security validations before delegating to the specific handler:
+    /// 1. Blacklist check — rejects blacklisted peers
+    /// 2. Protocol version validation — rejects protocol > 2
+    /// 3. getInfo sequence enforcement — first request MUST be getInfo
+    /// 4. Inbound connection limit — rejects if too many inbound connections
+    /// 5. Downloading check — rejects handlers that require up-to-date blockchain
+    pub async fn process_request(
+        &self,
+        request: PeerRequest,
+        peers: Arc<Peers>,
+        peer_addr: SocketAddr,
+    ) -> serde_json::Value {
+        // 1. Blacklist check
+        // 对应 Java: if (peer.isBlacklisted()) { return error(BLACKLISTED); }
+        if peers.is_blacklisted_addr(&peer_addr).await {
+            debug!("[P2P Dispatch] Rejected blacklisted peer: {}", peer_addr);
+            return serde_json::json!({"error": "BLACKLISTED"});
+        }
+
+        // 2. Register or get the peer
+        // 对应 Java: Peers.addPeer(peer)
+        let peer_ref = peers.find_or_create_peer(peer_addr, true).await;
+        let mut peer = peer_ref.lock().await;
+
+        // 3. Protocol version validation
+        // 对应 Java: if (request.getInt("protocol") > 2) { return error(UNSUPPORTED_PROTOCOL); }
+        if request.protocol > 2 {
+            debug!("[P2P Dispatch] Unsupported protocol {} from {}", request.protocol, peer_addr);
+            return serde_json::json!({"error": "UNSUPPORTED_PROTOCOL"});
+        }
+
+        // 4. getInfo sequence enforcement
+        // 对应 Java: if (peer.getVersion() == null && !"getInfo".equals(requestType))
+        let is_get_info = matches!(request.request_type, crate::protocol::RequestType::GetInfo);
+        if !is_get_info && peer.version.is_none() {
+            debug!("[P2P Dispatch] Sequence error: peer {} sent {:?} before getInfo",
+                   peer_addr, request.request_type);
+            return serde_json::json!({"error": "SEQUENCE_ERROR"});
+        }
+
+        // 5. Inbound connection limit
+        // 对应 Java: if (hasTooManyInboundPeers()) { return error(MAX_INBOUND_CONNECTIONS); }
+        let inbound_count = peers.inbound_connection_count().await;
+        if inbound_count >= self.p2p_config.max_inbound_connections {
+            debug!("[P2P Dispatch] Max inbound connections reached ({}), rejecting {}",
+                   inbound_count, peer_addr);
+            return serde_json::json!({"error": "MAX_INBOUND_CONNECTIONS"});
+        }
+
+        // 6. Downloading check
+        // 对应 Java: if (handler.rejectWhileDownloading() && isDownloading) { return error(DOWNLOADING); }
+        if *self.is_downloading.read().await && self.reject_while_downloading(&request.request_type) {
+            debug!("[P2P Dispatch] Rejecting {:?} from {} while downloading",
+                   request.request_type, peer_addr);
+            return serde_json::json!({"error": "DOWNLOADING"});
+        }
+
+        // Update peer activity tracking
+        // 对应 Java: peer.setState(PeerState.CONNECTED) and timestamp updates
+        let now = current_timestamp();
+        let was_inbound = peer.is_inbound;
+        peer.last_inbound_request = now;
+        peer.last_updated = now;
+        if peer.state == PeerState::NonConnected {
+            peer.state = PeerState::Connected;
+        }
+        if !was_inbound {
+            peer.is_inbound = true;
+            peer.fire_event(crate::peer::PeerEvent::AddInbound);
+        }
+        drop(peer);
+
+        // 7. Delegate to the specific handler
+        // 对应 Java: peerRequestHandler.processRequest(request, peer)
+        self.handle(request, peers, peer_addr).await
+    }
+
+    pub async fn handle(&self, request: PeerRequest, peers: Arc<Peers>, peer_addr: SocketAddr) -> serde_json::Value {
         match request.request_type {
             crate::protocol::RequestType::GetInfo => {
-                self.get_info.handle(request, Arc::clone(&peers)).await
+                self.get_info.handle(request, Arc::clone(&peers), peer_addr).await
             }
             crate::protocol::RequestType::GetPeers => {
                 self.get_peers.handle(request, Arc::clone(&peers)).await

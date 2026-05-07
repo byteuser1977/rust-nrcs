@@ -3,6 +3,7 @@
 
 pub mod config;
 pub mod error;
+pub mod event;
 pub mod protocol;
 pub mod websocket;
 pub mod http;

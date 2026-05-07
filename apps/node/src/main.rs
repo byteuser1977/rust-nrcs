@@ -21,6 +21,7 @@ use p2p::{
     Handler,
     daemon::BlockchainSyncDaemon,
     config::P2PConfig as GlobalP2PConfig,
+    connection_pool::ConnectionPool,
     block_apply::BlockRewardApplicator,
 };
 
@@ -741,9 +742,13 @@ async fn start_node(
         info!("P2P WebSocket server started on {}", listen_addr);
     }
 
+    // 创建 WebSocket 连接池（用于区块链同步）
+    let sync_pool = Arc::new(ConnectionPool::new(Arc::clone(&p2p_config)));
+
     // 启动区块链同步守护进程
     let sync_config = GlobalP2PConfig::default();
-    let sync_daemon = BlockchainSyncDaemon::new(sync_config);
+    let mut sync_daemon = BlockchainSyncDaemon::new(sync_config);
+    sync_daemon.set_connection_pool(sync_pool);
     sync_daemon.start(Arc::clone(&peers), Arc::clone(&block_verifier)).await;
     info!("Blockchain sync daemon started");
 

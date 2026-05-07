@@ -4,7 +4,7 @@ use crate::{
     peer::Peers,
 };
 use axum::{
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::post,
@@ -41,6 +41,7 @@ struct HttpHandlerState {
 }
 
 async fn handle_peer(
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     State(state): State<HttpHandlerState>,
     body: Bytes,
@@ -83,7 +84,7 @@ async fn handle_peer(
     info!("HTTP request: {:?}", request.request_type);
 
     // 调用处理器
-    let response = state.handler.handle(request, Arc::clone(&state.peers)).await;
+    let response = state.handler.process_request(request, Arc::clone(&state.peers), peer_addr).await;
 
     // 序列化响应
     let resp_json = match serde_json::to_vec(&response) {
@@ -116,7 +117,7 @@ pub async fn serve(
     info!("HTTP server listening on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, router).await?;
+    axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>()).await?;
 
     Ok(())
 }

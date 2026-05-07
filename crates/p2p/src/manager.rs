@@ -9,6 +9,7 @@
 //! - 整合连接池、广播、持久化等模块
 
 use crate::config::P2PConfig;
+use crate::connection_pool::ConnectionPool;
 use crate::daemon::{ConnectionDaemon, DiscoveryDaemon, TransactionDaemon, UnblacklistDaemon};
 use crate::error::{P2PError, P2PResult};
 use crate::peer::{Peer, PeerState, Peers};
@@ -25,6 +26,8 @@ pub struct P2PManager {
     config: Arc<P2PConfig>,
     /// 节点管理器
     peers: Arc<Peers>,
+    /// WebSocket 连接池
+    connection_pool: Option<Arc<ConnectionPool>>,
     /// 连接守护进程
     connection_daemon: Option<ConnectionDaemon>,
     /// 发现守护进程
@@ -47,6 +50,7 @@ impl P2PManager {
         Self {
             config,
             peers,
+            connection_pool: None,
             connection_daemon: None,
             discovery_daemon: None,
             unblacklist_daemon: None,
@@ -67,16 +71,22 @@ impl P2PManager {
         // 加载种子节点到内存
         self.config.init_bootstrap_peers(&self.peers).await;
 
+        // 创建 WebSocket 连接池（全局共享）
+        let pool = Arc::new(ConnectionPool::new(Arc::clone(&self.config)));
+        self.connection_pool = Some(Arc::clone(&pool));
+
         // 创建守护进程
         self.connection_daemon = Some(ConnectionDaemon::new(
             Arc::clone(&self.peers),
             (*self.config).clone(),
         ));
 
-        self.discovery_daemon = Some(DiscoveryDaemon::new(
+        let mut discovery_daemon = DiscoveryDaemon::new(
             Arc::clone(&self.peers),
             (*self.config).clone(),
-        ));
+        );
+        discovery_daemon.set_connection_pool(Arc::clone(&pool));
+        self.discovery_daemon = Some(discovery_daemon);
 
         self.unblacklist_daemon = Some(UnblacklistDaemon::new(
             Arc::clone(&self.peers),
@@ -162,6 +172,11 @@ impl P2PManager {
     /// Get config
     pub fn config(&self) -> &P2PConfig {
         &self.config
+    }
+
+    /// Get connection pool
+    pub fn connection_pool(&self) -> Option<Arc<ConnectionPool>> {
+        self.connection_pool.clone()
     }
 
     /// Add a peer
@@ -269,7 +284,7 @@ impl P2PManager {
 
         if let Some(peer_ref) = self.peers.get_peer(addr).await {
             let mut peer = peer_ref.lock().await;
-            peer.connect(&self.config).await
+            peer.connect_with_peers(&self.config, Some(&self.peers)).await
         } else {
             Err(crate::error::P2PError::internal("Peer not found".to_string()))
         }

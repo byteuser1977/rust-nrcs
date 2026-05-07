@@ -7,6 +7,7 @@ mod block_repository_tests;
 mod account_repository_tests;
 mod transaction_repository_tests;
 mod asset_repository_tests;
+mod asset_transfer_regression;
 mod alias_repository_tests;
 mod poll_repository_tests;
 mod order_repository_tests;

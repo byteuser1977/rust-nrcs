@@ -8,6 +8,7 @@
 //! - 下载缺失的区块并验证
 
 use crate::config::P2PConfig;
+use crate::connection_pool::ConnectionPool;
 use crate::peer::{Peer, PeerState};
 use crate::protocol::{PeerRequest, RequestType};
 use crate::websocket::WebsocketClient;
@@ -81,6 +82,7 @@ impl SyncState {
 
 pub struct BlockchainSyncDaemon {
     config: P2PConfig,
+    connection_pool: Option<Arc<ConnectionPool>>,
     running: Arc<RwLock<bool>>,
     is_downloading: Arc<RwLock<bool>>,
     sync_state: Arc<RwLock<SyncState>>,
@@ -90,10 +92,16 @@ impl BlockchainSyncDaemon {
     pub fn new(config: P2PConfig) -> Self {
         Self {
             config,
+            connection_pool: None,
             running: Arc::new(RwLock::new(false)),
             is_downloading: Arc::new(RwLock::new(false)),
             sync_state: Arc::new(RwLock::new(SyncState::new())),
         }
+    }
+
+    /// Set connection pool for persistent WebSocket connections
+    pub fn set_connection_pool(&mut self, pool: Arc<ConnectionPool>) {
+        self.connection_pool = Some(pool);
     }
 
     pub async fn start(
@@ -110,13 +118,14 @@ impl BlockchainSyncDaemon {
         drop(running);
 
         let config = self.config.clone();
+        let connection_pool = self.connection_pool.clone();
         let running = Arc::clone(&self.running);
         let is_downloading = Arc::clone(&self.is_downloading);
         let sync_state = Arc::clone(&self.sync_state);
 
         tokio::spawn(async move {
             info!("Blockchain sync daemon started");
-            Self::sync_loop(peers, config, running, is_downloading, sync_state, block_verifier).await;
+            Self::sync_loop(peers, config, connection_pool, running, is_downloading, sync_state, block_verifier).await;
             info!("Blockchain sync daemon stopped");
         });
     }
@@ -170,6 +179,7 @@ impl BlockchainSyncDaemon {
     async fn sync_loop(
         peers: Arc<crate::peer::Peers>,
         _config: P2PConfig,
+        connection_pool: Option<Arc<ConnectionPool>>,
         running: Arc<RwLock<bool>>,
         is_downloading: Arc<RwLock<bool>>,
         sync_state: Arc<RwLock<SyncState>>,
@@ -199,7 +209,7 @@ impl BlockchainSyncDaemon {
                     break;
                 }
 
-                match Self::download_peer(&peers, &is_downloading, &sync_state, &block_verifier).await {
+                match Self::download_peer(&peers, &connection_pool, &is_downloading, &sync_state, &block_verifier).await {
                     Ok(downloaded) => {
                         if downloaded == 0 {
                             consecutive_empty += 1;
@@ -248,6 +258,7 @@ impl BlockchainSyncDaemon {
 
     async fn download_peer(
         peers: &Arc<crate::peer::Peers>,
+        connection_pool: &Option<Arc<ConnectionPool>>,
         is_downloading: &Arc<RwLock<bool>>,
         sync_state: &Arc<RwLock<SyncState>>,
         block_verifier: &Arc<dyn BlockVerifier>,
@@ -283,7 +294,7 @@ impl BlockchainSyncDaemon {
         let unknown_label = "unknown".to_string();
         let peer_label = feeder_peer.announced_address.as_ref().unwrap_or(&unknown_label);
 
-        let cumulative_difficulty = Self::get_cumulative_difficulty(feeder_addr).await?;
+        let cumulative_difficulty = Self::get_cumulative_difficulty(feeder_addr, connection_pool).await?;
         if cumulative_difficulty.is_none() {
             debug!("Failed to get cumulative difficulty from peer");
             return Ok(0);
@@ -353,7 +364,7 @@ impl BlockchainSyncDaemon {
 
         debug!("Starting sync from block ID: {} (height: {})", common_block_id, common_block_height);
 
-        let chain_block_ids = Self::get_block_ids_after_common(feeder_addr, common_block_id, block_verifier).await?;
+        let chain_block_ids = Self::get_block_ids_after_common(feeder_addr, common_block_id, block_verifier, connection_pool).await?;
         if chain_block_ids.len() < 2 {
             debug!("Not enough blocks after common block");
             return Ok(0);
@@ -378,17 +389,35 @@ impl BlockchainSyncDaemon {
             &chain_block_ids,
             common_block_height,
             block_verifier,
+            connection_pool,
         ).await?;
 
         Ok(downloaded)
     }
 
+    /// Send a request via ConnectionPool with HTTP fallback
+    async fn send_request(
+        addr: std::net::SocketAddr,
+        request: &PeerRequest,
+        connection_pool: &Option<Arc<ConnectionPool>>,
+    ) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(ref pool) = connection_pool {
+            match pool.send_request(addr, request).await {
+                Ok(v) => Ok(v),
+                Err(e) => Err(Box::new(e)),
+            }
+        } else {
+            WebsocketClient::send_request(addr, request.clone()).await
+        }
+    }
+
     async fn get_cumulative_difficulty(
         peer_addr: std::net::SocketAddr,
+        connection_pool: &Option<Arc<ConnectionPool>>,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
         let request = PeerRequest::new(RequestType::GetCumulativeDifficulty, 1);
 
-        match WebsocketClient::send_request(peer_addr, request).await {
+        match Self::send_request(peer_addr, &request, connection_pool).await {
             Ok(response) => {
                 if let Some(cumulative_diff) = response.get("cumulativeDifficulty").and_then(|v| v.as_str()) {
                     Ok(Some(cumulative_diff.to_string()))
@@ -407,6 +436,7 @@ impl BlockchainSyncDaemon {
     async fn get_common_milestone_block_id(
         peer_addr: std::net::SocketAddr,
         block_verifier: &Arc<dyn BlockVerifier>,
+        connection_pool: &Option<Arc<ConnectionPool>>,
     ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
         let mut last_milestone_block_id: Option<String> = None;
 
@@ -419,7 +449,7 @@ impl BlockchainSyncDaemon {
                 request.set("lastBlockId", "0");
             }
 
-            match WebsocketClient::send_request(peer_addr, request).await {
+            match Self::send_request(peer_addr, &request, connection_pool).await {
                 Ok(response) => {
                     if let Some(milestone_ids) = response.get("milestoneBlockIds").and_then(|v| v.as_array()) {
                         if milestone_ids.is_empty() {
@@ -465,6 +495,7 @@ impl BlockchainSyncDaemon {
         peer_addr: std::net::SocketAddr,
         start_block_id: u64,
         block_verifier: &Arc<dyn BlockVerifier>,
+        connection_pool: &Option<Arc<ConnectionPool>>,
     ) -> Result<Vec<u64>, Box<dyn std::error::Error + Send + Sync>> {
         let mut block_list = Vec::new();
         let mut match_id = start_block_id;
@@ -476,7 +507,7 @@ impl BlockchainSyncDaemon {
             request.set("blockId", match_id.to_string());
             request.set("limit", MAX_BLOCKS_LIMIT as i32);
 
-            match WebsocketClient::send_request(peer_addr, request).await {
+            match Self::send_request(peer_addr, &request, connection_pool).await {
                 Ok(response) => {
                     if let Some(next_block_ids) = response.get("nextBlockIds").and_then(|v| v.as_array()) {
                         debug!("Received {} block IDs from peer (match_id={})", next_block_ids.len(), match_id);
@@ -557,6 +588,7 @@ impl BlockchainSyncDaemon {
         chain_block_ids: &[u64],
         common_block_height: u32,
         block_verifier: &Arc<dyn BlockVerifier>,
+        connection_pool: &Option<Arc<ConnectionPool>>,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         if chain_block_ids.len() < 2 {
             return Ok(0);
@@ -601,10 +633,11 @@ impl BlockchainSyncDaemon {
             request.set("blockIds", &id_list);
             request.set("blockId", prev_block_id.to_string());
 
+            let pool = connection_pool.clone();
             download_futures.push(async move {
                 let mut last_error = None;
                 for retry in 0..Self::MAX_RETRIES {
-                    match WebsocketClient::send_request(peer_addr, request.clone()).await {
+                    match Self::send_request(peer_addr, &request, &pool).await {
                         Ok(response) => {
                             if let Some(next_blocks) = response.get("nextBlocks").and_then(|v| v.as_array()) {
                                 if !next_blocks.is_empty() {
@@ -681,8 +714,9 @@ impl BlockchainSyncDaemon {
         chain_block_ids: &[u64],
         common_block_height: u32,
         block_verifier: &Arc<dyn BlockVerifier>,
+        connection_pool: &Option<Arc<ConnectionPool>>,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        Self::download_blocks_multi_peer(&[peer_addr], chain_block_ids, common_block_height, block_verifier).await
+        Self::download_blocks_multi_peer(&[peer_addr], chain_block_ids, common_block_height, block_verifier, connection_pool).await
     }
 
     async fn process_downloaded_block(

@@ -1918,10 +1918,33 @@ impl AccountRepository for PgAccountRepository {
         Ok(())
     }
 
+    /**
+     * 查询账户信息，如果不存在则自动创建默认记录
+     *
+     * # 参数
+     * - `account_id`: 账户 ID（有符号 i64）
+     *
+     * # 返回值
+     * 返回查询到或新创建的 AccountModel 对象
+     */
     async fn get_or_create(&self, account_id: i64) -> RepositoryResult<AccountModel> {
         if let Some(account) = self.find_by_account_id(account_id).await? {
             return Ok(account);
         }
+        
+        // ✅ 获取当前区块高度而非硬编码为 0（修复 height=0 的异常数据问题）
+        let current_height: i32 = sqlx::query_scalar(
+            r#"SELECT COALESCE(MAX("HEIGHT"), 0) FROM "BLOCK""#
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        
+        tracing::warn!(
+            account = account_id,
+            height = current_height,
+            "Auto-creating new account record (verify if this is expected)"
+        );
         
         let account = AccountModel {
             db_id: 0,
@@ -1931,7 +1954,7 @@ impl AccountRepository for PgAccountRepository {
             forged_balance: 0,
             active_lessee_id: None,
             has_control_phasing: false,
-            height: 0,
+            height: current_height,  // ✅ 使用当前区块高度
             latest: true,
         };
         
@@ -2249,11 +2272,21 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         Ok(())
     }
 
+    /**
+     * 增加账户的资产持有数量（同步更新已确认和未确认数量）
+     *
+     * # 参数
+     * - `account_id`: 账户 ID（有符号 i64）
+     * - `asset_id`: 资产 ID（有符号 i64）
+     * - `delta`: 变化量（正数表示增加）
+     */
     async fn increase_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
         let result = sqlx::query(
             r#"
             UPDATE "ACCOUNT_ASSET"
-            SET "QUANTITY" = "QUANTITY" + $1, "LATEST" = TRUE
+            SET "QUANTITY" = "QUANTITY" + $1,
+                "UNCONFIRMED_QUANTITY" = "UNCONFIRMED_QUANTITY" + $1,
+                "LATEST" = TRUE
             WHERE "ACCOUNT_ID" = $2 AND "ASSET_ID" = $3
             "#,
         )
@@ -2269,25 +2302,46 @@ impl AccountAssetRepository for PgAccountAssetRepository {
                 .fetch_one(&self.pool)
                 .await
                 .unwrap_or(0);
+            
+            tracing::debug!(
+                account = account_id,
+                asset = asset_id,
+                delta = delta,
+                height = current_height,
+                "Inserting new account_asset record (quantity and unconfirmed_quantity synced)"
+            );
+            
             sqlx::query(
-                r#"INSERT INTO "ACCOUNT_ASSET" ("ACCOUNT_ID", "ASSET_ID", "QUANTITY", "UNCONFIRMED_QUANTITY", "HEIGHT", "LATEST") VALUES ($1, $2, $3, 0, $4, TRUE)"#
+                r#"INSERT INTO "ACCOUNT_ASSET" ("ACCOUNT_ID", "ASSET_ID", "QUANTITY", "UNCONFIRMED_QUANTITY", "HEIGHT", "LATEST") VALUES ($1, $2, $3, $4, $5, TRUE)"#
             )
             .bind(account_id)
             .bind(asset_id)
-            .bind(delta)
+            .bind(delta)       // ✅ quantity 初始值
+            .bind(delta)       // ✅ unconfirmed_quantity 同步初始值（原来硬编码为 0）
             .bind(current_height)
             .execute(&self.pool)
             .await
             .map_err(RepositoryError::DbError)?;
         }
+        
         Ok(())
     }
 
+    /**
+     * 减少账户的资产持有数量（同步更新已确认和未确认数量）
+     *
+     * # 参数
+     * - `account_id`: 账户 ID（有符号 i64）
+     * - `asset_id`: 资产 ID（有符号 i64）
+     * - `delta`: 变化量（正数表示减少的数量）
+     */
     async fn decrease_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
         let result = sqlx::query(
             r#"
             UPDATE "ACCOUNT_ASSET"
-            SET "QUANTITY" = "QUANTITY" - $1, "LATEST" = TRUE
+            SET "QUANTITY" = "QUANTITY" - $1,
+                "UNCONFIRMED_QUANTITY" = "UNCONFIRMED_QUANTITY" - $1,
+                "LATEST" = TRUE
             WHERE "ACCOUNT_ID" = $2 AND "ASSET_ID" = $3 AND "QUANTITY" >= $1
             "#,
         )
@@ -2299,11 +2353,30 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         .map_err(RepositoryError::DbError)?;
 
         if result.rows_affected() == 0 {
-            return Err(RepositoryError::Validation("insufficient asset quantity".to_string()));
+            return Err(RepositoryError::Validation(format!(
+                "Insufficient asset balance: account={}, asset={}, need={}",
+                account_id, asset_id, delta
+            )));
         }
+        
+        tracing::debug!(
+            account = account_id,
+            asset = asset_id,
+            delta = delta,
+            "Decreased asset quantity (quantity and unconfirmed_quantity synced)"
+        );
+        
         Ok(())
     }
 
+    /**
+     * 更新或创建账户的未确认资产数量
+     *
+     * # 参数
+     * - `account_id`: 账户 ID（有符号 i64）
+     * - `asset_id`: 资产 ID（有符号 i64）
+     * - `delta`: 变化量（正数表示增加，负数表示减少）
+     */
     async fn add_to_unconfirmed_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
         let result = sqlx::query(
             r#"
@@ -2324,12 +2397,22 @@ impl AccountAssetRepository for PgAccountAssetRepository {
                 .fetch_one(&self.pool)
                 .await
                 .unwrap_or(0);
+            
+            tracing::debug!(
+                account = account_id,
+                asset = asset_id,
+                delta = delta,
+                height = current_height,
+                "Inserting new account_asset record for unconfirmed quantity update"
+            );
+            
             sqlx::query(
-                r#"INSERT INTO "ACCOUNT_ASSET" ("ACCOUNT_ID", "ASSET_ID", "QUANTITY", "UNCONFIRMED_QUANTITY", "HEIGHT", "LATEST") VALUES ($1, $2, 0, $3, $4, TRUE)"#
+                r#"INSERT INTO "ACCOUNT_ASSET" ("ACCOUNT_ID", "ASSET_ID", "QUANTITY", "UNCONFIRMED_QUANTITY", "HEIGHT", "LATEST") VALUES ($1, $2, $3, $4, $5, TRUE)"#
             )
             .bind(account_id)
             .bind(asset_id)
-            .bind(delta)
+            .bind(if delta > 0 { 0 } else { delta })  // ✅ quantity 初始值：增加时为0，减少时使用 delta（避免负数）
+            .bind(delta)                               // ✅ unconfirmed_quantity 使用实际变化量
             .bind(current_height)
             .execute(&self.pool)
             .await

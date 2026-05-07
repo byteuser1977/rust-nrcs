@@ -91,12 +91,12 @@ impl WebsocketServer {
                                     // Peers 已实现 Clone，直接克隆引用
                                     let peers_arc = peers.clone();
                                     debug!("[SERVER] Received request: {:?}", request);
-                                    let response = handler.handle(request, peers_arc).await;
+                                    let response = handler.process_request(request, peers_arc, addr).await;
                                     debug!("[SERVER] Sending response: {:?}", response);
                                     let resp_json = serde_json::to_vec(&response)
                                         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
                                     debug!("[SERVER] Response JSON ({} bytes)", resp_json.len());
-                                    let frame = codec.encode(&resp_json, false); // 暂时不压缩响应
+                                    let frame = codec.encode(&resp_json, false, header.request_id);
                                     debug!("[SERVER] Sending frame ({} bytes)", frame.len());
                                     if let Err(e) = write.send(Message::Binary(frame)).await {
                                         error!("[SERVER] Failed to send response: {}", e);
@@ -107,7 +107,7 @@ impl WebsocketServer {
                                     error!("JSON parse error: {}", e);
                                     let error_resp = PeerResponse::error("INVALID_JSON");
                                     let resp_json = serde_json::to_vec(&error_resp).unwrap();
-                                    let frame = codec.encode(&resp_json, false);
+                                    let frame = codec.encode(&resp_json, false, header.request_id);
                                     let _ = write.send(Message::Binary(frame)).await;
                                 }
                             }
@@ -126,10 +126,10 @@ impl WebsocketServer {
                             match serde_json::from_slice::<PeerRequest>(&body) {
                                 Ok(request) => {
                                     let peers_arc = peers.clone();
-                                    let response = handler.handle(request, peers_arc).await;
+                                    let response = handler.process_request(request, peers_arc, addr).await;
                                     let resp_json = serde_json::to_vec(&response)
                                         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-                                    let frame = codec.encode(&resp_json, false);
+                                    let frame = codec.encode(&resp_json, false, header.request_id);
                                     if let Err(e) = write.send(Message::Binary(frame)).await {
                                         error!("[SERVER] Failed to send response: {}", e);
                                         break;
@@ -139,7 +139,7 @@ impl WebsocketServer {
                                     error!("[SERVER] JSON parse error: {}", e);
                                     let error_resp = PeerResponse::error("INVALID_JSON");
                                     let resp_json = serde_json::to_vec(&error_resp).unwrap();
-                                    let frame = codec.encode(&resp_json, false);
+                                    let frame = codec.encode(&resp_json, false, header.request_id);
                                     let _ = write.send(Message::Binary(frame)).await;
                                 }
                             }
@@ -223,7 +223,7 @@ impl WebsocketClient {
         debug!("[CLIENT] Creating getInfo request");
         let payload = serde_json::to_vec(&req)?;
         debug!("[CLIENT] Serialized getInfo request ({} bytes)", payload.len());
-        let frame = codec.encode(&payload, false);
+        let frame = codec.encode(&payload, false, 0);
         debug!("[CLIENT] Sending binary frame ({} bytes)", frame.len());
         if let Err(e) = write.send(Message::Binary(frame)).await {
             error!("[CLIENT] Failed to send getInfo to {}: {}", addr, e);

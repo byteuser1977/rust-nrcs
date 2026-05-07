@@ -23,6 +23,8 @@ use orm::{
     AssetRepository, AssetTransferRepository, RepositoryError, TransactionModel,
     models::AccountLedgerModel, models::AssetModel, models::AccountAssetModel,
     models::AssetTransferModel,
+    // 事件分发系统（用于账户多表联动，对应 Java NRCS: Listeners<Account, AccountEvent>）
+    events::{AccountEvent, AccountEventType, setup_default_listeners},
     // 新增导入
     AliasRepository, AliasOfferRepository,
     PollRepository, VoteRepository,
@@ -87,6 +89,9 @@ pub enum ProcessorError {
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("rollback failed for transaction {transaction_id}: {reason}")]
+    RollbackFailed { transaction_id: u64, reason: String },
 }
 
 pub type ProcessorResult<T> = std::result::Result<T, ProcessorError>;
@@ -443,6 +448,9 @@ pub struct DatabaseTransactionProcessor {
     // 新增：Account Lease
     account_lease_repo: Arc<dyn AccountLeaseRepository>,
 
+    /// 事件分发器（用于账户多表联动更新）
+    dispatcher: std::sync::Arc<orm::events::EventDispatcher>,
+
     // 区块上下文
     current_block_id: std::sync::RwLock<i64>,
     current_height: std::sync::RwLock<i32>,
@@ -587,6 +595,8 @@ impl DatabaseTransactionProcessor {
             purchase_repo,
             shuffling_repo,
             account_lease_repo,
+            // 初始化事件分发器（用于账户多表联动）
+            dispatcher: std::sync::Arc::new(orm::events::EventDispatcher::new()),
             current_block_id: std::sync::RwLock::new(0),
             current_height: std::sync::RwLock::new(0),
             current_timestamp: std::sync::RwLock::new(0),
@@ -607,6 +617,27 @@ impl DatabaseTransactionProcessor {
 
     fn get_current_timestamp(&self) -> i32 {
         *self.current_timestamp.read().unwrap()
+    }
+
+    /**
+     * 初始化默认的事件监听器
+     *
+     * 注册用于联动更新派生表的处理器：
+     * - 余额变更 → 记录日志（后续可扩展为自动更新派生表）
+     * - 资产变更 → 记录资产变更日志
+     *
+     * # 注意
+     * 当前版本只记录日志，不执行实际的数据库操作。
+     * 完整的联动更新逻辑将在后续迭代中实现（需要重构为 async context）。
+     */
+    pub async fn setup_default_listeners(&self) {
+        // 使用 orm 模块提供的便捷方法设置默认监听器
+        // 对应 Java NRCS: FundingMonitor.init()
+        setup_default_listeners(&self.dispatcher).await;
+
+        tracing::info!(
+            "Default event listeners initialized (compatible with Java NRCS FundingMonitor)"
+        );
     }
 
     async fn get_account(&self, account_id: AccountId) -> ProcessorResult<Account> {
@@ -742,6 +773,17 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
     /// - Deduct totalAmountNQT from unconfirmed balance
     /// - Return false if insufficient (double-spend!)
     async fn apply_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<bool> {
+        tracing::debug!(
+            tx_id = tx.id,
+            type_id = format!("{:?}", tx.type_id),
+            subtype = tx.subtype,
+            sender = tx.sender_id,
+            recipient = tx.recipient_id,
+            amount = tx.amount,
+            fee = tx.fee,
+            "Starting apply_unconfirmed for transaction"
+        );
+
         let sender_id = tx.sender_id;
 
         // Java: TransactionType.applyUnconfirmed()
@@ -782,27 +824,89 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
                 "Double-spend detected! tx={}, sender={}, have={}, need={}",
                 tx.id, sender_id, account.unconfirmed_balance, deduct_amount
             );
+
+            tracing::debug!(
+                tx_id = %tx.id,
+                success = false,
+                reason = "insufficient unconfirmed balance",
+                "apply_unconfirmed failed"
+            );
+
             return Ok(false);
         }
 
         self.account_repo.add_to_unconfirmed_balance(sender_id as i64, -deduct_amount, self.current_height()).await?;
 
+        // ✅ 分发账户变更事件（用于联动更新派生表）
+        // 对应 Java NRCS: listeners.notify(this, AccountEvent.UNCONFIRMED_BALANCE)
+        let unconfirmed_event = AccountEvent::new(sender_id as i64, AccountEventType::UnconfirmedBalance)
+            .with_change("unconfirmed_balance", -deduct_amount)
+            .with_height(self.current_height())
+            .with_source("apply_unconfirmed")
+            .with_transaction(tx.id as i64);
+
+        self.dispatcher.dispatch_account_event(&unconfirmed_event).await;
+
         // Java: Also apply attachment unconfirmed (pre-deduct assets/currencies)
         if !tx.phased {
             let attachment_ok = self.apply_attachment_unconfirmed(tx).await?;
             if !attachment_ok {
-                // Rollback the NRCS deduction if attachment deduction failed
-                self.account_repo.add_to_unconfirmed_balance(sender_id as i64, deduct_amount, self.current_height()).await?;
+                tracing::warn!(
+                    tx_id = %tx.id,
+                    sender = sender_id,
+                    deduct_amount = deduct_amount,
+                    "Attachment apply_unconfirmed failed, rolling back NRCS balance"
+                );
+
+                if let Err(rollback_err) = self.account_repo.add_to_unconfirmed_balance(
+                    sender_id as i64, deduct_amount, self.current_height()
+                ).await {
+                    tracing::error!(
+                        tx_id = %tx.id,
+                        error = %rollback_err,
+                        "CRITICAL: Failed to rollback NRCS balance after attachment failure! Data may be inconsistent."
+                    );
+                    return Err(ProcessorError::RollbackFailed {
+                        transaction_id: tx.id,
+                        reason: format!("NRCS balance rollback failed: {}", rollback_err),
+                    });
+                }
+
+                tracing::debug!(
+                    tx_id = %tx.id,
+                    "Successfully rolled back NRCS balance after attachment failure"
+                );
+
                 return Ok(false);
             }
         }
 
         debug!("Pre-deducted tx={} from sender={}, amount={}, phased={}", tx.id, sender_id, deduct_amount, tx.phased);
+
+        tracing::debug!(
+            tx_id = %tx.id,
+            success = true,
+            "Completed apply_unconfirmed successfully"
+        );
+
         Ok(true)
     }
 
-    /// Rollback pre-deduction (restore unconfirmed balance)
+    /**
+     * 回滚交易的未确认余额预扣款
+     *
+     * # 参数
+     * - `tx`: 需要回滚的交易
+     */
     async fn rollback_unconfirmed(&self, tx: &Transaction) -> ProcessorResult<()> {
+        tracing::info!(
+            tx_id = tx.id,
+            sender = tx.sender_id,
+            type_id = format!("{:?}", tx.type_id),
+            subtype = tx.subtype,
+            "Starting rollback_unconfirmed for transaction"
+        );
+
         let sender_id = tx.sender_id;
 
         // Match the deduction logic: restore what was deducted
@@ -824,12 +928,27 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
                 .ok_or_else(|| ProcessorError::Validation("amount+fee overflow".to_string()))?
         };
 
+        tracing::debug!(
+            account = sender_id,
+            restore_amount = restore_amount,
+            "Restoring NRCS unconfirmed balance"
+        );
+
         self.account_repo.add_to_unconfirmed_balance(sender_id as i64, restore_amount, self.current_height()).await?;
 
         // Java: Also rollback attachment unconfirmed (restore assets/currencies)
         if !tx.phased {
+            tracing::debug!(
+                tx_id = %tx.id,
+                "Rolling back attachment unconfirmed changes"
+            );
             self.rollback_attachment_unconfirmed(tx).await?;
         }
+
+        tracing::info!(
+            tx_id = %tx.id,
+            "Completed rollback_unconfirmed successfully"
+        );
 
         debug!("Rolled back pre-deduction for tx={}, sender={}, phased={}", tx.id, sender_id, tx.phased);
         Ok(())
@@ -2327,6 +2446,7 @@ impl DatabaseTransactionProcessor {
 
     /// Match EXCHANGE_BUY against existing EXCHANGE_SELL requests
     /// Java: ExchangeRequestProcessor.executeSwap() for buy side
+    #[allow(clippy::too_many_arguments)]
     async fn try_match_exchange_buy(
         &self,
         request_id: i64,
@@ -2449,6 +2569,7 @@ impl DatabaseTransactionProcessor {
 
     /// Match EXCHANGE_SELL against existing EXCHANGE_BUY requests
     /// Java: ExchangeRequestProcessor.executeSwap() for sell side
+    #[allow(clippy::too_many_arguments)]
     async fn try_match_exchange_sell(
         &self,
         request_id: i64,
@@ -3255,7 +3376,7 @@ impl DatabaseTransactionProcessor {
                             // 初始化POLL_RESULT（每个选项初始weight=0）
                             if !options_str.is_empty() {
                                 let options: Vec<&str> = options_str.split(',').collect();
-                                for (_idx, _option) in options.iter().enumerate() {
+                                for _option in options.iter() {
                                     let poll_result = orm::models::PollResultModel {
                                         db_id: 0,
                                         poll_id: tx.id as i64,
@@ -3705,7 +3826,7 @@ impl DatabaseTransactionProcessor {
                 // Parse isText from attachment JSON (default true)
                 let is_text = tx.attachment_json.as_ref()
                     .and_then(|v| v.get("isText"))
-                    .and_then(|b| Self::parse_bool_value(b))
+                    .and_then(Self::parse_bool_value)
                     .unwrap_or(true);
 
                 // 对应 Java: TaggedData.add() 允许空名称（使用 transaction id 作为回退标识）
@@ -4733,10 +4854,10 @@ impl DatabaseTransactionProcessor {
         let data = enc_obj.get("data")?.as_str().and_then(|s| hex::decode(s).ok())?;
         let nonce = enc_obj.get("nonce")?.as_str().and_then(|s| hex::decode(s).ok())?;
         let is_text = enc_obj.get("isText")
-            .and_then(|v| Self::parse_bool_value(v))
+            .and_then(Self::parse_bool_value)
             .unwrap_or(true);
         let is_compressed = enc_obj.get("isCompressed")
-            .and_then(|v| Self::parse_bool_value(v))
+            .and_then(Self::parse_bool_value)
             .unwrap_or(false);
         Some((data, nonce, is_text, is_compressed))
     }
@@ -4794,22 +4915,69 @@ impl DatabaseTransactionProcessor {
                     return Ok(true); // No asset to deduct
                 }
 
+                tracing::debug!(
+                    account = sender_id,
+                    asset = asset_id,
+                    tx_id = tx.id,
+                    "Querying unconfirmed asset balance"
+                );
+
                 // Check unconfirmed quantity
                 match self.account_asset_repo.find_by_account_and_asset(sender_id, asset_id).await? {
                     Some(aa) => {
+                        tracing::debug!(
+                            account = sender_id,
+                            asset = asset_id,
+                            unconfirmed_qty = aa.unconfirmed_quantity,
+                            confirmed_qty = aa.quantity,
+                            tx_id = tx.id,
+                            "Retrieved account asset state"
+                        );
                         if aa.unconfirmed_quantity < quantity {
-                            tracing::warn!(
-                                "Insufficient unconfirmed asset balance: account={}, asset={}, have={}, need={}",
-                                sender_id, asset_id, aa.unconfirmed_quantity, quantity
-                            );
-                            return Ok(false);
-                        }
+                    tracing::warn!(
+                        account = sender_id,
+                        asset = asset_id,
+                        have = aa.unconfirmed_quantity,
+                        need = quantity,
+                        confirmed_qty = aa.quantity,
+                        tx_id = tx.id,
+                        tx_type = format!("{:?}", tx.type_id),
+                        tx_subtype = tx.subtype,
+                        "Insufficient unconfirmed asset balance detected"
+                    );
+
+                    tracing::debug!(
+                        account = sender_id,
+                        asset = asset_id,
+                        account_asset_record = format!("{:?}", aa),
+                        "Full account_asset state for debugging"
+                    );
+
+                    return Ok(false);
+                }
                         // Deduct from unconfirmed quantity
                         self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, -quantity).await?;
+
+                        tracing::debug!(
+                            account = sender_id,
+                            asset = asset_id,
+                            delta = -quantity,
+                            new_unconfirmed = aa.unconfirmed_quantity - quantity,
+                            tx_id = tx.id,
+                            operation = "deduct_unconfirmed",
+                            "Updated unconfirmed asset quantity"
+                        );
+
                         debug!("Pre-deducted asset transfer: account={}, asset={}, quantity={}", sender_id, asset_id, quantity);
                         Ok(true)
                     }
                     None => {
+                        tracing::debug!(
+                            account = sender_id,
+                            asset = asset_id,
+                            tx_id = tx.id,
+                            "No account asset record found (account does not hold this asset)"
+                        );
                         tracing::warn!("Account {} has no asset {}", sender_id, asset_id);
                         Ok(false)
                     }

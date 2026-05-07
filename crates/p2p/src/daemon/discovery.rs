@@ -10,6 +10,7 @@
 use crate::config::P2PConfig;
 use crate::peer::{Peer, PeerState, Peers};
 use crate::protocol::{PeerRequest, RequestType};
+use crate::connection_pool::ConnectionPool;
 use orm::PeerRepository;
 use orm::models::misc::PeerModel;
 use std::sync::Arc;
@@ -24,6 +25,7 @@ pub struct DiscoveryDaemon {
     peers: Arc<Peers>,
     config: P2PConfig,
     peer_repo: Option<Arc<dyn PeerRepository>>,
+    connection_pool: Option<Arc<ConnectionPool>>,
     running: Arc<RwLock<bool>>,
 }
 
@@ -34,6 +36,7 @@ impl DiscoveryDaemon {
             peers,
             config,
             peer_repo: None,
+            connection_pool: None,
             running: Arc::new(RwLock::new(false)),
         }
     }
@@ -41,6 +44,11 @@ impl DiscoveryDaemon {
     /// Set peer repository for persistence
     pub fn set_peer_repo(&mut self, repo: Arc<dyn PeerRepository>) {
         self.peer_repo = Some(repo);
+    }
+
+    /// Set connection pool for persistent WebSocket connections
+    pub fn set_connection_pool(&mut self, pool: Arc<ConnectionPool>) {
+        self.connection_pool = Some(pool);
     }
 
     /// Start the discovery daemon
@@ -60,6 +68,8 @@ impl DiscoveryDaemon {
         let running = Arc::clone(&self.running);
         let peer_repo = self.peer_repo.clone();
 
+        let connection_pool = self.connection_pool.clone();
+
         tokio::spawn(async move {
             loop {
                 if !*running.read().await {
@@ -68,7 +78,7 @@ impl DiscoveryDaemon {
 
                 tokio::time::sleep(Duration::from_secs(config.discovery_daemon_interval_secs)).await;
 
-                if let Err(e) = Self::discovery_loop(&peers, &config).await {
+                if let Err(e) = Self::discovery_loop(&peers, &config, &connection_pool).await {
                     warn!("Discovery loop error: {}", e);
                 }
 
@@ -93,7 +103,11 @@ impl DiscoveryDaemon {
     /// Main discovery loop
     /// 
     /// 对应 NRCS Java: getMorePeersThread.run()
-    async fn discovery_loop(peers: &Arc<Peers>, config: &P2PConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn discovery_loop(
+        peers: &Arc<Peers>,
+        config: &P2PConfig,
+        connection_pool: &Option<Arc<ConnectionPool>>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // 检查是否有太多已知节点
         let count = peers.known_peers_count().await;
         if config.too_many_known_peers(count) {
@@ -102,11 +116,11 @@ impl DiscoveryDaemon {
 
         // 1. 从连接的节点获取更多节点
         if let Some(peer) = peers.get_any_peer(PeerState::Connected, true).await {
-            Self::request_peers_from_peer(peers, &peer, config).await?;
+            Self::request_peers_from_peer(peers, &peer, config, connection_pool).await?;
         }
 
         // 2. 向其他节点广播自己的节点列表
-        Self::share_my_peers(peers, config).await?;
+        Self::share_my_peers(peers, config, connection_pool).await?;
 
         Ok(())
     }
@@ -118,19 +132,26 @@ impl DiscoveryDaemon {
         peers: &Arc<Peers>,
         peer: &Peer,
         _config: &P2PConfig,
+        connection_pool: &Option<Arc<ConnectionPool>>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        use crate::websocket::WebsocketClient;
-
         // 1. 构建 getPeers 请求
         let request = PeerRequest::new(RequestType::GetPeers, 1);
 
-        // 2. 发送请求
+        // 2. 发送请求（优先使用 ConnectionPool 持久 WebSocket，回退到 HTTP）
         debug!("[DiscoveryDaemon] Requesting peers from {}", peer.address);
 
-        match WebsocketClient::send_request(peer.address, request).await {
-            Ok(response) => {
+        let response = if let Some(ref pool) = connection_pool {
+            pool.send_request(peer.address, &request).await
+                .map_err(|e| format!("{}", e))
+        } else {
+            crate::websocket::WebsocketClient::send_request(peer.address, request.clone()).await
+                .map_err(|e| e.to_string())
+        };
+
+        match response {
+            Ok(resp) => {
                 // 3. 解析返回的节点列表
-                if let Some(peers_arr) = response.get("peers").and_then(|v| v.as_array()) {
+                if let Some(peers_arr) = resp.get("peers").and_then(|v| v.as_array()) {
                     let mut added = 0usize;
 
                     for peer_info in peers_arr {
@@ -176,8 +197,8 @@ impl DiscoveryDaemon {
     async fn share_my_peers(
         peers: &Arc<Peers>,
         config: &P2PConfig,
+        connection_pool: &Option<Arc<ConnectionPool>>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        use crate::websocket::WebsocketClient;
         use serde_json::{Map as JsonMap, Value};
 
         // 1. 获取可分享的节点列表
@@ -236,15 +257,25 @@ impl DiscoveryDaemon {
         let mut request = PeerRequest::new(RequestType::AddPeers, 1);
         request.set("peers", shareable);
 
-        // 4. 并发发送给目标节点
+        // 4. 并发发送给目标节点（优先使用 ConnectionPool）
         let share_targets_len = share_targets.len();
+        let pool = connection_pool.clone();
 
         for target in share_targets {
             let target_addr = target.address;
             let req_clone = request.clone();
+            let pool = pool.clone();
 
             tokio::spawn(async move {
-                match WebsocketClient::send_request(target_addr, req_clone).await {
+                let result = if let Some(ref pool) = pool {
+                    pool.send_request(target_addr, &req_clone).await
+                        .map_err(|e| e.to_string())
+                } else {
+                    crate::websocket::WebsocketClient::send_request(target_addr, req_clone).await
+                        .map_err(|e| e.to_string())
+                };
+
+                match result {
                     Ok(resp) => {
                         if let Some(added) = resp.get("added").and_then(|v| v.as_i64()) {
                             debug!("[DiscoveryDaemon] Shared {} peers with {} (accepted {})",

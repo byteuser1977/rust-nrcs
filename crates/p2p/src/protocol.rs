@@ -151,7 +151,15 @@ impl PeerResponse {
 pub struct FrameCodec;
 
 impl FrameCodec {
-    pub fn encode(&self, payload: &[u8], compressed: bool) -> Vec<u8> {
+    /// Encode a payload into a binary frame.
+    ///
+    /// The `length` field in the header MUST be the original uncompressed size
+    /// (matching Java PeerWebSocket behavior). When compression is enabled,
+    /// the payload on the wire is smaller, but the length field still records
+    /// the pre-compression size so the receiver knows the target buffer size
+    /// for decompression.
+    pub fn encode(&self, payload: &[u8], compressed: bool, request_id: i64) -> Vec<u8> {
+        let original_len = payload.len();
         let mut flags: i32 = 0;
         let body = if compressed {
             flags |= 1;
@@ -160,12 +168,12 @@ impl FrameCodec {
             payload.to_vec()
         };
 
-        let length = body.len() as i32;
+        let length = original_len as i32;
         let mut buf = Vec::new();
 
         // Version(4) + RequestID(8) + Flags(4) + Length(4) + Body
         buf.extend(&1i32.to_be_bytes()); // version = 1
-        buf.extend(&0i64.to_be_bytes()); // request_id (占位)
+        buf.extend(&request_id.to_be_bytes());
         buf.extend(&flags.to_be_bytes());
         buf.extend(&length.to_be_bytes());
         buf.extend(body);
@@ -187,26 +195,41 @@ impl FrameCodec {
         let length = i32::from_be_bytes([data[16], data[17], data[18], data[19]]);
 
         let body_start = 20;
-        let body_end = body_start + length as usize;
+        let is_compressed = flags & 1 != 0;
 
-        if data.len() < body_end {
-            return Err(ProtocolError::InvalidFrame("Incomplete frame".into()));
-        }
-
-        let mut body = data[body_start..body_end].to_vec();
-
-        if flags & 1 != 0 {
+        if is_compressed {
+            // Java semantics: `length` is the uncompressed size. The wire payload
+            // (compressed) occupies all remaining bytes in the frame.
+            if data.len() <= body_start {
+                return Err(ProtocolError::InvalidFrame("Empty compressed frame".into()));
+            }
+            let mut body = data[body_start..].to_vec();
             body = self::decompress_gzip(&body)?;
+
+            let header = FrameHeader {
+                version,
+                request_id,
+                flags,
+                length,
+            };
+
+            Ok((header, body))
+        } else {
+            let body_end = body_start + length as usize;
+            if data.len() < body_end {
+                return Err(ProtocolError::InvalidFrame("Incomplete frame".into()));
+            }
+            let body = data[body_start..body_end].to_vec();
+
+            let header = FrameHeader {
+                version,
+                request_id,
+                flags,
+                length,
+            };
+
+            Ok((header, body))
         }
-
-        let header = FrameHeader {
-            version,
-            request_id,
-            flags,
-            length,
-        };
-
-        Ok((header, body))
     }
 }
 

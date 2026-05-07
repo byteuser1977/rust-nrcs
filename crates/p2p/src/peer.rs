@@ -5,6 +5,11 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, warn};
 
+use crate::event::PeerEventDispatcher;
+
+// 重新导出，方便 handlers/daemons 使用
+pub use crate::event::{PeerEvent, PeerListener};
+
 /// 节点状态
 /// 
 /// 对应 NRCS Java: PeerState.java
@@ -70,6 +75,21 @@ pub struct Peer {
     pub uploaded_volume: u64,
     /// 端口号
     pub port: u16,
+    /// Hallmark 信息（解析后的身份标识）
+    #[serde(skip)]
+    pub hallmark: Option<crate::hallmark::HallmarkInfo>,
+    /// Hallmark 调整后权重（由 analyze_hallmark 分组逻辑计算）
+    #[serde(skip)]
+    pub adjusted_weight: u64,
+    /// 缓存的账户余额（-1 = 未缓存，对应 Java hallmarkBalance）
+    #[serde(skip)]
+    pub hallmark_balance: i64,
+    /// 缓存余额时的区块链高度（对应 Java hallmarkBalanceHeight）
+    #[serde(skip)]
+    pub hallmark_balance_height: u32,
+    /// 事件分发器（用于通知 peer 状态变更）
+    #[serde(skip)]
+    pub event_dispatcher: Option<Arc<PeerEventDispatcher>>,
 }
 
 impl Peer {
@@ -95,6 +115,23 @@ impl Peer {
             downloaded_volume: 0,
             uploaded_volume: 0,
             port: address.port(),
+            hallmark: None,
+            adjusted_weight: 0,
+            hallmark_balance: -1,
+            hallmark_balance_height: 0,
+            event_dispatcher: None,
+        }
+    }
+
+    /// 设置事件分发器
+    pub fn set_event_dispatcher(&mut self, dispatcher: Arc<PeerEventDispatcher>) {
+        self.event_dispatcher = Some(dispatcher);
+    }
+
+    /// 触发事件
+    pub(crate) fn fire_event(&self, event: PeerEvent) {
+        if let Some(ref dispatcher) = self.event_dispatcher {
+            dispatcher.notify(self, event);
         }
     }
 
@@ -107,6 +144,7 @@ impl Peer {
         self.state = PeerState::NonConnected;
         self.last_inbound_request = 0;
         debug!("Peer {} blacklisted: {:?}", self.address, self.blacklisting_cause);
+        self.fire_event(PeerEvent::Blacklist);
     }
 
     /// 解除黑名单
@@ -120,6 +158,7 @@ impl Peer {
         self.blacklisting_time = 0;
         self.blacklisting_cause = None;
         debug!("Peer {} unblacklisted", self.address);
+        self.fire_event(PeerEvent::Unblacklist);
     }
 
     /// 更新黑名单状态
@@ -172,36 +211,221 @@ impl Peer {
     pub fn deactivate(&mut self) {
         self.state = PeerState::Disconnected;
         self.last_updated = current_timestamp();
+        self.fire_event(PeerEvent::Deactivate);
+    }
+
+    /// 更新下载流量
+    ///
+    /// 对应 NRCS Java: Peer.updateDownloadedVolume(int volume)
+    pub fn update_downloaded_volume(&mut self, volume: u64) {
+        self.downloaded_volume += volume;
+        self.fire_event(PeerEvent::DownloadedVolume);
+    }
+
+    /// 更新上传流量
+    ///
+    /// 对应 NRCS Java: Peer.updateUploadedVolume(int volume)
+    pub fn update_uploaded_volume(&mut self, volume: u64) {
+        self.uploaded_volume += volume;
+        self.fire_event(PeerEvent::UploadedVolume);
+    }
+
+    /// 添加服务标志
+    ///
+    /// 对应 NRCS Java: Peer.addService(PeerService service)
+    pub fn add_service(&mut self, service_flag: u64) {
+        let old = self.services;
+        self.services |= service_flag;
+        if self.services != old {
+            self.fire_event(PeerEvent::ChangedServices);
+        }
+    }
+
+    /// 移除服务标志
+    ///
+    /// 对应 NRCS Java: Peer.removeService(PeerService service)
+    pub fn remove_service(&mut self, service_flag: u64) {
+        let old = self.services;
+        self.services &= !service_flag;
+        if self.services != old {
+            self.fire_event(PeerEvent::ChangedServices);
+        }
+    }
+
+    /// 设置服务标志（带变更检测和事件通知）
+    pub fn set_services(&mut self, services: u64) {
+        if self.services != services {
+            self.services = services;
+            self.fire_event(PeerEvent::ChangedServices);
+        }
     }
 
     /// 检查是否提供服务
-    /// 
+    ///
     /// 对应 NRCS Java: Peer.providesService(PeerService)
     pub fn provides_service(&self, service_flag: u64) -> bool {
         self.services & service_flag != 0
     }
 
     /// 获取节点权重
-    /// 
+    ///
     /// 对应 NRCS Java: Peer.getWeight()
-    /// 权重基于服务标志和下载/上传流量计算
+    ///
+    /// 有 hallmark: adjustedWeight * (balance / ONE_NRCS) / MAX_BALANCE_NRCS
+    /// 无 hallmark: 基于服务标志和下载/上传流量计算
     pub fn get_weight(&self) -> u64 {
-        // 基础权重为 1
+        if let Some(ref hm) = self.hallmark {
+            if hm.is_valid && self.adjusted_weight > 0 {
+                // Java: return (int)(adjustedWeight * (hallmarkBalance / ONE_NRCS) / MAX_BALANCE_NRCS)
+                // 无账户余额数据时，直接使用 adjusted_weight
+                if self.hallmark_balance > 0 {
+                    let balance_nrcs = self.hallmark_balance as u64 / blockchain_types::constants::ONE_NRCS;
+                    let weight = self.adjusted_weight * balance_nrcs / blockchain_types::constants::MAX_BALANCE_NRCS;
+                    return weight.max(1);
+                }
+                return self.adjusted_weight.max(1);
+            }
+        }
+
+        // 无 hallmark：基于服务标志和流量计算权重
         let mut weight: u64 = 1;
-        
-        // 如果提供服务，增加权重
-        // 服务标志: 1=API, 2=API_SSL, 4=CORS, 8=HALLMARK
         if self.services > 0 {
             weight += self.services.count_ones() as u64 * 10;
         }
-        
-        // 根据下载流量增加权重（每 1MB 增加 1 点权重）
         weight += self.downloaded_volume / (1024 * 1024);
-        
-        // 根据上传流量增加权重（每 1MB 增加 1 点权重）
         weight += self.uploaded_volume / (1024 * 1024);
-        
         weight
+    }
+
+    /// 分析并设置 Hallmark（完整分组权重逻辑）
+    ///
+    /// 对应 NRCS Java: Peer.analyzeHallmark(String hallmark)
+    ///
+    /// 1. 解析 hallmark 字符串
+    /// 2. 从公钥推导 accountId
+    /// 3. 按 accountId 分组所有已知节点
+    /// 4. 按比例重新分配 adjustedWeight
+    /// 5. 触发 WEIGHT 事件
+    pub fn analyze_hallmark(&mut self, hallmark_str: &str, peers: &Peers) -> bool {
+        use crate::hallmark::HallmarkParser;
+
+        // 1. 空 hallmark：清除
+        if hallmark_str.is_empty() {
+            self.unset_hallmark();
+            return true;
+        }
+
+        // 2. 相同 hallmark 无需重复分析
+        if let Some(ref hm) = self.hallmark {
+            if hm.raw == hallmark_str {
+                return true;
+            }
+        }
+
+        // 3. 解析 hallmark
+        let info = HallmarkParser::parse(hallmark_str);
+        if !info.is_valid {
+            self.unset_hallmark();
+            return false;
+        }
+
+        // 4. 从公钥推导 accountId
+        let account_id = info.public_key
+            .map(|pk| blockchain_types::block::account_id_from_public_key(&pk))
+            .unwrap_or(0);
+
+        // 5. 按 accountId 分组所有已知节点
+        // 对应 Java: 遍历所有节点，收集 hallmark accountId 相同的节点
+        let all_peers = peers.get_known_peers_blocking();
+        let mut grouped_peers: Vec<(std::net::SocketAddr, u32, u64)> = Vec::new();
+        // (addr, date, hallmark_weight)
+
+        let mut most_recent_date: u32 = info.date;
+        let mut total_weight: u64 = 0;
+
+        for known_peer in &all_peers {
+            if let Some(ref hm) = known_peer.hallmark {
+                if let Some(pk) = hm.public_key {
+                    let peer_account_id = blockchain_types::block::account_id_from_public_key(&pk);
+                    if peer_account_id == account_id {
+                        let date = hm.date;
+                        let weight = hm.weight as u64;
+                        grouped_peers.push((known_peer.address, date, weight));
+                        total_weight += weight;
+                        if date > most_recent_date {
+                            most_recent_date = date;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 6. 计算并重新分配 adjustedWeight
+        if total_weight == 0 {
+            self.unset_hallmark();
+            return false;
+        }
+
+        let _this_weight = info.weight as u64;
+        self.adjusted_weight = blockchain_types::constants::MAX_BALANCE_NRCS
+            * Self::hallmark_weight_by_date(&most_recent_date, &grouped_peers, info.weight as u64)
+            / total_weight;
+        self.hallmark = Some(info.clone());
+
+        // Group account ID derivation with hallmark date for weight calculation
+        // Java: for each grouped peer, adjustedWeight = MAX_BALANCE_NRCS * getHallmarkWeight(mostRecentDate) / totalWeight
+        if self.adjusted_weight == 0 {
+            self.adjusted_weight = 1;
+        }
+
+        // 7. 触发本节点和同组节点的 WEIGHT 事件
+        self.fire_event(PeerEvent::Weight);
+
+        // 更新同组其他节点的 adjusted_weight 并触发事件
+        for (addr, _, _) in &grouped_peers {
+            if *addr == self.address {
+                continue; // already handled
+            }
+            if let Some(peer_ref) = peers.get_peer_blocking(addr) {
+                if let Ok(mut p) = peer_ref.try_lock() {
+                    p.adjusted_weight = blockchain_types::constants::MAX_BALANCE_NRCS
+                        * Self::hallmark_weight_by_date(&most_recent_date, &grouped_peers, p.hallmark.as_ref().map(|h| h.weight as u64).unwrap_or(0))
+                        / total_weight;
+                    if p.adjusted_weight == 0 {
+                        p.adjusted_weight = 1;
+                    }
+                    p.fire_event(PeerEvent::Weight);
+                }
+            }
+        }
+
+        debug!("[Hallmark] Analyzed hallmark for peer {}: account_id={}, adjusted_weight={}, group_size={}",
+               self.address, account_id, self.adjusted_weight, grouped_peers.len());
+
+        true
+    }
+
+    /// 清除 Hallmark（移除 HALLMARK 服务标志）
+    ///
+    /// 对应 NRCS Java: Peer.unsetHallmark()
+    fn unset_hallmark(&mut self) {
+        self.remove_service(1); // HALLMARK service flag = 0x01
+        self.hallmark = None;
+        self.adjusted_weight = 0;
+        self.hallmark_balance = -1;
+        self.hallmark_balance_height = 0;
+    }
+
+    /// 获取指定日期的 hallmark 权重
+    ///
+    /// 对应 NRCS Java: Peer.getHallmarkWeight(int date)
+    fn hallmark_weight_by_date(date: &u32, grouped_peers: &[(std::net::SocketAddr, u32, u64)], this_weight: u64) -> u64 {
+        for (_, peer_date, weight) in grouped_peers {
+            if peer_date == date {
+                return *weight;
+            }
+        }
+        this_weight
     }
 
     /// 检查是否在黑名单中
@@ -276,7 +500,7 @@ impl Peer {
 
         // 判断是否压缩
         let should_compress = config.gzip_enabled && payload.len() >= config.min_compress_size;
-        let frame = codec.encode(&payload, should_compress);
+        let frame = codec.encode(&payload, should_compress, 0);
 
         write.send(Message::Binary(frame)).await
             .map_err(|e| P2PError::from_str(ErrorCode::WriteFailed, format!("{}", e)))?;
@@ -360,6 +584,15 @@ impl Peer {
         &mut self,
         config: &crate::config::P2PConfig,
     ) -> Result<serde_json::Value, crate::error::P2PError> {
+        self.connect_with_peers(config, None).await
+    }
+
+    /// 连接到远程节点并交换信息（带 Peers 引用，用于 hallmark 分组）
+    pub async fn connect_with_peers(
+        &mut self,
+        config: &crate::config::P2PConfig,
+        peers: Option<&Peers>,
+    ) -> Result<serde_json::Value, crate::error::P2PError> {
         use crate::protocol::{PeerRequest, RequestType};
 
         // 1. 更新最后连接尝试时间
@@ -382,7 +615,7 @@ impl Peer {
         }
 
         // 5. 更新 Peer 属性
-        self.update_from_getinfo_response(&response, config);
+        self.update_from_getinfo_response(&response, config, peers);
 
         // 6. 检查版本并设置连接状态
         // 对应 Java: Peer.connect() 中的版本检查逻辑
@@ -403,10 +636,11 @@ impl Peer {
         &mut self,
         response: &serde_json::Value,
         config: &crate::config::P2PConfig,
+        peers: Option<&Peers>,
     ) {
-        // services
+        // services（使用 set_services 以触发 CHANGED_SERVICES 事件）
         if let Some(services) = response.get("services").and_then(|v| v.as_i64()) {
-            self.services = services as u64;
+            self.set_services(services as u64);
         }
 
         // application
@@ -426,8 +660,16 @@ impl Peer {
 
         // hallmark（可选）
         if let Some(hallmark) = response.get("hallmark").and_then(|v| v.as_str()) {
-            // TODO: 实现 analyze_hallmark() 解析验证
-            debug!("Received hallmark from peer {}: {}", self.address, hallmark);
+            if let Some(peers) = peers {
+                if self.analyze_hallmark(hallmark, peers) {
+                    debug!("Peer {} hallmark valid, weight={}",
+                           self.address, self.hallmark.as_ref().map(|h| h.weight).unwrap_or(0));
+                } else {
+                    debug!("Peer {} hallmark invalid", self.address);
+                }
+            } else {
+                debug!("Received hallmark from peer {} but no Peers reference for grouping", self.address);
+            }
         }
 
         // announcedAddress（可能变更）
@@ -483,8 +725,8 @@ impl Peer {
         if platform.is_some() {
             self.platform = platform;
         }
-        if services > 0 {
-            self.services = services;
+        if services > 0 && self.services != services {
+            self.set_services(services);
         }
         if api_port.is_some() {
             self.api_port = api_port;
@@ -500,8 +742,16 @@ impl Peer {
     }
 
     pub fn set_state(&mut self, state: PeerState) {
+        let old_state = self.state;
         self.state = state;
         self.last_updated = current_timestamp();
+
+        // 对应 Java: Peer.setState() 中的事件触发
+        if old_state == PeerState::NonConnected && state != PeerState::NonConnected {
+            self.fire_event(PeerEvent::AddedActivePeer);
+        } else if old_state != PeerState::NonConnected && state != PeerState::NonConnected {
+            self.fire_event(PeerEvent::ChangedActivePeer);
+        }
     }
 
     /// 转换为 Java 兼容的 PeerInfo 响应格式
@@ -609,6 +859,8 @@ pub struct Peers {
     known_blacklisted_peers: Arc<RwLock<HashSet<String>>>,
     /// 自己节点的信息
     my_peer_info: Arc<RwLock<Peer>>,
+    /// Peer 事件分发器
+    pub event_dispatcher: Arc<PeerEventDispatcher>,
 }
 
 impl Peers {
@@ -618,6 +870,7 @@ impl Peers {
             active_connections: Arc::new(Mutex::new(ActiveConnections::new())),
             known_blacklisted_peers: Arc::new(RwLock::new(HashSet::new())),
             my_peer_info: Arc::new(RwLock::new(my_peer_info)),
+            event_dispatcher: Arc::new(PeerEventDispatcher::new()),
         }
     }
 
@@ -643,8 +896,14 @@ impl Peers {
     pub async fn register_peer(&self, peer: Peer) {
         let mut known = self.known_peers.write().await;
         let addr = peer.address;
+        let is_new = !known.contains_key(&addr);
         let peer_clone = peer.clone();
-        let entry = known.entry(addr).or_insert_with(|| Arc::new(Mutex::new(peer)));
+        let dispatcher = Arc::clone(&self.event_dispatcher);
+        let entry = known.entry(addr).or_insert_with(|| {
+            let mut p = peer;
+            p.event_dispatcher = Some(Arc::clone(&dispatcher));
+            Arc::new(Mutex::new(p))
+        });
         // 更新元数据
         let mut peer_mutex = entry.lock().await;
         peer_mutex.update_metadata(
@@ -655,6 +914,11 @@ impl Peers {
             peer_clone.api_port,
             peer_clone.api_ssl_port,
         );
+        if is_new {
+            drop(peer_mutex);
+            let peer_ref = entry.lock().await;
+            peer_ref.fire_event(PeerEvent::NewPeer);
+        }
         debug!("Registered peer: {}", addr);
     }
 
@@ -737,9 +1001,18 @@ impl Peers {
     /// 查找或创建节点（用于 AddPeers 等场景）
     pub async fn find_or_create_peer(&self, addr: SocketAddr, is_inbound: bool) -> Arc<Mutex<Peer>> {
         let mut known = self.known_peers.write().await;
-        known.entry(addr).or_insert_with(|| {
-            Arc::new(Mutex::new(Peer::new(addr, is_inbound)))
-        }).clone()
+        let dispatcher = Arc::clone(&self.event_dispatcher);
+        let is_new = !known.contains_key(&addr);
+        let entry = known.entry(addr).or_insert_with(|| {
+            let mut p = Peer::new(addr, is_inbound);
+            p.event_dispatcher = Some(Arc::clone(&dispatcher));
+            Arc::new(Mutex::new(p))
+        }).clone();
+        if is_new {
+            let peer = entry.lock().await;
+            peer.fire_event(PeerEvent::NewPeer);
+        }
+        entry
     }
 
     /// 检查节点是否在黑名单中（完整检查，对应 Java: Peer.isBlacklisted()）
@@ -919,11 +1192,14 @@ impl Peers {
     }
 
     /// Remove a peer
-    /// 
+    ///
     /// 对应 NRCS Java: Peers.removePeer(Peer peer)
     pub async fn remove_peer(&self, addr: &SocketAddr) {
         let mut known = self.known_peers.write().await;
-        known.remove(addr);
+        if let Some(peer_ref) = known.remove(addr) {
+            let peer = peer_ref.lock().await;
+            peer.fire_event(PeerEvent::Remove);
+        }
         debug!("Removed peer: {}", addr);
     }
 
@@ -932,9 +1208,61 @@ impl Peers {
         let known = self.known_peers.read().await;
         known.get(addr).cloned()
     }
+
+    /// Get all known peers (blocking, for use in synchronous context)
+    pub fn get_known_peers_blocking(&self) -> Vec<Peer> {
+        let known = self.known_peers.blocking_read();
+        let mut peers = Vec::new();
+        for p in known.values() {
+            if let Ok(p) = p.try_lock() {
+                peers.push(p.clone());
+            }
+        }
+        peers
+    }
+
+    /// Get peer by address (blocking, for use in synchronous context)
+    pub fn get_peer_blocking(&self, addr: &SocketAddr) -> Option<Arc<Mutex<Peer>>> {
+        let known = self.known_peers.blocking_read();
+        known.get(addr).cloned()
+    }
+
+    /// 注册 peer 事件监听器
+    ///
+    /// 对应 NRCS Java: Peers.addListener(Listener<IPeer>, Event)
+    pub async fn add_listener(&self, listener: Arc<dyn crate::event::PeerListener>, event_type: PeerEvent) -> bool {
+        self.event_dispatcher.add_listener(listener, event_type).await
+    }
+
+    /// 移除 peer 事件监听器
+    ///
+    /// 对应 NRCS Java: Peers.removeListener(Listener<IPeer>, Event)
+    pub async fn remove_listener(&self, listener: &Arc<dyn crate::event::PeerListener>, event_type: PeerEvent) -> bool {
+        self.event_dispatcher.remove_listener(listener, event_type).await
+    }
+
+    /// 通知入站连接事件（由 dispatcher 调用）
+    ///
+    /// 对应 NRCS Java: Peers.notifyListeners(peer, Event.ADD_INBOUND)
+    pub async fn notify_add_inbound(&self, addr: &SocketAddr) {
+        if let Some(peer_ref) = self.get_peer(addr).await {
+            let peer = peer_ref.lock().await;
+            peer.fire_event(PeerEvent::AddInbound);
+        }
+    }
+
+    /// 通知移除入站连接事件
+    ///
+    /// 对应 NRCS Java: Peers.notifyListeners(peer, Event.REMOVE_INBOUND)
+    pub async fn notify_remove_inbound(&self, addr: &SocketAddr) {
+        if let Some(peer_ref) = self.get_peer(addr).await {
+            let peer = peer_ref.lock().await;
+            peer.fire_event(PeerEvent::RemoveInbound);
+        }
+    }
 }
 
-fn current_timestamp() -> i64 {
+pub(crate) fn current_timestamp() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -969,6 +1297,11 @@ mod tests {
             downloaded_volume: 0,
             uploaded_volume: 0,
             port: 8080,
+            hallmark: None,
+            adjusted_weight: 0,
+            hallmark_balance: -1,
+            hallmark_balance_height: 0,
+            event_dispatcher: None,
         };
 
         let json = serde_json::to_string(&peer).unwrap();

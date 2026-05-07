@@ -470,7 +470,7 @@ pub async fn compact_database(args: CompactDatabaseArgs) -> anyhow::Result<()> {
     }
 
     // Determine the probable database file name from the URL
-    let db_file_name = if db_url.contains("nrcs") { "nrcs" } else { "nrcs" };
+    let db_file_name = "nrcs";
     let db_file_mv = db_path.join(format!("{}.mv.db", db_file_name));
     let db_file_h2 = db_path.join(format!("{}.h2.db", db_file_name));
 
@@ -522,7 +522,7 @@ fn build_dictionary(kind: &str, custom: Option<&str>) -> Vec<char> {
         "ascii" => (32..127).map(|c| c as u8 as char).collect(),
         "asciiall" => (0..256).map(|c| c as u8 as char).collect(),
         "unicode" => (0..=0xFFFFu32)
-            .filter_map(|c| char::from_u32(c))
+            .filter_map(char::from_u32)
             .collect(),
         "" => (32..127).map(|c| c as u8 as char).collect(),
         _ => {
@@ -646,7 +646,7 @@ pub async fn recover_passphrase(args: RecoverPassphraseArgs) -> anyhow::Result<(
         ) -> bool {
             if pos_idx >= positions.len() {
                 *counter += 1;
-                if *counter % 100_000 == 0 {
+                if (*counter).is_multiple_of(100_000) {
                     eprintln!("  ... tried {} permutations", counter);
                 }
                 let candidate: String = wildcard.iter().collect();

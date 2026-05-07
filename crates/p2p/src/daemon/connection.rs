@@ -205,7 +205,7 @@ impl ConnectionDaemon {
             }
 
             // 4. 调用完整的连接握手流程
-            match p.connect(&config).await {
+            match p.connect_with_peers(&config, Some(peers)).await {
                 Ok(response) => {
                     debug!("[ConnectionDaemon] Successfully connected to {}: app={}, ver={}",
                           peer.address,
@@ -275,6 +275,8 @@ impl ConnectionDaemon {
                 // 更新 peer 状态
                 if let Some(peer_ref) = peers.get_peer(&peer.address).await {
                     let mut p = peer_ref.lock().await;
+                    p.is_inbound = false;
+                    p.fire_event(crate::peer::PeerEvent::RemoveInbound);
                     p.deactivate();
                 }
 

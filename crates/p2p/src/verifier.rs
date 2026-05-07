@@ -104,10 +104,10 @@ impl BlockchainVerifier {
             let tx_full_hash_hex = hex::encode(tx.full_hash.0);
             let known_bad = KNOWN_BAD_SIGNATURES.iter().find(|(fh, _)| *fh == tx_full_hash_hex);
             let skip_sig_check = tx_is_pruned || known_bad.is_some();
-            if known_bad.is_some() {
+            if let Some((_, reason)) = known_bad {
                 warn!(
                     "Skipping signature verification for known bad tx id={} full_hash={}: {}",
-                    tx.id, tx_full_hash_hex, known_bad.unwrap().1
+                    tx.id, tx_full_hash_hex, reason
                 );
             }
             if !skip_sig_check && !tx.verify_signature() {
@@ -142,17 +142,17 @@ impl BlockchainVerifier {
                 );
 
                 // Compute and verify fullHash for debugging
-                let sig_hash = Sha256::digest(&tx.signature.0);
+                let sig_hash = Sha256::digest(tx.signature.0);
                 let msg_hash = Sha256::digest(&sfs);
                 let mut full_hash_hasher = Sha256::new();
                 full_hash_hasher.update(&sfs);
-                full_hash_hasher.update(&sig_hash);
+                full_hash_hasher.update(sig_hash);
                 let computed_full_hash = full_hash_hasher.finalize();
                 warn!(
                     "  crypto: SHA256(msg)={}, SHA256(sig)={}, computed_fullHash={}",
-                    hex::encode(&msg_hash),
-                    hex::encode(&sig_hash),
-                    hex::encode(&computed_full_hash),
+                    hex::encode(msg_hash),
+                    hex::encode(sig_hash),
+                    hex::encode(computed_full_hash),
                 );
                 warn!(
                     "  fullHash: stored={}, computed_match={}",
@@ -166,7 +166,7 @@ impl BlockchainVerifier {
                 warn!(
                     "  get_bytes len={}, SHA256(get_bytes)={}",
                     gb.len(),
-                    hex::encode(&gb_hash),
+                    hex::encode(gb_hash),
                 );
 
                 return Err(BlockchainError::InvalidTransaction(
@@ -287,7 +287,7 @@ impl BlockchainVerifier {
         self.block_repo.insert(&block_model).await
             .map_err(|e| BlockchainError::Database(e.to_string()))?;
 
-        let block_id = block.get_id() as i64;
+        let block_id = block.id.unwrap_or(0) as i64;
 
         if let Some(prev_id) = block.previous_block_id.filter(|&id| id != 0) {
             if let Err(e) = self.block_repo.update_next_block_id(prev_id as i64, block_id).await {
@@ -319,7 +319,7 @@ impl BlockchainVerifier {
         self.block_repo.insert_tx(&block_model, tx).await
             .map_err(|e| anyhow::anyhow!("Failed to insert block: {}", e))?;
 
-        let block_id = block.get_id() as i64;
+        let block_id = block.id.unwrap_or(0) as i64;
 
         if let Some(prev_id) = block.previous_block_id.filter(|&id| id != 0) {
             self.block_repo.update_next_block_id_tx(prev_id as i64, block_id, tx).await
@@ -476,6 +476,12 @@ impl BlockchainVerifier {
         Ok(())
     }
 
+    /**
+     * 清理插入失败的区块及其所有副作用
+     *
+     * 当前实现只删除 block 和 transaction 表，
+     * 需要扩展为同时回滚派生表的变更（account、account_asset 等）
+     */
     async fn cleanup_inserted_block(&self, height: i32) -> anyhow::Result<()> {
         let mut db_tx = self.tx_manager.begin().await?;
 
@@ -484,9 +490,49 @@ impl BlockchainVerifier {
         {
             let block_id = block_model.id;
 
+            warn!(
+                block_id = block_id,
+                height = height,
+                "Cleaning up failed block and rolling back derived tables"
+            );
+
             let txs = self.tx_repo.find_by_block(block_id).await
                 .map_err(|e| anyhow::anyhow!("Failed to find transactions for block {}: {}", block_id, e))?;
 
+            // Step 2: Rollback unconfirmed balances for all transactions in the failed block
+            let mut rollback_count = 0;
+            for tx_model in &txs {
+                match tx_model.to_domain() {
+                    Ok(tx) => {
+                        if let Err(e) = self.tx_processor.rollback_unconfirmed(&tx).await {
+                            error!(
+                                tx_id = %tx_model.id,
+                                error = %e,
+                                "CRITICAL: Failed to rollback transaction during cleanup!"
+                            );
+                        } else {
+                            rollback_count += 1;
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            tx_id = %tx_model.id,
+                            error = %e,
+                            "CRITICAL: Failed to convert transaction model to domain during cleanup!"
+                        );
+                    }
+                }
+            }
+
+            info!(
+                tx_count = txs.len(),
+                rollback_count = rollback_count,
+                "Rolled back unconfirmed balances for {}/{} transactions in failed block",
+                rollback_count,
+                txs.len()
+            );
+
+            // Step 3: Delete transaction records (original logic)
             for tx in &txs {
                 self.tx_repo.delete_by_db_id_tx(tx.db_id, &mut db_tx).await
                     .map_err(|e| anyhow::anyhow!("Failed to delete transaction {}: {}", tx.db_id, e))?;
@@ -494,10 +540,16 @@ impl BlockchainVerifier {
 
             debug!("Cleaned up {} transactions from block {}", txs.len(), block_id);
 
+            // Step 4: Delete block record (original logic)
             self.block_repo.delete_by_db_id_tx(block_model.db_id, &mut db_tx).await
                 .map_err(|e| anyhow::anyhow!("Failed to delete block {}: {}", block_model.db_id, e))?;
 
             debug!("Cleaned up block at height={}, id={}", height, block_id);
+
+            info!(
+                block_id = block_id,
+                "Block cleanup completed with full rollback"
+            );
         }
 
         db_tx.commit().await
@@ -527,7 +579,7 @@ impl BlockVerifier for BlockchainVerifier {
         let _guard = self.state.lock().await;
 
         let block_height = block.height;
-        let block_id = block.get_id();
+        let block_id = block.id.unwrap_or(0);
 
         if block_height <= 2 {
             debug!("Block {} gen_pub_key: {:?}", block_height, block.generator_public_key.as_ref().map(hex::encode));
@@ -586,7 +638,7 @@ impl BlockVerifier for BlockchainVerifier {
                     warn!(
                         "  tx[{}]: id={}, type={:?}, subtype={}, version={}, flags={:#010X}, get_bytes_len={}, sha256={}",
                         i, tx.id, tx.type_id, tx.subtype, tx.version, tx.get_flags(),
-                        tx_gb.len(), hex::encode(&tx_hash)
+                        tx_gb.len(), hex::encode(tx_hash)
                     );
                     warn!(
                         "  tx[{}]: attachment_bytes_len={}, pruned_att_bytes={}, has_msg={}, has_enc_msg={}, has_pk={}, has_enc2self={}, phased={}, has_prun_msg={}, has_prun_enc={}, has_prun_att={}",
@@ -832,8 +884,10 @@ impl BlockVerifier for BlockchainVerifier {
         // Step 2: Wrap in database transaction for atomicity
         let db_tx = self.tx_manager.begin().await?;
 
-        // Step 3: Collect all transaction IDs to delete
+        // Step 3: Collect all transactions for rollback and deletion
         let mut all_tx_ids: Vec<i64> = Vec::new();
+        let mut all_txs_for_rollback: Vec<Transaction> = Vec::new();
+
         for block_model in &blocks_to_remove {
             let block_id = block_model.id;
             let txs = self.tx_repo.find_by_block(block_id).await
@@ -841,9 +895,37 @@ impl BlockVerifier for BlockchainVerifier {
 
             for tx in &txs {
                 all_tx_ids.push(tx.db_id);
+                if let Ok(domain_tx) = tx.to_domain() {
+                    all_txs_for_rollback.push(domain_tx);
+                }
             }
 
             debug!("Found {} transactions in block {} to delete", txs.len(), block_id);
+        }
+
+        // Step 3.5: Rollback unconfirmed balances before deleting transactions
+        if !all_txs_for_rollback.is_empty() {
+            info!(
+                count = all_txs_for_rollback.len(),
+                target_height = height,
+                "Rolling back unconfirmed balances for popped transactions"
+            );
+
+            for tx in &all_txs_for_rollback {
+                if let Err(e) = self.tx_processor.rollback_unconfirmed(tx).await {
+                    warn!(
+                        tx_id = tx.id,
+                        error = %e,
+                        "Failed to rollback unconfirmed balance during pop_off"
+                    );
+                }
+            }
+
+            info!(
+                count = all_txs_for_rollback.len(),
+                "Rolled back unconfirmed balances for {} popped transactions",
+                all_txs_for_rollback.len()
+            );
         }
 
         // Step 4: Delete all transactions using repository method

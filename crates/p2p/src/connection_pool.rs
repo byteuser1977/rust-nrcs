@@ -115,7 +115,7 @@ impl WebSocketConnection {
         let should_compress = config.gzip_enabled && payload.len() >= config.min_compress_size;
 
         // 6. 编码帧
-        let frame = FrameCodec.encode(&payload, should_compress);
+        let frame = FrameCodec.encode(&payload, should_compress, request_id);
 
         // 7. 发送帧
         {

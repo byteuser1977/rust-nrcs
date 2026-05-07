@@ -17,9 +17,13 @@ pub mod repository;
 pub mod genesis;
 pub mod transaction;
 pub mod connection;
+/// 事件分发系统（用于账户多表联动）
+pub mod events;
 
 pub use models::*;
 pub use repository::*;
 pub use genesis::*;
 pub use transaction::*;
 pub use connection::*;
+/// 事件分发器相关类型
+pub use events::{EventDispatcher, AccountEvent, AccountEventType};
