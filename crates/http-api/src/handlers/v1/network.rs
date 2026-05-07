@@ -312,3 +312,284 @@ fn peer_to_json(peer: &p2p::Peer) -> serde_json::Value {
         "lastUpdated": peer.last_updated as i32
     })
 }
+
+pub struct AddBundlingRuleHandler;
+
+impl AddBundlingRuleHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for AddBundlingRuleHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "minRateNQTPerFXT", "totalFeesLimitFQT", "overpayFQTPerFXT", "feeCalculatorName", "filter"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Network]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _min_rate_nqt_per_fxt = req.require_u64("minRateNQTPerFXT")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct BlacklistAPIProxyPeerHandler;
+
+impl BlacklistAPIProxyPeerHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for BlacklistAPIProxyPeerHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["peer", "adminPassword"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Network]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _peer = req.require_string("peer")?;
+        let _admin_password = req.get_string("adminPassword");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct BlacklistBundlerHandler;
+
+impl BlacklistBundlerHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for BlacklistBundlerHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "adminPassword"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Network]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _admin_password = req.get_string("adminPassword");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct BundleTransactionsHandler;
+
+impl BundleTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for BundleTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "transactionFullHash", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Network, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _transaction_full_hash = req.require_string("transactionFullHash")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetBundlerRatesHandler;
+
+impl GetBundlerRatesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetBundlerRatesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["minRateNQTPerFXT", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Network]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _min_rate_nqt_per_fxt = req.get_u64("minRateNQTPerFXT");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetBundlersHandler;
+
+impl GetBundlersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetBundlersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["adminPassword", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Network]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _admin_password = req.get_string("adminPassword");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetBundlingOptionsHandler;
+
+impl GetBundlingOptionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetBundlingOptionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Network]
+    }
+
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct SetAPIProxyPeerHandler;
+
+impl SetAPIProxyPeerHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SetAPIProxyPeerHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["peer", "adminPassword"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Network]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _peer = req.require_string("peer")?;
+        let _admin_password = req.get_string("adminPassword");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAllBundlerRatesHandler;
+
+impl GetAllBundlerRatesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAllBundlerRatesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Network]
+    }
+
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}

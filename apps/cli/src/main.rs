@@ -6,8 +6,12 @@
 //! - generate-keypair: 生成密钥对
 //! - generate-passphrase: 生成助记词
 //! - sign-tx: 签名交易
+//! - verify-address: 验证账户地址
+//! - convert-hex: 十六进制转换
+//! - export-constants: 导出区块链常量
 //! - compact-db: 压缩数据库
-//! - verify-trace: 验证跟踪文件
+//! - recover-passphrase: 恢复密码短语
+//! - base-target-test: 测试基础目标值计算
 
 mod commands;
 
@@ -29,6 +33,10 @@ enum Commands {
     SignTransaction(commands::SignTransactionArgs),
     VerifyAddress(commands::VerifyAddressArgs),
     ConvertHex(commands::ConvertHexArgs),
+    ExportConstants(commands::ExportConstantsArgs),
+    CompactDatabase(commands::CompactDatabaseArgs),
+    RecoverPassphrase(commands::RecoverPassphraseArgs),
+    BaseTargetTest(commands::BaseTargetTestArgs),
 }
 
 #[tokio::main]
@@ -45,6 +53,10 @@ async fn main() -> anyhow::Result<()> {
         Commands::SignTransaction(args) => commands::sign_transaction(args).await?,
         Commands::VerifyAddress(args) => commands::verify_address(args).await?,
         Commands::ConvertHex(args) => commands::convert_hex(args).await?,
+        Commands::ExportConstants(args) => commands::export_constants(args).await?,
+        Commands::CompactDatabase(args) => commands::compact_database(args).await?,
+        Commands::RecoverPassphrase(args) => commands::recover_passphrase(args).await?,
+        Commands::BaseTargetTest(args) => commands::base_target_test(args).await?,
     }
 
     Ok(())

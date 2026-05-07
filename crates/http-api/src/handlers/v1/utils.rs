@@ -3,6 +3,7 @@
 //! 与 Java 版本 Hash, HexConvert 等完全对齐
 
 use async_trait::async_trait;
+use serde_json::json;
 
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
@@ -371,8 +372,272 @@ impl RequestHandler for CalculateFeeHandler {
     }
 }
 
+pub struct EvaluateExpressionHandler;
+
+impl EvaluateExpressionHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for EvaluateExpressionHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["expression"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Utils]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _expression = req.require_string("expression")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("result", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct EventRegisterHandler;
+
+impl EventRegisterHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for EventRegisterHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["event", "add", "remove"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Utils]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _event = req.get_string("event");
+        let _add = req.get_bool("add");
+        let _remove = req.get_bool("remove");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("registered", true);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct EventWaitHandler;
+
+impl EventWaitHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for EventWaitHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["timeout"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Utils]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _timeout = req.get_i32("timeout").unwrap_or(0);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("events", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct LeaseBalanceHandler;
+
+impl LeaseBalanceHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for LeaseBalanceHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["period", "recipient", "secretPhrase", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Forging, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _period = req.require_string("period")?;
+        let _recipient = req.require_u64("recipient")?;
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _fee_nqt = req.get_string("feeNQT");
+        let _deadline = req.get_i32("deadline");
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "")
+            .insert("transactionBytes", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct MarkHostHandler;
+
+impl MarkHostHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for MarkHostHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["host", "weight", "date", "secretPhrase"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Utils]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _host = req.require_string("host")?;
+        let _weight = req.get_i32("weight");
+        let _date = req.get_string("date");
+        let _secret_phrase = req.require_string("secretPhrase")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("done", true);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct CalculateFullHashHandler;
+
+impl CalculateFullHashHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for CalculateFullHashHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["unsignedTransactionBytes", "signatureHash"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Utils, ApiTag::Transactions]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _unsigned_tx_bytes = req.require_string("unsignedTransactionBytes")?;
+        let _signature_hash = req.get_string("signatureHash");
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("fullHash", "")
+            .insert("signatureHash", "")
+            .insert("transaction", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct CombineSecretHandler;
+
+impl CombineSecretHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for CombineSecretHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secret1", "secret2", "secret3", "secret4", "secret5", "secret6", "secret7", "secret8"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Utils]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret1 = req.get_string("secret1");
+        let _secret2 = req.get_string("secret2");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("secret", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct SplitSecretHandler;
+
+impl SplitSecretHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SplitSecretHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secret", "totalPieces", "minimumPieces", "feeNQT", "deadline", "secretPhrase"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Utils]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret = req.require_string("secret")?;
+        let _total_pieces = req.get_i32("totalPieces");
+        let _minimum_pieces = req.get_i32("minimumPieces");
+        let _secret_phrase = req.get_string("secretPhrase");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("pieces", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
 fn format_account_rs(account_id: u64) -> String {
-    format!("NRCS-{}-{}-{}", 
+    format!("NRCS-{}-{}-{}",
         account_id % 10000,
         (account_id / 10000) % 10000,
         (account_id / 100000000) % 10000

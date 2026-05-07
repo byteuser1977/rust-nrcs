@@ -257,19 +257,80 @@ impl RequestHandler for GetPollVotersHandler {
     fn parameters(&self) -> Vec<&'static str> {
         vec!["poll", "firstIndex", "lastIndex"]
     }
-    
+
     fn api_tags(&self) -> Vec<ApiTag> {
         vec![ApiTag::Vs]
     }
-    
+
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _poll_id = req.require_u64("poll")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
-        
+
         let mut builder = RsRespBuilder::new();
         builder.insert("voters", json!([]));
-        
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetPollVoteHandler;
+
+impl GetPollVoteHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetPollVoteHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["poll", "account"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Vs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _poll = req.require_u64("poll")?;
+        let _account = req.require_u64("account")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("poll", "0")
+            .insert("voter", "0")
+            .insert("voterRS", "NRCS-0-0-0")
+            .insert("votes", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct ParsePhasingParamsHandler;
+
+impl ParsePhasingParamsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for ParsePhasingParamsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["phasingParams"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Utils]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _phasing_params = req.require_string("phasingParams")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO: parse phasingParams JSON");
+
         Ok(builder.build())
     }
 }

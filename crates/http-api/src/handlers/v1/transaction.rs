@@ -278,8 +278,196 @@ impl RequestHandler for BroadcastTransactionHandler {
     }
 }
 
+pub struct SendTransactionHandler;
+
+impl SendTransactionHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SendTransactionHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["transactionBytes", "transactionJSON", "secretPhrase", "broadcast"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Transactions, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _tx_bytes_hex = req.get_string("transactionBytes");
+        let _tx_json = req.get_string("transactionJSON");
+        let _secret_phrase = req.get_string("secretPhrase");
+        let _broadcast = req.get_bool("broadcast");
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "0")
+            .insert("fullHash", "")
+            .insert("numberPeersSentTo", 0i32);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetBlockchainTransactionsHandler;
+
+impl GetBlockchainTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetBlockchainTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "firstIndex", "lastIndex"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Transactions]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("transactions", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetScheduledTransactionsHandler;
+
+impl GetScheduledTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetScheduledTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Transactions]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.get_u64("account");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("scheduledTransactions", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetExpectedTransactionsHandler;
+
+impl GetExpectedTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Transactions]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.get_u64("account");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("expectedTransactions", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetFxtTransactionHandler;
+
+impl GetFxtTransactionHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetFxtTransactionHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["transaction"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Transactions]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _transaction = req.require_u64("transaction")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "0")
+            .insert("timestamp", 0i32)
+            .insert("sender", "0")
+            .insert("senderRS", "NRCS-0-0-0")
+            .insert("amountNQT", "0")
+            .insert("feeNQT", "0")
+            .insert("confirmations", 0i32);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetExpectedOrderCancellationsHandler;
+
+impl GetExpectedOrderCancellationsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedOrderCancellationsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["askOrder", "bidOrder"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _ask_order = req.get_u64("askOrder");
+        let _bid_order = req.get_u64("bidOrder");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("orderCancellations", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
 fn format_account_rs(account_id: u64) -> String {
-    format!("NRCS-{}-{}-{}", 
+    format!("NRCS-{}-{}-{}",
         account_id % 10000,
         (account_id / 10000) % 10000,
         (account_id / 100000000) % 10000

@@ -235,12 +235,96 @@ impl RequestHandler for SimulateCoinExchangeHandler {
         let _exchange = req.require_u64("exchange")?;
         let _pair_currency = req.get_i32("pairCurrency").unwrap_or(0);
         let _quantity = req.require_string("quantityQNT")?;
-        
+
         let mut builder = RsRespBuilder::new();
         builder
             .insert("exchangeNQT", "0")
             .insert("pairNQT", "0");
-        
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetCoinExchangeTradeHandler;
+
+impl GetCoinExchangeTradeHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetCoinExchangeTradeHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["order", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ce]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _order_id = req.require_u64("order")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("trade", json!({}));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetExpectedCoinExchangeOrdersHandler;
+
+impl GetExpectedCoinExchangeOrdersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedCoinExchangeOrdersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ce]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency_id = req.require_u64("currency")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("orders", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetExpectedCoinExchangeOrderCancellationsHandler;
+
+impl GetExpectedCoinExchangeOrderCancellationsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedCoinExchangeOrderCancellationsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ce]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency_id = req.require_u64("currency")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("orderCancellations", json!([]));
+
         Ok(builder.build())
     }
 }

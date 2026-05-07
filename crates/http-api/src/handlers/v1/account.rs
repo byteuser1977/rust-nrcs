@@ -577,6 +577,341 @@ impl RequestHandler for GetBalancesHandler {
     }
 }
 
+// --- New handlers: account block/pagination APIs ---
+
+pub struct GetAccountBlockCountHandler;
+
+impl GetAccountBlockCountHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountBlockCountHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::Blocks]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("numberOfBlocks", 0i32);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountBlockIdsHandler;
+
+impl GetAccountBlockIdsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountBlockIdsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "firstIndex", "lastIndex"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::Blocks]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("blockIds", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountBlocksHandler;
+
+impl GetAccountBlocksHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountBlocksHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "firstIndex", "lastIndex", "includeTransactions"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::Blocks]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+        let _include_transactions = req.get_bool("includeTransactions");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("blocks", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountExchangeRequestsHandler;
+
+impl GetAccountExchangeRequestsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountExchangeRequestsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "firstIndex", "lastIndex"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("exchangeRequests", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountLedgerHandler;
+
+impl GetAccountLedgerHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountLedgerHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec![
+            "account",
+            "firstIndex",
+            "lastIndex",
+            "event",
+            "eventType",
+            "holdingType",
+            "holding",
+            "includeHoldingInfo",
+        ]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+        let _event = req.get_string("event");
+        let _event_type = req.get_i32("eventType");
+        let _holding_type = req.get_i32("holdingType");
+        let _holding = req.get_u64("holding");
+        let _include_holding_info = req.get_bool("includeHoldingInfo");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("entries", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountLedgerEntryHandler;
+
+impl GetAccountLedgerEntryHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountLedgerEntryHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["ledgerId"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _ledger_id = req.require_u64("ledgerId")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("entry", json!({}));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountPhasedTransactionsHandler;
+
+impl GetAccountPhasedTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountPhasedTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "firstIndex", "lastIndex"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::Phasing]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("transactions", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountCurrentAskOrdersHandler;
+
+impl GetAccountCurrentAskOrdersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountCurrentAskOrdersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "firstIndex", "lastIndex"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("askOrders", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAccountCurrentBidOrdersHandler;
+
+impl GetAccountCurrentBidOrdersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAccountCurrentBidOrdersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "firstIndex", "lastIndex"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("bidOrders", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAllBroadcastedTransactionsHandler;
+
+impl GetAllBroadcastedTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAllBroadcastedTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec![]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Transactions]
+    }
+
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("transactions", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAllWaitingTransactionsHandler;
+
+impl GetAllWaitingTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAllWaitingTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec![]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Transactions]
+    }
+
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("transactions", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
 fn format_account_rs(account_id: u64) -> String {
     format!("NRCS-{}-{}-{}", 
         account_id % 10000,

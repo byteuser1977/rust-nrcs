@@ -782,8 +782,266 @@ impl RequestHandler for GetAllOpenBidOrdersHandler {
     }
 }
 
+pub struct GetExpectedAssetDeletesHandler;
+
+impl GetExpectedAssetDeletesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedAssetDeletesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _asset_id = req.require_u64("asset")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetExpectedAssetTransfersHandler;
+
+impl GetExpectedAssetTransfersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedAssetTransfersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _asset_id = req.require_u64("asset")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAvailableToBuyHandler;
+
+impl GetAvailableToBuyHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAvailableToBuyHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "units", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency = req.require_string("currency")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAvailableToSellHandler;
+
+impl GetAvailableToSellHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAvailableToSellHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "units", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency = req.require_string("currency")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetBuyOffersHandler;
+
+impl GetBuyOffersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetBuyOffersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "account", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency = req.require_string("currency")?;
+        let _account = req.get_u64("account");
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetSellOffersHandler;
+
+impl GetSellOffersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetSellOffersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "account", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency = req.require_string("currency")?;
+        let _account = req.get_u64("account");
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetOfferHandler;
+
+impl GetOfferHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetOfferHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["offer", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _offer_id = req.require_u64("offer")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetExpectedBuyOffersHandler;
+
+impl GetExpectedBuyOffersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedBuyOffersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency = req.require_string("currency")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetExpectedSellOffersHandler;
+
+impl GetExpectedSellOffersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedSellOffersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency = req.require_string("currency")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
 fn format_account_rs(account_id: u64) -> String {
-    format!("NRCS-{}-{}-{}", 
+    format!("NRCS-{}-{}-{}",
         account_id % 10000,
         (account_id / 10000) % 10000,
         (account_id / 100000000) % 10000

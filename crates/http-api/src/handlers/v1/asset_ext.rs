@@ -243,25 +243,253 @@ impl RequestHandler for SetAssetPropertyHandler {
     fn parameters(&self) -> Vec<&'static str> {
         vec!["secretPhrase", "asset", "property", "value", "feeNQT", "deadline"]
     }
-    
+
     fn api_tags(&self) -> Vec<ApiTag> {
         vec![ApiTag::Ae, ApiTag::CreateTransaction]
     }
-    
+
     fn require_post(&self) -> bool {
         true
     }
-    
+
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _asset_id = req.require_u64("asset")?;
         let _property = req.require_string("property")?;
-        
+
         let mut builder = RsRespBuilder::new();
         builder
             .insert("transaction", "")
             .insert("fullHash", "");
-        
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAskOrderIdsHandler;
+
+impl GetAskOrderIdsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAskOrderIdsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset", "firstIndex", "lastIndex"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _asset = req.require_u64("asset")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("askOrderIds", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetBidOrderIdsHandler;
+
+impl GetBidOrderIdsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetBidOrderIdsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset", "firstIndex", "lastIndex"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _asset = req.require_u64("asset")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("bidOrderIds", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct DeleteAssetPropertyHandler;
+
+impl DeleteAssetPropertyHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for DeleteAssetPropertyHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "asset", "property", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _asset_id = req.require_u64("asset")?;
+        let _property = req.require_string("property")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct DeleteAssetSharesHandler;
+
+impl DeleteAssetSharesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for DeleteAssetSharesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "asset", "quantityQNT", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _asset_id = req.require_u64("asset")?;
+        let _quantity = req.require_string("quantityQNT")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct SetAssetLongValuePropertyHandler;
+
+impl SetAssetLongValuePropertyHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SetAssetLongValuePropertyHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "asset", "property", "value", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _asset_id = req.require_u64("asset")?;
+        let _property = req.require_string("property")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAssetDeletesHandler;
+
+impl GetAssetDeletesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAssetDeletesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _asset_id = req.require_u64("asset")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAssetPhasedTransactionsHandler;
+
+impl GetAssetPhasedTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAssetPhasedTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _asset_id = req.require_u64("asset")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
         Ok(builder.build())
     }
 }

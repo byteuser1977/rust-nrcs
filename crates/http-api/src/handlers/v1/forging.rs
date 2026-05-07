@@ -208,6 +208,39 @@ impl RequestHandler for GetNextBlockGeneratorsHandler {
     }
 }
 
+pub struct SetLoggingHandler;
+
+impl SetLoggingHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SetLoggingHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["logLevel", "adminPassword"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Debug]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _log_level = req.require_string("logLevel")?;
+        let _admin_password = req.get_string("adminPassword");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
 fn format_account_rs(account_id: u64) -> String {
     format!("NRCS-{}-{}-{}",
         account_id % 10000,

@@ -102,12 +102,89 @@ impl RequestHandler for RemoveAccountControlHandler {
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _control = req.get_string("control");
-        
+
         let mut builder = RsRespBuilder::new();
         builder
             .insert("transaction", "")
             .insert("fullHash", "");
-        
+
+        Ok(builder.build())
+    }
+}
+
+// --- New handlers: account property management APIs ---
+
+pub struct DeleteAccountPropertyHandler;
+
+impl DeleteAccountPropertyHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for DeleteAccountPropertyHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["property", "secretPhrase", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _property = req.require_string("property")?;
+        let _secret_phrase = req.require_string("secretPhrase")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct SetAccountLongValuePropertyHandler;
+
+impl SetAccountLongValuePropertyHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SetAccountLongValuePropertyHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["property", "value", "secretPhrase", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _property = req.require_string("property")?;
+        let _value = req.get_string("value");
+        let _secret_phrase = req.require_string("secretPhrase")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+
         Ok(builder.build())
     }
 }

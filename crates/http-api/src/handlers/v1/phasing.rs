@@ -153,17 +153,318 @@ impl RequestHandler for GetAccountPhasingTransactionCountHandler {
     fn parameters(&self) -> Vec<&'static str> {
         vec!["account"]
     }
-    
+
     fn api_tags(&self) -> Vec<ApiTag> {
         vec![ApiTag::Phasing]
     }
-    
+
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _account = req.require_u64("account")?;
-        
+
         let mut builder = RsRespBuilder::new();
         builder.insert("numberOfPhasingTransactions", 0i32);
-        
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetPhasingOnlyControlHandler;
+
+impl GetPhasingOnlyControlHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetPhasingOnlyControlHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Phasing]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("controlVotingModel", 0i32)
+            .insert("controlQuorum", 0i32)
+            .insert("controlMinBalance", "0")
+            .insert("controlMinBalanceModel", 0i32)
+            .insert("controlHolding", "0")
+            .insert("controlWhitelisted", json!([]))
+            .insert("controlMaxFees", json!([]))
+            .insert("controlMinDuration", 0i32)
+            .insert("controlMaxDuration", 0i32);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetPhasingAssetControlHandler;
+
+impl GetPhasingAssetControlHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetPhasingAssetControlHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Phasing]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _asset = req.require_u64("asset")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("controlVotingModel", 0i32)
+            .insert("controlQuorum", 0i32)
+            .insert("controlMinBalance", "0")
+            .insert("controlMinBalanceModel", 0i32)
+            .insert("controlHolding", "0")
+            .insert("controlWhitelisted", json!([]))
+            .insert("controlMaxFees", json!([]))
+            .insert("controlMinDuration", 0i32)
+            .insert("controlMaxDuration", 0i32);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct SetPhasingOnlyControlHandler;
+
+impl SetPhasingOnlyControlHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SetPhasingOnlyControlHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["controlVotingModel", "controlQuorum", "controlMinBalance",
+             "controlMinBalanceModel", "controlHolding", "controlWhitelisted",
+             "controlMinDuration", "controlMaxDuration", "controlMaxFees",
+             "secretPhrase", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Phasing, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _control_voting_model = req.get_i32("controlVotingModel");
+        let _control_quorum = req.get_i32("controlQuorum");
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct SetPhasingAssetControlHandler;
+
+impl SetPhasingAssetControlHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for SetPhasingAssetControlHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset", "controlVotingModel", "controlQuorum", "controlMinBalance",
+             "controlMinBalanceModel", "controlHolding", "controlWhitelisted",
+             "controlMinDuration", "controlMaxDuration", "controlMaxFees",
+             "secretPhrase", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Phasing, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _asset = req.require_u64("asset")?;
+        let _control_voting_model = req.get_i32("controlVotingModel");
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetPhasingPollVoteHandler;
+
+impl GetPhasingPollVoteHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetPhasingPollVoteHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["transaction", "account"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Phasing]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _transaction = req.require_u64("transaction")?;
+        let _account = req.require_u64("account")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("voter", "0")
+            .insert("transaction", "0");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetHashedSecretPhasedTransactionsHandler;
+
+impl GetHashedSecretPhasedTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetHashedSecretPhasedTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["phasingHashedSecret"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Phasing]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _phasing_hashed_secret = req.require_string("phasingHashedSecret")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("transactions", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetLinkedPhasedTransactionsHandler;
+
+impl GetLinkedPhasedTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetLinkedPhasedTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["linkedFullHash"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Phasing]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _linked_full_hash = req.require_string("linkedFullHash")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("transactions", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetVoterPhasedTransactionsHandler;
+
+impl GetVoterPhasedTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetVoterPhasedTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Phasing]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("transactions", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAllPhasingOnlyControlsHandler;
+
+impl GetAllPhasingOnlyControlsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAllPhasingOnlyControlsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec![]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Phasing]
+    }
+
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("phasingOnlyControls", json!([]));
+
         Ok(builder.build())
     }
 }

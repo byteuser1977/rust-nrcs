@@ -195,12 +195,73 @@ impl RequestHandler for CurrencyReserveClaimHandler {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _currency_id = req.require_u64("currency")?;
         let _units = req.require_string("unitsQNT")?;
-        
+
         let mut builder = RsRespBuilder::new();
         builder
             .insert("transaction", "")
             .insert("fullHash", "");
-        
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetMintingTargetHandler;
+
+impl GetMintingTargetHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetMintingTargetHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "units", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ms]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency_id = req.require_u64("currency")?;
+        let _units = req.require_u64("units")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("difficulty", "0")
+            .insert("targetBytes", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetCurrencyPhasedTransactionsHandler;
+
+impl GetCurrencyPhasedTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetCurrencyPhasedTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ms]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency_id = req.get_u64("currency");
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("transactions", json!([]));
+
         Ok(builder.build())
     }
 }

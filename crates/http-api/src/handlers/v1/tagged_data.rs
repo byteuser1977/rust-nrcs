@@ -224,21 +224,136 @@ impl RequestHandler for SearchTaggedDataHandler {
     fn parameters(&self) -> Vec<&'static str> {
         vec!["query", "tag", "channel", "account", "firstIndex", "lastIndex", "includeData"]
     }
-    
+
     fn api_tags(&self) -> Vec<ApiTag> {
         vec![ApiTag::Data, ApiTag::Search]
     }
-    
+
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _query = req.get_string("query");
         let _tag = req.get_string("tag");
         let _channel = req.get_string("channel");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
-        
+
         let mut builder = RsRespBuilder::new();
         builder.insert("data", json!([]));
-        
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetChannelTaggedDataHandler;
+
+impl GetChannelTaggedDataHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetChannelTaggedDataHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["channel", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Data]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _channel = req.require_string("channel")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDataTagCountHandler;
+
+impl GetDataTagCountHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDataTagCountHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Data]
+    }
+
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDataTagsHandler;
+
+impl GetDataTagsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDataTagsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Data]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDataTagsLikeHandler;
+
+impl GetDataTagsLikeHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDataTagsLikeHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["tagPrefix", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Data]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _tag_prefix = req.require_string("tagPrefix")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
         Ok(builder.build())
     }
 }

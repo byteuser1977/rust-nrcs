@@ -373,25 +373,359 @@ impl RequestHandler for DGSRefundHandler {
     fn parameters(&self) -> Vec<&'static str> {
         vec!["secretPhrase", "purchase", "refundNQT", "feeNQT", "deadline"]
     }
-    
+
     fn api_tags(&self) -> Vec<ApiTag> {
         vec![ApiTag::Dgs, ApiTag::CreateTransaction]
     }
-    
+
     fn require_post(&self) -> bool {
         true
     }
-    
+
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
         let _purchase_id = req.require_u64("purchase")?;
         let _refund = req.get_string("refundNQT");
-        
+
         let mut builder = RsRespBuilder::new();
         builder
             .insert("transaction", "")
             .insert("fullHash", "");
-        
+
+        Ok(builder.build())
+    }
+}
+
+pub struct DGSPriceChangeHandler;
+
+impl DGSPriceChangeHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for DGSPriceChangeHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "goods", "priceNQT", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _goods_id = req.require_u64("goods")?;
+        let _price = req.require_string("priceNQT")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct DGSQuantityChangeHandler;
+
+impl DGSQuantityChangeHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for DGSQuantityChangeHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "goods", "deltaQuantity", "feeNQT", "deadline"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs, ApiTag::CreateTransaction]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _goods_id = req.require_u64("goods")?;
+        let _delta = req.get_i32("deltaQuantity").unwrap_or(0);
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDGSExpiredPurchasesHandler;
+
+impl GetDGSExpiredPurchasesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDGSExpiredPurchasesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["seller", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _seller = req.get_u64("seller");
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDGSGoodsCountHandler;
+
+impl GetDGSGoodsCountHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDGSGoodsCountHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["seller", "inStockOnly", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _seller = req.get_u64("seller");
+        let _in_stock_only = req.get_bool("inStockOnly");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDGSGoodsPurchaseCountHandler;
+
+impl GetDGSGoodsPurchaseCountHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDGSGoodsPurchaseCountHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["goods", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _goods_id = req.require_u64("goods")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDGSGoodsPurchasesHandler;
+
+impl GetDGSGoodsPurchasesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDGSGoodsPurchasesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["goods", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _goods_id = req.require_u64("goods")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDGSPendingPurchasesHandler;
+
+impl GetDGSPendingPurchasesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDGSPendingPurchasesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["seller", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _seller = req.get_u64("seller");
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDGSPurchaseCountHandler;
+
+impl GetDGSPurchaseCountHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDGSPurchaseCountHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["seller", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _seller = req.get_u64("seller");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDGSTagCountHandler;
+
+impl GetDGSTagCountHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDGSTagCountHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["inStockOnly", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _in_stock_only = req.get_bool("inStockOnly");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDGSTagsHandler;
+
+impl GetDGSTagsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDGSTagsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetDGSTagsLikeHandler;
+
+impl GetDGSTagsLikeHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetDGSTagsLikeHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["tagPrefix", "firstIndex", "lastIndex", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Dgs]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _tag_prefix = req.require_string("tagPrefix")?;
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("note", "TODO");
+
         Ok(builder.build())
     }
 }

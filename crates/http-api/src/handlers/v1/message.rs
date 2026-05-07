@@ -293,8 +293,136 @@ impl RequestHandler for DownloadPrunableMessageHandler {
     }
 }
 
+pub struct DecryptFromHandler;
+
+impl DecryptFromHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for DecryptFromHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "data", "nonce", "decryptedMessageIsText", "uncompressDecryptedMessage", "secretPhrase"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Messages]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _data = req.get_string("data");
+        let _nonce = req.get_string("nonce");
+        let _decrypted_message_is_text = req.get_bool("decryptedMessageIsText");
+        let _uncompress = req.get_bool("uncompressDecryptedMessage");
+        let _secret_phrase = req.get_string("secretPhrase");
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("decryptedMessage", "")
+            .insert("decryptedMessageIsText", true);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct EncryptToHandler;
+
+impl EncryptToHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for EncryptToHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["recipient", "messageToEncrypt", "messageToEncryptIsText", "compressMessageToEncrypt", "secretPhrase"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Messages]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _recipient = req.require_u64("recipient")?;
+        let _message_to_encrypt = req.get_string("messageToEncrypt");
+        let _message_is_text = req.get_bool("messageToEncryptIsText");
+        let _compress = req.get_bool("compressMessageToEncrypt");
+        let _secret_phrase = req.get_string("secretPhrase");
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("data", "")
+            .insert("nonce", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetSharedKeyHandler;
+
+impl GetSharedKeyHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetSharedKeyHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "secretPhrase", "nonce"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Messages]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account = req.require_u64("account")?;
+        let _secret_phrase = req.get_string("secretPhrase");
+        let _nonce = req.get_string("nonce");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("sharedKey", "");
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetAllPrunableMessagesHandler;
+
+impl GetAllPrunableMessagesHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetAllPrunableMessagesHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["firstIndex", "lastIndex"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Messages]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(99);
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("messages", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
 fn format_account_rs(account_id: u64) -> String {
-    format!("NRCS-{}-{}-{}", 
+    format!("NRCS-{}-{}-{}",
         account_id % 10000,
         (account_id / 10000) % 10000,
         (account_id / 100000000) % 10000

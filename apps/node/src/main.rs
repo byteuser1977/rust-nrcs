@@ -827,8 +827,12 @@ async fn start_node(
         .parse()
         .context("Invalid API server address")?;
     
+    // 注册所有 API handler 到全局 API_REGISTRY
+    http_api::init_api_handlers();
+    info!("Registered {} API handlers", http_api::get_all_handlers().len());
+
     let api_router = http_api::routes::create_router(api_state);
-    
+
     tokio::spawn(async move {
         let listener = tokio::net::TcpListener::bind(api_addr).await.unwrap();
         info!("HTTP API server starting on {}", api_addr);

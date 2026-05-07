@@ -199,10 +199,159 @@ impl RequestHandler for GetExecutedTransactionsHandler {
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _executed_phased = req.get_u64("executedPhasedTransaction");
         let _failed_phased = req.get_u64("failedPhasedTransaction");
-        
+
         let mut builder = RsRespBuilder::new();
         builder.insert("transactions", json!([]));
-        
+
+        Ok(builder.build())
+    }
+}
+
+pub struct FullResetHandler;
+
+impl FullResetHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for FullResetHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["adminPassword"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Debug]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _admin_password = req.require_string("adminPassword")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("done", true);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct RequeueUnconfirmedTransactionsHandler;
+
+impl RequeueUnconfirmedTransactionsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for RequeueUnconfirmedTransactionsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["adminPassword"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Debug]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _admin_password = req.require_string("adminPassword")?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("done", true);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct RetrievePrunedTransactionHandler;
+
+impl RetrievePrunedTransactionHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for RetrievePrunedTransactionHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["transaction"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Debug]
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _transaction_id = req.get_u64("transaction");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("retrieved", true);
+
+        Ok(builder.build())
+    }
+}
+
+pub struct ProcessVoucherHandler;
+
+impl ProcessVoucherHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for ProcessVoucherHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["secretPhrase", "validate", "broadcast"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Debug]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    fn file_parameter(&self) -> Option<&'static str> {
+        Some("voucher")
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _validate = req.get_bool("validate");
+        let _broadcast = req.get_bool("broadcast");
+
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("transaction", "")
+            .insert("fullHash", "")
+            .insert("transactionBytes", "");
+
         Ok(builder.build())
     }
 }
