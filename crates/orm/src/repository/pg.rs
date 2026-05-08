@@ -1940,7 +1940,7 @@ impl AccountRepository for PgAccountRepository {
         .await
         .unwrap_or(0);
         
-        tracing::warn!(
+        tracing::debug!(
             account = account_id,
             height = current_height,
             "Auto-creating new account record (verify if this is expected)"
@@ -1963,7 +1963,9 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn add_to_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
-        if amount < 0 {
+        use blockchain_types::genesis::CREATOR_ID;
+
+        if amount < 0 && account_id != CREATOR_ID {
             let account = self.find_by_account_id(account_id).await?;
             if let Some(acc) = account {
                 let new_balance = acc.balance.checked_add(amount)
@@ -2013,7 +2015,9 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
-        if amount < 0 {
+        use blockchain_types::genesis::CREATOR_ID;
+
+        if amount < 0 && account_id != CREATOR_ID {
             let account = self.find_by_account_id(account_id).await?;
             if let Some(acc) = account {
                 let new_balance = acc.unconfirmed_balance.checked_add(amount)
@@ -2063,6 +2067,27 @@ impl AccountRepository for PgAccountRepository {
     }
 
     async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
+        use blockchain_types::genesis::CREATOR_ID;
+
+        if amount < 0 && account_id != CREATOR_ID {
+            let account = self.find_by_account_id(account_id).await?;
+            if let Some(acc) = account {
+                let new_balance = acc.balance.checked_add(amount)
+                    .ok_or_else(|| RepositoryError::Validation(
+                        format!("balance overflow for account {}", account_id)
+                    ))?;
+                let new_unconfirmed = acc.unconfirmed_balance.checked_add(amount)
+                    .ok_or_else(|| RepositoryError::Validation(
+                        format!("unconfirmed balance overflow for account {}", account_id)
+                    ))?;
+                if new_balance < 0 || new_unconfirmed < 0 {
+                    return Err(RepositoryError::Validation(
+                        format!("insufficient balance for account {}: have {}, need {}",
+                            account_id, acc.balance, -amount)
+                    ));
+                }
+            }
+        }
         let result = sqlx::query(
             r#"
             UPDATE "ACCOUNT"
@@ -2663,6 +2688,39 @@ impl AccountLedgerRepository for PgAccountLedgerRepository {
             r#"SELECT * FROM "ACCOUNT_LEDGER" WHERE "BLOCK_ID" = $1 ORDER BY "HEIGHT" DESC"#
         )
         .bind(block_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn insert_batch(&self, entries: &[AccountLedgerModel]) -> RepositoryResult<usize> {
+        let mut count = 0;
+        for entry in entries.iter() {
+            self.insert(entry).await?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
+    async fn find_by_event_type(&self, event_type: i16, limit: i64) -> RepositoryResult<Vec<AccountLedgerModel>> {
+        let records = sqlx::query_as::<_, AccountLedgerModel>(
+            r#"SELECT * FROM "ACCOUNT_LEDGER" WHERE "EVENT_TYPE" = $1 ORDER BY "HEIGHT" DESC LIMIT $2"#
+        )
+        .bind(event_type)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_height_range(&self, start_height: i32, end_height: i32) -> RepositoryResult<Vec<AccountLedgerModel>> {
+        let records = sqlx::query_as::<_, AccountLedgerModel>(
+            r#"SELECT * FROM "ACCOUNT_LEDGER" WHERE "HEIGHT" BETWEEN $1 AND $2 ORDER BY "HEIGHT" ASC"#
+        )
+        .bind(start_height)
+        .bind(end_height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;

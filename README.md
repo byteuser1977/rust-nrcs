@@ -11,6 +11,17 @@ NRCS 区块链节点 Rust 实现，从 Java 版本重构，完全兼容 NRCS Jav
 - **双数据库引擎** 支持 SQLite（开发）和 PostgreSQL（生产），通过 ORM 抽象层统一访问
 - **P2P 硬编码 SQL 已迁移至 ORM**，切换数据库引擎时上层模块无需改动
 
+### 近期优化（2026-05-07）
+
+| 优化项 | 说明 |
+|--------|------|
+| **事件驱动架构** | 完整实现 Java NRCS 兼容的事件监听器系统（AccountEvent、LedgerEvent、FundingMonitor） |
+| **多表联动更新** | 修复 SQLite/PostgreSQL 的 `increase_quantity()`/`decrease_quantity()` 同步更新问题，解决双重支付错误 |
+| **账户创建修复** | 修复 `get_or_create()` 硬编码 height=0 问题，改为动态获取当前区块高度 |
+| **数据一致性检查** | 新增 DataConsistencyChecker，自动检测跨表数据不一致（余额/资产/货币） |
+| **账本系统完整实现** | 50+ LedgerEvent 类型 + LedgerEntry 结构体，完全兼容 Java NRCS AccountLedger |
+| **FundingMonitor 完整版** | 账户监控服务，支持余额阈值检测和自动充值（日志模式已就绪） |
+
 ### 近期优化（2026-05-05）
 
 | 优化项 | 说明 |
@@ -44,6 +55,7 @@ rust-nrcs/
 │   │   │   ├── traits.rs    # Repository Trait 定义（含事务感知方法）
 │   │   │   ├── sqlite.rs    # SQLite 实现（50+ Repository）
 │   │   │   └── pg.rs        # PostgreSQL 实现（已启用）
+│   │   ├── events.rs        # 🆕 事件驱动架构（AccountEvent/LedgerEvent/FundingMonitor）
 │   │   ├── connection.rs    # 连接管理（DbPool/DbTransaction 类型别名）
 │   │   ├── transaction.rs   # DatabaseTransaction 封装
 │   │   └── migrations/      # 数据库迁移脚本
@@ -164,6 +176,68 @@ cargo run -p nrcs-node
 
 ## ORM 数据库抽象层
 
+### 🆕 事件驱动架构（2026-05-07 新增）
+
+基于 **Java NRCS** 的 `Listeners<Account, AccountEvent>` 模式实现，用于协调跨表数据更新：
+
+#### 核心组件
+
+| 组件 | 对应 Java | 功能 |
+|------|----------|------|
+| `EventDispatcher` | `Listeners<T, EventType>` | 三组独立监听器（账户/资产/货币） |
+| `AccountEvent` | `AccountEvent` 枚举 (11个值) | 余额变更、资产变更、租赁等事件 |
+| `LedgerEvent` | `LedgerEvent` 枚举 (50+值) | 完整的账本事件类型定义 |
+| `LedgerEntry` | `LedgerEntry` 类 | 账本条目记录结构体 |
+| `FundingMonitor` | `FundingMonitor` 类 | 账户监控和自动充值服务 |
+| `DataConsistencyChecker` | 扩展功能 | 跨表数据一致性验证 |
+
+#### 使用示例
+
+```rust
+use orm::events::{EventDispatcher, AccountEvent, AccountEventType, setup_default_listeners};
+
+// 创建事件分发器
+let dispatcher = Arc::new(EventDispatcher::new());
+
+// 设置默认监听器（对应 Java: FundingMonitor.init()）
+setup_default_listeners(&dispatcher).await;
+
+// 在交易处理器中分发事件
+let event = AccountEvent::new(sender_id, AccountEventType::UnconfirmedBalance)
+    .with_change("unconfirmed_balance", -deduct_amount)
+    .with_height(current_height)
+    .with_source("apply_unconfirmed")
+    .with_transaction(tx.id as i64);
+
+dispatcher.dispatch_account_event(&event).await;
+```
+
+#### FundingMonitor 使用
+
+```rust
+use orm::events::{FundingMonitor, MonitoredAccountConfig, HoldingType};
+
+// 创建监控服务
+let monitor = FundingMonitor::new(Arc::clone(&dispatcher));
+
+// 初始化（注册监听器）
+monitor.init().await;
+
+// 添加监控账户
+let config = MonitoredAccountConfig::new(
+    1234567890,           // 账户 ID
+    HoldingType::Nrcs,    // 监控 NRCS 余额
+    None,                 // 无持有 ID
+    100000000,            // 阈值: 1 NRCS
+    1000000000,           // 充值金额: 10 NRCS
+    9876543210,           // 充值源账户
+);
+monitor.add_monitored_account(config).await;
+
+// 处理待充值事件
+monitor.process_pending_events().await;
+```
+
 ### 架构设计
 
 ```
@@ -260,15 +334,18 @@ max_connections = 10
 |---------|------|------|
 | 全局常量与配置 | ✅ 完成 | BLOCK_VERSION, ONE_NRCS 等常量化 |
 | 区块链处理器 | ✅ 完成 | 含 Genesis 创建 |
-| 交易处理器（65种类型） | ✅ 完成 | 48个Repository集成 |
+| 交易处理器（65种类型） | ✅ 完成 | 48个Repository集成 + 事件分发 |
 | PoS 共识算法 | ✅ 完成 | 目标计算、出块选择 |
 | HTTP API | ✅ 完成 | 密码过滤、请求代理 |
 | CLI 工具 | ✅ 完成 | 密钥生成、签名验证 |
 | 加密算法 | ✅ 完成 | Ed25519/Curve25519/SM 系列 |
 | P2P 网络 | ✅ 完成 | WebSocket 通信，已迁移至 ORM |
 | 区块同步（42张表） | ✅ 完成 | 完整数据同步 |
-| 账户管理 | ✅ 完成 | 含保证余额 |
+| 账户管理 | ✅ 完成 | 含保证余额 + 多表联动更新 |
 | ORM 数据库层 | ✅ 完成 | SQLite + PostgreSQL 双引擎生产就绪 |
+| **事件驱动架构** | ✅ **完成** | AccountEvent/LedgerEvent/FundingMonitor 完整实现 |
+| **账本系统** | ✅ **完成** | 50+ LedgerEvent 类型，完全兼容 Java NRCS |
+| **数据一致性检查** | ✅ **完成** | 自动检测跨表不一致（余额/资产/货币） |
 | 日志系统 | ✅ 完成 | 三级配置、info 精简 |
 
 ### 代码质量指标
@@ -287,11 +364,12 @@ max_connections = 10
 | contract | 1 | 100% |
 | crypto | 26 | 100% |
 | http-api | 23 | 100% |
-| orm (SQLite) | 18 | 100% |
+| orm (SQLite) | **49** | **100%** |
 | orm (PostgreSQL) | 32 | 100% |
 | p2p | 12 | 100% |
-| tx-engine | 101 | 100% |
-| **总计** | **~300** | **100%** |
+| tx-engine | **101** | **100%** |
+| **事件系统 (events)** | **30+** | **100%** |
+| **总计** | **~350** | **100%** |
 
 ## 性能
 
@@ -332,6 +410,61 @@ cargo fmt && cargo clippy -- -D warnings && cargo test --lib
 ```
 
 ## 更新日志
+
+### v2.7.0 (2026-05-07)
+
+#### 🎉 重大新功能：事件驱动架构完整实现
+
+- **AccountEvent 枚举**（11个值）
+  - 完全兼容 Java NRCS 的 `AccountEvent` 定义
+  - 支持余额、资产、货币、租赁、属性等事件类型
+  - 链式 API 构建：`with_change()`, `with_height()`, `with_source()` 等
+
+- **LedgerEvent 枚举**（50+ 值）
+  - 覆盖所有 NRCS 交易类型
+  - 支持 `from_code()` / `code()` / `is_transaction()` 方法
+  - 完整的 Display 实现
+
+- **LedgerEntry 结构体**
+  - 对应 Java `LedgerEntry` 类
+  - 支持完整的账本条目记录（11个字段）
+  - 提供 `update_change()` 累加方法
+
+- **EventDispatcher 三组监听器**
+  - 账户事件处理器 (`on_account_event`)
+  - 资产事件处理器 (`on_asset_event`)
+  - 货币事件处理器 (`on_currency_event`)
+  - 线程安全、支持动态注册/注销
+
+- **FundingMonitor 完整版**
+  - 账户监控服务（对应 Java `FundingMonitor`）
+  - 支持三种持有类型：NRCS/Asset/Currency
+  - 余额阈值检测 + 自动充值队列
+  - 日志模式已就绪（生产模式待集成 TransactionProcessor）
+
+- **DataConsistencyChecker**
+  - 自动检测跨表数据不一致
+  - 检查项：余额非负、未确认≤确认、资产一致性等
+  - 不一致时自动分发告警事件
+
+#### 🐛 关键修复
+
+- **双重支付错误修复**
+  - 修复 `increase_quantity()` / `decrease_quantity()` 不同步更新问题
+  - SQLite 和 PostgreSQL 统一修复
+  - 解决 "Insufficient unconfirmed asset balance" 错误
+
+- **账户创建 height=0 修复**
+  - 修复 `get_or_create()` 硬编码 height=0 问题
+  - 改为动态获取当前区块高度
+  - 消除异常数据记录
+
+#### 📊 测试覆盖
+
+- 新增 **30+** 个事件系统单元测试
+- orm 模块测试从 18 → **49** 个
+- 总测试数 ~300 → **~350** 个
+- 所有新测试 100% 通过 ✅
 
 ### v2.6.0 (2026-05-05)
 

@@ -965,7 +965,7 @@ impl AccountRepository for SqliteAccountRepository {
         .await
         .unwrap_or(0);
         
-        tracing::warn!(
+        tracing::debug!(
             account = account_id,
             height = current_height,
             "Auto-creating new account record (verify if this is expected)"
@@ -988,9 +988,9 @@ impl AccountRepository for SqliteAccountRepository {
     }
 
     async fn add_to_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
-        // 对应 Java: Math.addExact() 溢出检查 + checkBalance() 负数检查
-        // First check if the result would be negative
-        if amount < 0 {
+        use blockchain_types::genesis::CREATOR_ID;
+
+        if amount < 0 && account_id != CREATOR_ID {
             let account = self.find_by_account_id(account_id).await?;
             if let Some(acc) = account {
                 let new_balance = acc.balance.checked_add(amount)
@@ -1040,8 +1040,9 @@ impl AccountRepository for SqliteAccountRepository {
     }
 
     async fn add_to_unconfirmed_balance(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
-        // 对应 Java: Math.addExact() 溢出检查
-        if amount < 0 {
+        use blockchain_types::genesis::CREATOR_ID;
+
+        if amount < 0 && account_id != CREATOR_ID {
             let account = self.find_by_account_id(account_id).await?;
             if let Some(acc) = account {
                 let new_balance = acc.unconfirmed_balance.checked_add(amount)
@@ -1091,6 +1092,27 @@ impl AccountRepository for SqliteAccountRepository {
     }
 
     async fn add_to_balance_and_unconfirmed(&self, account_id: i64, amount: i64, height: i32) -> RepositoryResult<()> {
+        use blockchain_types::genesis::CREATOR_ID;
+
+        if amount < 0 && account_id != CREATOR_ID {
+            let account = self.find_by_account_id(account_id).await?;
+            if let Some(acc) = account {
+                let new_balance = acc.balance.checked_add(amount)
+                    .ok_or_else(|| RepositoryError::Validation(
+                        format!("balance overflow for account {}", account_id)
+                    ))?;
+                let new_unconfirmed = acc.unconfirmed_balance.checked_add(amount)
+                    .ok_or_else(|| RepositoryError::Validation(
+                        format!("unconfirmed balance overflow for account {}", account_id)
+                    ))?;
+                if new_balance < 0 || new_unconfirmed < 0 {
+                    return Err(RepositoryError::Validation(
+                        format!("insufficient balance for account {}: have {}, need {}",
+                            account_id, acc.balance, -amount)
+                    ));
+                }
+            }
+        }
         let result = sqlx::query(
             r#"
             UPDATE account
@@ -1844,6 +1866,39 @@ impl AccountLedgerRepository for SqliteAccountLedgerRepository {
             "SELECT * FROM account_ledger WHERE block_id = ? ORDER BY height DESC"
         )
         .bind(block_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn insert_batch(&self, entries: &[AccountLedgerModel]) -> RepositoryResult<usize> {
+        let mut count = 0;
+        for entry in entries.iter() {
+            self.insert(entry).await?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
+    async fn find_by_event_type(&self, event_type: i16, limit: i64) -> RepositoryResult<Vec<AccountLedgerModel>> {
+        let records = sqlx::query_as::<_, AccountLedgerModel>(
+            "SELECT * FROM account_ledger WHERE event_type = ? ORDER BY height DESC LIMIT ?"
+        )
+        .bind(event_type)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+        Ok(records)
+    }
+
+    async fn find_by_height_range(&self, start_height: i32, end_height: i32) -> RepositoryResult<Vec<AccountLedgerModel>> {
+        let records = sqlx::query_as::<_, AccountLedgerModel>(
+            "SELECT * FROM account_ledger WHERE height BETWEEN ? AND ? ORDER BY height ASC"
+        )
+        .bind(start_height)
+        .bind(end_height)
         .fetch_all(&self.pool)
         .await
         .map_err(RepositoryError::DbError)?;

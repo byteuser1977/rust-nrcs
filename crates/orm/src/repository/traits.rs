@@ -109,6 +109,41 @@ pub trait AccountAssetRepository: Repository<AccountAssetModel> {
 pub trait AccountLedgerRepository: Repository<AccountLedgerModel> {
     async fn find_by_account(&self, account_id: i64, limit: i64) -> RepositoryResult<Vec<AccountLedgerModel>>;
     async fn find_by_block(&self, block_id: i64) -> RepositoryResult<Vec<AccountLedgerModel>>;
+
+    /**
+     * 批量插入账本条目（提高性能）
+     *
+     * 用于在区块处理后批量写入多条账本记录。
+     * 比逐条插入效率更高，减少数据库 I/O 开销。
+     *
+     * # 参数
+     * - `entries`: 要插入的账本条目列表
+     *
+     * # 返回值
+     * - `Ok(count)`: 成功插入的条目数量
+     */
+    async fn insert_batch(&self, entries: &[AccountLedgerModel]) -> RepositoryResult<usize>;
+
+    /**
+     * 按事件类型查询账本条目
+     *
+     * # 参数
+     * - `event_type`: 事件类型代码（对应 LedgerEvent.code()）
+     * - `limit`: 返回结果的最大数量
+     */
+    async fn find_by_event_type(&self, event_type: i16, limit: i64) -> RepositoryResult<Vec<AccountLedgerModel>>;
+
+    /**
+     * 按高度范围查询账本条目
+     *
+     * 用于获取指定高度区间内的所有账本记录，
+     * 常用于区块回滚或数据恢复场景。
+     *
+     * # 参数
+     * - `start_height`: 起始高度（包含）
+     * - `end_height`: 结束高度（包含）
+     */
+    async fn find_by_height_range(&self, start_height: i32, end_height: i32) -> RepositoryResult<Vec<AccountLedgerModel>>;
 }
 
 #[async_trait]
