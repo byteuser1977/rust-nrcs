@@ -10,7 +10,10 @@
 
 pub mod api_tag;
 pub mod api_registry;
+pub mod account_query_service;
+pub mod bundler_service;
 pub mod config;
+pub mod dgs_service;
 pub mod core;
 pub mod db_shell;
 pub mod dto;

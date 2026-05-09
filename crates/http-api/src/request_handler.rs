@@ -153,6 +153,24 @@ impl RsRespBuilder {
             data: self.data,
         }
     }
+
+    /// 插入打包器信息到响应中
+    ///
+    /// 对应 NRCS Java: `Bundler` 类的 JSON 序列化
+    pub fn insert_bundler_info(&mut self, bundler: &crate::bundler_service::BundlerInfo) -> &mut Self {
+        self.insert("bundler", bundler.account_id.to_string())
+            .insert("totalFeesLimitFQT", bundler.total_fees_limit_fqt.to_string())
+            .insert("currentTotalFeesFQT", bundler.current_total_fees_fqt.to_string())
+            .insert("announcedMinRateNQTPerFXT", bundler.announced_min_rate_nqt_per_fxt.to_string())
+            .insert("bundlingRules", serde_json::to_value(&bundler.bundling_rules).unwrap_or(Value::Array(vec![])));
+
+        // 可选字段：publicKey
+        if let Some(ref pk) = bundler.public_key {
+            self.insert("publicKey", pk.clone());
+        }
+
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

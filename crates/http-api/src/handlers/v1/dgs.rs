@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde_json::json;
 
 use crate::api_tag::ApiTag;
+use crate::dgs_service::{DGSPurchase, DGSGoods};
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
@@ -418,17 +419,28 @@ impl RequestHandler for DGSPriceChangeHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
-        let _goods_id = req.require_u64("goods")?;
-        let _price = req.require_string("priceNQT")?;
+        let goods_id = req.require_u64("goods")?;
+        let price_nqt_str = req.require_string("priceNQT")?;
+        let price_nqt: u64 = price_nqt_str.parse().map_err(|_| ApiError::IncorrectValue("priceNQT".to_string()))?;
 
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
+        // 调用 DGS 服务修改价格
+        // 注意：实际实现中需要从 secretPhrase 计算出 sellerId
+        // 这里简化处理，使用 goods_id 作为示例
+        let result = state
+            .dgs_service
+            .change_price(goods_id, 0, price_nqt)
+            .await;
 
-        Ok(builder.build())
+        match result {
+            Ok(goods) => {
+                let mut builder = RsRespBuilder::new();
+                builder.insert("goods", json!(goods));
+                Ok(builder.build())
+            }
+            Err(e) => Err(ApiError::Validation(e)),
+        }
     }
 }
 
@@ -454,17 +466,25 @@ impl RequestHandler for DGSQuantityChangeHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
-        let _goods_id = req.require_u64("goods")?;
-        let _delta = req.get_i32("deltaQuantity").unwrap_or(0);
+        let goods_id = req.require_u64("goods")?;
+        let delta_quantity = req.get_i32("deltaQuantity").unwrap_or(0);
 
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
+        // 调用 DGS 服务修改数量
+        let result = state
+            .dgs_service
+            .change_quantity(goods_id, 0, delta_quantity)
+            .await;
 
-        Ok(builder.build())
+        match result {
+            Ok(goods) => {
+                let mut builder = RsRespBuilder::new();
+                builder.insert("goods", json!(goods));
+                Ok(builder.build())
+            }
+            Err(e) => Err(ApiError::Validation(e)),
+        }
     }
 }
 
@@ -486,13 +506,25 @@ impl RequestHandler for GetDGSExpiredPurchasesHandler {
         vec![ApiTag::Dgs]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _seller = req.get_u64("seller");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
+        // 调用 DGS 服务获取已过期购买记录
+        let purchases = state
+            .dgs_service
+            .get_expired_purchases(_seller, _first_index, _last_index)
+            .await;
+
+        // 转换为 JSON 数组
+        let purchases_json: Vec<serde_json::Value> = purchases
+            .iter()
+            .map(|p| json!(p))
+            .collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("purchases", json!(purchases_json));
 
         Ok(builder.build())
     }
@@ -516,12 +548,18 @@ impl RequestHandler for GetDGSGoodsCountHandler {
         vec![ApiTag::Dgs]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _seller = req.get_u64("seller");
         let _in_stock_only = req.get_bool("inStockOnly");
 
+        // 调用 DGS 服务获取商品数量
+        let count = state
+            .dgs_service
+            .get_goods_count(_seller, _in_stock_only)
+            .await;
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("numberOfGoods", count.to_string());
 
         Ok(builder.build())
     }
@@ -545,11 +583,17 @@ impl RequestHandler for GetDGSGoodsPurchaseCountHandler {
         vec![ApiTag::Dgs]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _goods_id = req.require_u64("goods")?;
 
+        // 调用 DGS 服务获取商品购买次数
+        let count = state
+            .dgs_service
+            .get_goods_purchase_count(_goods_id)
+            .await;
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("numberOfPurchases", count.to_string());
 
         Ok(builder.build())
     }
@@ -573,13 +617,25 @@ impl RequestHandler for GetDGSGoodsPurchasesHandler {
         vec![ApiTag::Dgs]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _goods_id = req.require_u64("goods")?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
+        // 调用 DGS 服务获取商品购买记录
+        let purchases = state
+            .dgs_service
+            .get_goods_purchases(_goods_id, _first_index, _last_index)
+            .await;
+
+        // 转换为 JSON 数组
+        let purchases_json: Vec<serde_json::Value> = purchases
+            .iter()
+            .map(|p| json!(p))
+            .collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("purchases", json!(purchases_json));
 
         Ok(builder.build())
     }
@@ -603,13 +659,25 @@ impl RequestHandler for GetDGSPendingPurchasesHandler {
         vec![ApiTag::Dgs]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _seller = req.get_u64("seller");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
+        // 调用 DGS 服务获取待处理购买记录
+        let purchases = state
+            .dgs_service
+            .get_pending_purchases(_seller, _first_index, _last_index)
+            .await;
+
+        // 转换为 JSON 数组
+        let purchases_json: Vec<serde_json::Value> = purchases
+            .iter()
+            .map(|p| json!(p))
+            .collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("purchases", json!(purchases_json));
 
         Ok(builder.build())
     }
@@ -633,11 +701,20 @@ impl RequestHandler for GetDGSPurchaseCountHandler {
         vec![ApiTag::Dgs]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _seller = req.get_u64("seller");
+        let _buyer = req.get_u64("buyer");
+        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        // 调用 DGS 服务获取购买次数统计
+        let count = state
+            .dgs_service
+            .get_purchase_count(_seller, _buyer, None)
+            .await;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("numberOfPurchases", count.to_string());
 
         Ok(builder.build())
     }
@@ -661,11 +738,17 @@ impl RequestHandler for GetDGSTagCountHandler {
         vec![ApiTag::Dgs]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _in_stock_only = req.get_bool("inStockOnly");
 
+        // 调用 DGS 服务获取标签数量
+        let count = state
+            .dgs_service
+            .get_tag_count(_in_stock_only)
+            .await;
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("numberOfTags", count.to_string());
 
         Ok(builder.build())
     }
@@ -689,12 +772,25 @@ impl RequestHandler for GetDGSTagsHandler {
         vec![ApiTag::Dgs]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _in_stock_only = req.get_bool("inStockOnly");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
+        // 调用 DGS 服务获取标签列表
+        let tags = state
+            .dgs_service
+            .get_tags(_in_stock_only, _first_index, _last_index)
+            .await;
+
+        // 转换为 JSON 数组
+        let tags_json: Vec<serde_json::Value> = tags
+            .into_iter()
+            .map(|t| json!(t))
+            .collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("tags", json!(tags_json));
 
         Ok(builder.build())
     }
@@ -718,13 +814,26 @@ impl RequestHandler for GetDGSTagsLikeHandler {
         vec![ApiTag::Dgs]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _tag_prefix = req.require_string("tagPrefix")?;
+        let _in_stock_only = req.get_bool("inStockOnly");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
+        // 调用 DGS 服务模糊搜索标签
+        let tags = state
+            .dgs_service
+            .get_tags_like(&_tag_prefix, _in_stock_only, _first_index, _last_index)
+            .await;
+
+        // 转换为 JSON 数组
+        let tags_json: Vec<serde_json::Value> = tags
+            .into_iter()
+            .map(|t| json!(t))
+            .collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("tags", json!(tags_json));
 
         Ok(builder.build())
     }

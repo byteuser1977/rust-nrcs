@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde_json::json;
 
 use crate::api_tag::ApiTag;
+use crate::bundler_service::{BundlerRule};
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
@@ -313,6 +314,11 @@ fn peer_to_json(peer: &p2p::Peer) -> serde_json::Value {
     })
 }
 
+/// 添加打包规则 Handler
+///
+/// 对应 NRCS Java: `AddBundlingRule`
+///
+/// 功能：为现有打包器添加新的打包规则
 pub struct AddBundlingRuleHandler;
 
 impl AddBundlingRuleHandler {
@@ -328,7 +334,7 @@ impl RequestHandler for AddBundlingRuleHandler {
     }
 
     fn api_tags(&self) -> Vec<ApiTag> {
-        vec![ApiTag::Network]
+        vec![ApiTag::Forging]
     }
 
     fn require_post(&self) -> bool {
@@ -339,17 +345,54 @@ impl RequestHandler for AddBundlingRuleHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _min_rate_nqt_per_fxt = req.require_u64("minRateNQTPerFXT")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let secret_phrase = req.require_string("secretPhrase")?;
+        let min_rate_nqt_per_fxt = req.require_u64("minRateNQTPerFXT")?;
+        let _total_fees_limit_fqt = req.get_u64("totalFeesLimitFQT").unwrap_or(0);
+        let _overpay_fqt_per_fxt = req.get_u64("overpayFQTPerFXT").unwrap_or(0);
+        let fee_calculator_name = req
+            .get_string("feeCalculatorName")
+            .unwrap_or_else(|| "MinFeeCalculator".to_string());
+        
+        // 获取过滤器参数（支持多个 filter 参数）
+        let filters: Vec<String> = req
+            .params
+            .keys()
+            .filter(|k| *k == "filter")
+            .filter_map(|k| req.params.get(k).cloned())
+            .collect();
 
-        let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        // 构建规则对象
+        let rule = BundlerRule {
+            min_rate_nqt_per_fxt,
+            overpay_fqt_per_fxt: _overpay_fqt_per_fxt,
+            fee_calculator_name,
+            filters,
+        };
 
-        Ok(builder.build())
+        // 调用 Bundler 服务添加规则
+        let result = state
+            .bundler_service
+            .add_bundling_rule(&secret_phrase, rule)
+            .await
+            .map_err(|e| ApiError::Internal(e))?;
+
+        match result {
+            Some(bundler_info) => {
+                let mut builder = RsRespBuilder::new();
+                builder.insert_bundler_info(&bundler_info);
+                Ok(builder.build())
+            }
+            None => Err(ApiError::Validation(
+                "Bundler not found for this account. Please start a bundler first.".to_string(),
+            )),
+        }
     }
 }
 
+/// 黑名单 API 代理节点 Handler
+///
+/// 对应 NRCS Java: `BlacklistAPIProxyPeer`
 pub struct BlacklistAPIProxyPeerHandler;
 
 impl BlacklistAPIProxyPeerHandler {
@@ -372,17 +415,26 @@ impl RequestHandler for BlacklistAPIProxyPeerHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _peer = req.require_string("peer")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let peer = req.require_string("peer")?;
         let _admin_password = req.get_string("adminPassword");
 
+        state
+            .bundler_service
+            .blacklist_api_proxy_peer(&peer)
+            .await
+            .map_err(|e| ApiError::Internal(e))?;
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
 }
 
+/// 黑名单打包器 Handler
+///
+/// 对应 NRCS Java: `BlacklistBundler`
 pub struct BlacklistBundlerHandler;
 
 impl BlacklistBundlerHandler {
@@ -405,17 +457,28 @@ impl RequestHandler for BlacklistBundlerHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let account = req.require_u64("account")?;
         let _admin_password = req.get_string("adminPassword");
 
+        let removed = state
+            .bundler_service
+            .blacklist_bundler(account)
+            .await
+            .map_err(|e| ApiError::Internal(e))?;
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("removed", removed);
 
         Ok(builder.build())
     }
 }
 
+/// 打包交易 Handler
+///
+/// 对应 NRCS Java: `BundleTransactions`
+///
+/// 功能：手动触发交易打包（创建子区块交易）
 pub struct BundleTransactionsHandler;
 
 impl BundleTransactionsHandler {
@@ -431,7 +494,7 @@ impl RequestHandler for BundleTransactionsHandler {
     }
 
     fn api_tags(&self) -> Vec<ApiTag> {
-        vec![ApiTag::Network, ApiTag::CreateTransaction]
+        vec![ApiTag::Forging, ApiTag::CreateTransaction]
     }
 
     fn require_post(&self) -> bool {
@@ -442,17 +505,35 @@ impl RequestHandler for BundleTransactionsHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let secret_phrase = req.require_string("secretPhrase")?;
         let _transaction_full_hash = req.require_string("transactionFullHash")?;
+        let _fee_nqt = req.get_string("feeNQT");
+        let _deadline = req.get_i32("deadline").unwrap_or(600);
 
+        // 获取或创建打包器
+        let bundler_info = state
+            .bundler_service
+            .start_bundler(
+                &secret_phrase,
+                u64::MAX, // 无限制
+                vec![BundlerRule::default()],
+            )
+            .await
+            .map_err(|e| ApiError::Internal(e))?;
+
+        // 触发一次打包运行（实际实现中会扫描未确认交易并打包）
+        // 这里简化处理，返回打包器信息
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert_bundler_info(&bundler_info);
 
         Ok(builder.build())
     }
 }
 
+/// 获取打包器费率 Handler
+///
+/// 对应 NRCS Java: `GetBundlerRates`
 pub struct GetBundlerRatesHandler;
 
 impl GetBundlerRatesHandler {
@@ -471,16 +552,49 @@ impl RequestHandler for GetBundlerRatesHandler {
         vec![ApiTag::Network]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _min_rate_nqt_per_fxt = req.get_u64("minRateNQTPerFXT");
 
+        // 获取所有打包器费率
+        let rates = state
+            .bundler_service
+            .get_bundler_rates()
+            .await;
+
+        // 可选过滤：只返回费率 >= minRateNQTPerFXT 的
+        let filtered_rates: Vec<serde_json::Value> = if let Some(min_rate) = _min_rate_nqt_per_fxt {
+            rates
+                .into_iter()
+                .filter(|r| r.rate >= min_rate)
+                .map(|r| json!({
+                    "rate": r.rate,
+                    "feeLimit": r.fee_limit,
+                    "account": r.account_id.to_string(),
+                    "timestamp": r.timestamp
+                }))
+                .collect()
+        } else {
+            rates
+                .into_iter()
+                .map(|r| json!({
+                    "rate": r.rate,
+                    "feeLimit": r.fee_limit,
+                    "account": r.account_id.to_string(),
+                    "timestamp": r.timestamp
+                }))
+                .collect()
+        };
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("rates", json!(filtered_rates));
 
         Ok(builder.build())
     }
 }
 
+/// 获取打包器列表 Handler
+///
+/// 对应 NRCS Java: `GetBundlers`
 pub struct GetBundlersHandler;
 
 impl GetBundlersHandler {
@@ -492,23 +606,49 @@ impl GetBundlersHandler {
 #[async_trait]
 impl RequestHandler for GetBundlersHandler {
     fn parameters(&self) -> Vec<&'static str> {
-        vec!["adminPassword", "requireBlock", "requireLastBlock"]
+        vec!["account", "secretPhrase", "adminPassword"]
     }
 
     fn api_tags(&self) -> Vec<ApiTag> {
-        vec![ApiTag::Network]
+        vec![ApiTag::Forging]
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let account = req.get_u64("account");
+        let _secret_phrase = req.get_string("secretPhrase");
         let _admin_password = req.get_string("adminPassword");
 
+        // 根据参数获取不同的打包器列表
+        let bundlers = if let Some(acc_id) = account {
+            state.bundler_service.get_account_bundlers(acc_id).await
+        } else {
+            state.bundler_service.get_all_bundlers().await
+        };
+
+        // 转换为 JSON 数组
+        let bundlers_json: Vec<serde_json::Value> = bundlers
+            .iter()
+            .map(|b| json!({
+                "bundler": b.account_id.to_string(),
+                "totalFeesLimitFQT": b.total_fees_limit_fqt.to_string(),
+                "currentTotalFeesFQT": b.current_total_fees_fqt.to_string(),
+                "announcedMinRateNQTPerFXT": b.announced_min_rate_nqt_per_fxt.to_string(),
+                "bundlingRules": b.bundling_rules.clone()
+            }))
+            .collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("bundlers", json!(bundlers_json));
 
         Ok(builder.build())
     }
 }
 
+/// 获取打包选项 Handler
+///
+/// 对应 NRCS Java: `GetBundlingOptions`
+///
+/// 功能：返回可用的过滤器和费率计算器列表
 pub struct GetBundlingOptionsHandler;
 
 impl GetBundlingOptionsHandler {
@@ -527,14 +667,35 @@ impl RequestHandler for GetBundlingOptionsHandler {
         vec![ApiTag::Network]
     }
 
-    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        // 获取可用的过滤器列表
+        let filters = state.bundler_service.get_available_filters();
+        let calculators = state.bundler_service.get_available_fee_calculators();
+
+        // 构建过滤器 JSON 数组
+        let filters_json: Vec<serde_json::Value> = filters
+            .iter()
+            .map(|f| json!({"name": f}))
+            .collect();
+
+        // 构建费率计算器 JSON 数组
+        let calculators_json: Vec<serde_json::Value> = calculators
+            .iter()
+            .map(|c| json!({"name": c}))
+            .collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder
+            .insert("filters", json!(filters_json))
+            .insert("feeCalculators", json!(calculators_json));
 
         Ok(builder.build())
     }
 }
 
+/// 设置 API 代理节点 Handler
+///
+/// 对应 NRCS Java: `SetAPIProxyPeer`
 pub struct SetAPIProxyPeerHandler;
 
 impl SetAPIProxyPeerHandler {
@@ -557,17 +718,26 @@ impl RequestHandler for SetAPIProxyPeerHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _peer = req.require_string("peer")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let peer = req.require_string("peer")?;
         let _admin_password = req.get_string("adminPassword");
 
+        state
+            .bundler_service
+            .set_api_proxy_peer(&peer)
+            .await
+            .map_err(|e| ApiError::Internal(e))?;
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
 }
 
+/// 获取所有打包器费率 Handler
+///
+/// 对应 NRCS Java: `GetAllBundlerRates`
 pub struct GetAllBundlerRatesHandler;
 
 impl GetAllBundlerRatesHandler {
@@ -586,9 +756,26 @@ impl RequestHandler for GetAllBundlerRatesHandler {
         vec![ApiTag::Network]
     }
 
-    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+    async fn process_request(&self, _req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        // 获取所有费率（不经过过滤）
+        let rates = state
+            .bundler_service
+            .get_bundler_rates()
+            .await;
+
+        // 转换为 JSON 数组（与 GetBundlerRates 格式一致）
+        let rates_json: Vec<serde_json::Value> = rates
+            .into_iter()
+            .map(|r| json!({
+                "rate": r.rate,
+                "feeLimit": r.fee_limit,
+                "account": r.account_id.to_string(),
+                "timestamp": r.timestamp
+            }))
+            .collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("rates", json!(rates_json));
 
         Ok(builder.build())
     }

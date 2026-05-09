@@ -2,6 +2,9 @@
 
 use std::sync::Arc;
 
+use crate::account_query_service::AccountQueryServiceApi;
+use crate::bundler_service::BundlerServiceApi;
+use crate::dgs_service::DGSServiceApi;
 use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, DbPool};
 use tx_engine::TransactionProcessor;
 use ::account::AccountManager;
@@ -43,6 +46,12 @@ pub struct ApiState {
     pub account_asset_repo: Arc<dyn AccountAssetRepository>,
     pub p2p_manager: Option<Arc<P2PManager>>,
     pub forging_service: Option<Arc<dyn ForgingApi>>,
+    /// Bundler 服务（用于交易打包管理）
+    pub bundler_service: Arc<dyn BundlerServiceApi>,
+    /// DGS 商城服务（用于商品和购买记录查询）
+    pub dgs_service: Arc<dyn DGSServiceApi>,
+    /// 账户查询服务（用于高级账户查询）
+    pub account_query_service: Arc<dyn AccountQueryServiceApi>,
     pub db_pool: Option<DbPool>,
     /// 允许访问 API 的 IP 白名单 (对应 Java: API.allowedBotHosts)
     /// None 或 Vec::empty() 表示允许所有 (默认)
