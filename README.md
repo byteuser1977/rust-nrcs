@@ -111,6 +111,56 @@ RUST_LOG=debug cargo run -p nrcs-node
 # 在 config/local.toml 中添加: log_level = "debug"
 ```
 
+### 访问 API 测试页面
+
+启动节点后，通过浏览器访问以下地址打开 **API 测试控制台**：
+
+```bash
+# 本地测试页面（表单提交到本地 /nrcs）
+open http://localhost:8080/test
+
+# 代理测试页面（表单提交到远程 /nrcs-proxy）
+open http://localhost:8080/test-proxy
+```
+
+> **默认端口**：`config/default.toml` 中 `api.port = 8080`，如已修改请使用对应端口
+
+#### 页面功能说明
+
+| 功能 | 说明 |
+|------|------|
+| **左侧导航栏** | 按 ApiTag 分类浏览：ALL（全部）、SELECTED（选中）、Accounts、Blocks、Transactions 等 22 个分类 |
+| **API 搜索框** | 右上角 Search 输入框，回车搜索 API 名称 |
+| **API 表单面板** | 每个 API 一个可折叠面板，包含参数输入表单和 JSON 响应显示区 |
+| **新窗口查看** | 点击面板标题右侧的 🪟 图标，在新标签页中单独查看该 API |
+| **多选功能** | 勾选 API 面板前的复选框 → 点击顶部下拉菜单 → Select All Displayed (Add/Replace) |
+| **字段过滤** | 点击 "Show Non-Empty Fields" 按钮，隐藏所有空参数输入框；再次点击恢复 |
+| **Tab 过滤** | 点击 "Show Open Tabs" 按钮，仅显示已展开的面板；再次点击恢复 |
+| **Cookie 持久化** | 选中的 API 列表自动保存到 Cookie（30天过期），刷新页面不丢失 |
+
+#### URL 参数
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| 无参数 | 显示全部 API（按字母排序） | `/test` |
+| `requestTag` | 仅显示指定分类下的 API | `/test?requestTag=ACCOUNTS` |
+| `requestType` | 单独显示某个 API（自动展开） | `/test?requestType=GetAccount` |
+| `requestTypes` | 显示多个选中的 API（下划线分隔） | `/test?requestTypes=GetAccount_GetBalance_GetBlock` |
+
+#### 表单提交
+
+- **POST 方式**：填写参数后点击 Submit，右侧面板显示格式化的 JSON 响应
+- **GET URI**：非 POST-only 的 API 会自动生成 "Open GET URL" 链接，可直接在浏览器中访问
+- **文件上传**：支持 `fileParameter` 类型的 API（如 UploadTaggedData），自动切换为 multipart/form-data 编码
+
+#### 与 Java NRCS 完全兼容
+
+本页面与 Java 版 [APITestServlet](nrcs-main/src/main/java/com/bytechain/nrcs/http/test/APITestServlet.java) 完全对齐：
+- 相同的 Bootstrap UI 布局
+- 相同的 API 分类体系（22 个 ApiTag）
+- 相同的表单交互逻辑（ats.js + ats.util.js）
+- 支持 `/test`（本地）和 `/test-proxy`（代理）双模式
+
 ### 运行测试
 
 ```bash

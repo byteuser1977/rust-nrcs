@@ -1,6 +1,7 @@
 //! API 测试页面
 //!
 //! 与 Java 版本 APITestServlet 完全对齐
+//! 参考: com.bytechain.nrcs.http.test.APITestServlet
 
 use axum::{
     extract::Query,
@@ -15,11 +16,37 @@ use crate::api_tag::ApiTag;
 pub async fn api_test_page(
     Query(params): Query<HashMap<String, String>>,
 ) -> Response {
+    build_test_page_response(&params, "/test", "/nrcs")
+}
+
+pub async fn api_test_page_proxy(
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    build_test_page_response(&params, "/test-proxy", "/nrcs-proxy")
+}
+
+fn build_test_page_response(
+    params: &HashMap<String, String>,
+    servlet_path: &str,
+    form_action: &str,
+) -> Response {
     let request_tag = params.get("requestTag").map(|s| s.as_str()).unwrap_or("");
     let request_type = params.get("requestType");
-    
-    let html = generate_test_html(request_tag, request_type);
-    
+    let request_types = params.get("requestTypes");
+    let has_request_type = request_type.is_some();
+    let has_request_types = params.contains_key("requestTypes");
+
+    let html = generate_test_html(
+        servlet_path,
+        form_action,
+        request_tag,
+        request_type,
+        request_types,
+        has_request_type,
+        has_request_types,
+        params,
+    );
+
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "text/html; charset=UTF-8")
@@ -30,18 +57,40 @@ pub async fn api_test_page(
         .unwrap()
 }
 
-fn generate_test_html(request_tag: &str, request_type: Option<&String>) -> String {
+#[allow(clippy::too_many_arguments)]
+fn generate_test_html(
+    servlet_path: &str,
+    form_action: &str,
+    request_tag: &str,
+    request_type: Option<&String>,
+    request_types: Option<&String>,
+    has_request_type: bool,
+    has_request_types: bool,
+    params: &HashMap<String, String>,
+) -> String {
     let mut html = String::new();
-    
+    let mut api_calls: Vec<String> = Vec::new();
+
     html.push_str(HEADER_1);
-    html.push_str(&build_links(request_tag));
+    html.push_str(&build_links(request_tag, has_request_type, has_request_types));
     html.push_str(HEADER_2);
-    
-    if let Some(rt) = request_type {
-        if let Some(handler) = get_all_handlers().get(rt) {
-            html.push_str(&form(rt, true, handler.parameters(), handler.require_post(), handler.file_parameter()));
+
+    if has_request_type {
+        if let Some(rt) = request_type {
+            if let Some(handler) = get_all_handlers().get(rt) {
+                html.push_str(&form(
+                    rt,
+                    true,
+                    handler.parameters(),
+                    handler.require_post(),
+                    handler.file_parameter(),
+                    form_action,
+                    params,
+                ));
+                api_calls.push(rt.clone());
+            }
         }
-    } else {
+    } else if !has_request_types {
         let apis = if request_tag.is_empty() {
             get_all_handlers()
                 .keys().cloned()
@@ -55,76 +104,118 @@ fn generate_test_html(request_tag: &str, request_type: Option<&String>) -> Strin
                     .collect::<Vec<_>>()
             }
         };
-        
+
         let mut apis_sorted = apis;
         apis_sorted.sort();
-        
+
         for api_name in apis_sorted {
             if let Some(handler) = get_all_handlers().get(&api_name) {
-                html.push_str(&form(&api_name, false, handler.parameters(), handler.require_post(), handler.file_parameter()));
+                html.push_str(&form(
+                    &api_name,
+                    false,
+                    handler.parameters(),
+                    handler.require_post(),
+                    handler.file_parameter(),
+                    form_action,
+                    params,
+                ));
+                api_calls.push(api_name.clone());
+            }
+        }
+    } else {
+        let types_str = request_types.map(|s| s.as_str()).unwrap_or("");
+        if types_str.is_empty() {
+            html.push_str(&full_text_message("No API calls selected.", "info"));
+        } else {
+            let mut selected: Vec<&str> = types_str.split('_').collect();
+            selected.sort();
+            for api_name in &selected {
+                if let Some(handler) = get_all_handlers().get(*api_name) {
+                    html.push_str(&form(
+                        api_name,
+                        false,
+                        handler.parameters(),
+                        handler.require_post(),
+                        handler.file_parameter(),
+                        form_action,
+                        params,
+                    ));
+                    api_calls.push(api_name.to_string());
+                }
             }
         }
     }
-    
+
     html.push_str(FOOTER_1);
-    html.push_str(&build_js_calls(request_type, request_tag));
+    html.push_str(&build_js_calls(servlet_path, &api_calls));
     html.push_str(FOOTER_2);
-    
+
     html
 }
 
 fn parse_tag(s: &str) -> Result<ApiTag, ()> {
     for tag in ApiTag::all() {
-        if tag.display_name() == s || format!("{:?}", tag) == s {
+        if tag.display_name() == s || tag.name() == s {
             return Ok(*tag);
         }
     }
     Err(())
 }
 
-fn build_links(request_tag: &str) -> String {
+fn build_links(request_tag: &str, has_request_type: bool, has_request_types: bool) -> String {
     let mut buf = String::new();
-    
+
     buf.push_str("<li");
-    if request_tag.is_empty() {
+    if request_tag.is_empty() && !has_request_types && !has_request_type {
         buf.push_str(" class='active'");
     }
     buf.push_str("><a href='/test'>ALL</a></li>\n");
-    
-    buf.push_str("<li><a href='/test?requestTypes=' id='navi-selected'>SELECTED</a></li>\n");
-    
+
+    buf.push_str("<li");
+    if has_request_types {
+        buf.push_str(" class='active'");
+    }
+    buf.push_str("><a href='/test?requestTypes=' id='navi-selected'>SELECTED</a></li>\n");
+
     for tag in ApiTag::all() {
         let apis = get_apis_by_tag(*tag);
         if !apis.is_empty() {
             buf.push_str("<li");
-            if request_tag == tag.display_name() {
+            if request_tag == tag.name() {
                 buf.push_str(" class='active'");
             }
             buf.push_str("><a href='/test?requestTag=");
-            buf.push_str(tag.display_name());
+            buf.push_str(tag.name());
             buf.push_str("'>");
             buf.push_str(tag.display_name());
             buf.push_str("</a></li>\n");
         }
     }
-    
+
     buf
 }
 
+fn full_text_message(msg: &str, msg_type: &str) -> String {
+    format!("<div class='alert alert-{}' role='alert'>{}</div>\n", msg_type, msg)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn form(
     request_type: &str,
     single_view: bool,
     parameters: Vec<&'static str>,
     require_post: bool,
     file_parameter: Option<&'static str>,
+    form_action: &str,
+    params: &HashMap<String, String>,
 ) -> String {
     let mut buf = String::new();
-    
+
     buf.push_str("<div class='panel panel-default api-call-All' ");
     buf.push_str("id='api-call-");
     buf.push_str(request_type);
     buf.push_str("'>\n");
-    
+
     buf.push_str("<div class='panel-heading'>\n");
     buf.push_str("<h4 class='panel-title'>\n");
     buf.push_str("<a data-toggle='collapse' class='collapse-link' data-target='#collapse");
@@ -132,7 +223,7 @@ fn form(
     buf.push_str("' href='#'>");
     buf.push_str(request_type);
     buf.push_str("</a>\n");
-    
+
     buf.push_str("<span style='float:right;font-weight:normal;font-size:14px;'>\n");
     if !single_view {
         buf.push_str("<a href='/test?requestType=");
@@ -140,7 +231,7 @@ fn form(
         buf.push_str("' target='_blank' style='font-weight:normal;font-size:14px;color:#777;'>\n<span class='glyphicon glyphicon-new-window'></span>\n</a>");
         buf.push_str(" &nbsp;&nbsp;\n");
     }
-    
+
     buf.push_str("&nbsp;&nbsp;&nbsp;\n<input type='checkbox' class='api-call-sel-ALL' ");
     buf.push_str("id='api-call-sel-");
     buf.push_str(request_type);
@@ -148,7 +239,7 @@ fn form(
     buf.push_str("</span>\n");
     buf.push_str("</h4>\n");
     buf.push_str("</div> <!-- panel-heading -->\n");
-    
+
     buf.push_str("<div id='collapse");
     buf.push_str(request_type);
     buf.push_str("' class='panel-collapse collapse");
@@ -156,21 +247,33 @@ fn form(
         buf.push_str(" in");
     }
     buf.push_str("'>\n");
-    
+
     buf.push_str("<div class='panel-body'>\n");
-    buf.push_str("<form action='/nrcs' method='POST' ");
+    buf.push_str("<form action='");
+    buf.push_str(form_action);
+    buf.push_str("' method='POST' ");
     if file_parameter.is_some() {
         buf.push_str("enctype='multipart/form-data' ");
     }
-    buf.push_str("onsubmit='return ATS.submitForm(this)'>\n");
-    
+    buf.push_str("onsubmit='return ATS.submitForm(this");
+    if let Some(fp) = file_parameter {
+        buf.push_str(", \"");
+        buf.push_str(fp);
+        buf.push('"');
+    }
+    buf.push_str(")'>\n");
+
+    buf.push_str("<input type='hidden' id='formAction' value='");
+    buf.push_str(form_action);
+    buf.push_str("'/>\n");
+
     buf.push_str("<input type='hidden' name='requestType' value='");
     buf.push_str(request_type);
     buf.push_str("'/>\n");
-    
+
     buf.push_str("<div class='col-xs-12 col-lg-6' style='min-width: 40%;'>\n");
     buf.push_str("<table class='table'>\n");
-    
+
     if let Some(fp) = file_parameter {
         buf.push_str("<tr class='api-call-input-tr'>\n");
         buf.push_str("<td>");
@@ -184,13 +287,13 @@ fn form(
         buf.push_str("' style='width:100%;min-width:200px;'/></td>\n");
         buf.push_str("</tr>\n");
     }
-    
+
     for parameter in &parameters {
         buf.push_str("<tr class='api-call-input-tr'>\n");
         buf.push_str("<td>");
         buf.push_str(parameter);
         buf.push_str(":</td>\n");
-        
+
         if is_textarea(parameter) {
             buf.push_str("<td><textarea name='");
             buf.push_str(parameter);
@@ -198,22 +301,34 @@ fn form(
         } else if is_password(parameter) {
             buf.push_str("<td><input type='password' name='");
             buf.push_str(parameter);
-            buf.push_str("' style='width:100%;min-width:200px;'/></td>\n");
+            buf.push_str("' ");
+            if let Some(value) = params.get(*parameter) {
+                buf.push_str("value='");
+                buf.push_str(&value.replace('\'', "&quot;"));
+                buf.push_str("' ");
+            }
+            buf.push_str("style='width:100%;min-width:200px;'/></td>\n");
         } else {
             buf.push_str("<td><input type='text' name='");
             buf.push_str(parameter);
-            buf.push_str("' style='width:100%;min-width:200px;'/></td>\n");
+            buf.push_str("' ");
+            if let Some(value) = params.get(*parameter) {
+                buf.push_str("value='");
+                buf.push_str(&value.replace('\'', "&quot;"));
+                buf.push_str("' ");
+            }
+            buf.push_str("style='width:100%;min-width:200px;'/></td>\n");
         }
-        
+
         buf.push_str("</tr>\n");
     }
-    
+
     buf.push_str("<tr>\n");
     buf.push_str("<td colspan='2'><input type='submit' class='btn btn-default' value='submit'/></td>\n");
     buf.push_str("</tr>\n");
     buf.push_str("</table>\n");
     buf.push_str("</div>\n");
-    
+
     buf.push_str("<div class='col-xs-12 col-lg-6' style='min-width: 50%;'>\n");
     buf.push_str("<h5 style='margin-top:0px;'>\n");
     if require_post {
@@ -224,12 +339,12 @@ fn form(
     buf.push_str("Response</h5>\n");
     buf.push_str("<pre class='hljs json'><code class='result'>JSON response</code></pre>\n");
     buf.push_str("</div>\n");
-    
+
     buf.push_str("</form>\n");
     buf.push_str("</div> <!-- panel-body -->\n");
     buf.push_str("</div> <!-- panel-collapse -->\n");
     buf.push_str("</div> <!-- panel -->\n");
-    
+
     buf
 }
 
@@ -241,19 +356,27 @@ fn is_textarea(parameter: &str) -> bool {
     parameter == "website"
 }
 
-fn build_js_calls(request_type: Option<&String>, _request_tag: &str) -> String {
+fn build_js_calls(servlet_path: &str, api_calls: &[String]) -> String {
     let mut buf = String::new();
-    
-    buf.push_str("\n    $('#nodeType').val('Full Node');\n");
-    buf.push_str("    $('#servletPath').val('/test');\n");
-    
-    if let Some(rt) = request_type {
+
+    buf.push_str("\n    $('#nodeType').val('");
+    buf.push_str(get_node_type());
+    buf.push_str("');\n");
+    buf.push_str("    $('#servletPath').val('");
+    buf.push_str(servlet_path);
+    buf.push_str("');\n");
+
+    for api_call in api_calls {
         buf.push_str("    ATS.apiCalls.push('");
-        buf.push_str(rt);
+        buf.push_str(api_call);
         buf.push_str("');\n");
     }
-    
+
     buf
+}
+
+fn get_node_type() -> &'static str {
+    "Full Node"
 }
 
 const HEADER_1: &str = r#"<!DOCTYPE html>
@@ -325,32 +448,9 @@ const FOOTER_1: &str = r#"</div> <!-- panel-group -->
 <script src='ui/js/3rdparty/jquery.js'></script>
 <script src='ui/js/3rdparty/bootstrap.js' type='text/javascript'></script>
 <script src='ui/js/3rdparty/highlight.pack.js' type='text/javascript'></script>
+<script src='ui/js/ats.js' type='text/javascript'></script>
+<script src='ui/js/ats.util.js' type='text/javascript'></script>
 <script>
-var ATS = {
-    apiCalls: [],
-    submitForm: function(form) {
-        var formData = new FormData(form);
-        var resultEl = $(form).find('.result');
-        resultEl.text('Loading...');
-        
-        $.ajax({
-            url: $(form).attr('action'),
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            success: function(data) {
-                resultEl.text(JSON.stringify(data, null, 2));
-                hljs.highlightBlock(resultEl[0]);
-            },
-            error: function(xhr, status, error) {
-                resultEl.text('Error: ' + error);
-            }
-        });
-        return false;
-    }
-};
-
 $(document).ready(function() {
 "#;
 

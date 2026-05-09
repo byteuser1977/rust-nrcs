@@ -1,0 +1,12 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2021"
+description = "Common utilities and shared functionality for NRCS blockchain"
+license = "Apache-2.0"
+authors = ["ByteChain <dev@bytechain.cn>"]
+
+[dependencies]
+regex = "1"
+
+[dev-dependencies]

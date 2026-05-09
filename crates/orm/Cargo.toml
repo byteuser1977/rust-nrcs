@@ -19,6 +19,9 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 anyhow = "1.0"
 hex = "0.4"
 
+# 公共工具
+common = { path = "../common" }
+
 # 区块链核心类型
 blockchain-types = { path = "../blockchain-types" }
 

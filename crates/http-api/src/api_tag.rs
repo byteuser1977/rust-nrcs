@@ -78,6 +78,34 @@ pub enum ApiTag {
 }
 
 impl ApiTag {
+    pub fn name(&self) -> &'static str {
+        match self {
+            ApiTag::Accounts => "ACCOUNTS",
+            ApiTag::AccountControl => "ACCOUNT_CONTROL",
+            ApiTag::Aliases => "ALIASES",
+            ApiTag::Ae => "AE",
+            ApiTag::Blocks => "BLOCKS",
+            ApiTag::CreateTransaction => "CREATE_TRANSACTION",
+            ApiTag::Dgs => "DGS",
+            ApiTag::Forging => "FORGING",
+            ApiTag::Messages => "MESSAGES",
+            ApiTag::Ms => "MS",
+            ApiTag::Network => "NETWORK",
+            ApiTag::Phasing => "PHASING",
+            ApiTag::Search => "SEARCH",
+            ApiTag::Info => "INFO",
+            ApiTag::Shuffling => "SHUFFLING",
+            ApiTag::Data => "DATA",
+            ApiTag::Tokens => "TOKENS",
+            ApiTag::Transactions => "TRANSACTIONS",
+            ApiTag::Vs => "VS",
+            ApiTag::Utils => "UTILS",
+            ApiTag::Debug => "DEBUG",
+            ApiTag::Addons => "ADDONS",
+            ApiTag::Ce => "CE",
+        }
+    }
+
     pub fn display_name(&self) -> &'static str {
         match self {
             ApiTag::Accounts => "Accounts",

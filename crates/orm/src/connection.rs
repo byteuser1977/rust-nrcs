@@ -114,7 +114,11 @@ impl DatabaseConfig {
 /// # }
 /// ```
 pub async fn create_pool(config: &DatabaseConfig) -> anyhow::Result<AnyPool> {
-    info!("Creating {} database pool: {}", config.db_type, config.url);
+    info!(
+        "Creating {} database pool: {}",
+        config.db_type,
+        mask_url(&config.url)
+    );
 
     let options: AnyConnectOptions = config.url.parse()
         .map_err(|e| anyhow::anyhow!("Invalid database URL {}: {}", config.url, e))?;
@@ -216,5 +220,17 @@ mod tests {
             mask_url("postgresql://admin:secret123@db.example.com:5432/production"),
             "postgresql://****:****@db.example.com:5432/production"
         );
+    }
+
+    #[test]
+    fn test_mask_url_real_world_example() {
+        let url = "postgres://nrcs_user:password@localhost:5432/nrcs_db";
+        let masked = mask_url(url);
+        
+        assert!(masked.contains("postgres://"));
+        assert!(masked.contains("****:****@"));
+        assert!(masked.contains("localhost:5432/nrcs_db"));
+        assert!(!masked.contains("nrcs_user"));
+        assert!(!masked.contains("password"));
     }
 }
