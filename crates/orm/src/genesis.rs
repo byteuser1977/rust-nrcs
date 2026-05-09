@@ -7,6 +7,7 @@ use blockchain_types::constants::{GENESIS_BLOCK_ID, INITIAL_BASE_TARGET, ONE_NRC
 use crate::models::*;
 use crate::repository::*;
 use crate::RepositoryResult;
+use tracing::info;
 
 /// Load genesis configuration from config/genesis.json.
 /// Returns (timestamp, Vec<(account_id, balance)>)
@@ -119,7 +120,9 @@ pub async fn ensure_genesis(
     guaranteed_balance_repo: &dyn AccountGuaranteedBalanceRepository,
 ) -> RepositoryResult<()> {
     let count = block_repo.count().await?;
+
     if count > 0 {
+        info!("[Genesis] Genesis block already exists, skipping creation");
         return Ok(());
     }
 
@@ -165,6 +168,7 @@ pub async fn ensure_genesis(
         generator_id,
     };
 
+    info!("[Genesis] Creating genesis block (id={}, height={})", block_id, height);
     block_repo.insert(&block_model).await?;
 
     for (account_id, balance) in accounts {
@@ -187,6 +191,7 @@ pub async fn ensure_genesis(
             guaranteed_balance_repo.upsert_additions(account_id, height, balance_nqt).await?;
         }
     }
+    info!("[Genesis] ✓ Genesis block and {} accounts created successfully", _unix_timestamp);
 
     let genesis_tx_ids: Vec<i64> = vec![
         -6309664432798542337i64,

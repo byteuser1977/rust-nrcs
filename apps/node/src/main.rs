@@ -119,6 +119,8 @@ struct P2PConfig {
 struct APIConfig {
     host: String,
     port: u16,
+    #[serde(default)]
+    allowed_bot_hosts: Vec<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -826,6 +828,8 @@ async fn start_node(
         account_asset_repo,
         p2p_manager: None,
         forging_service: Some(forging_service),
+        db_pool: Some(pool.clone()),
+        allowed_bot_hosts: cfg.api.allowed_bot_hosts.clone(),
     };
     
     let api_addr: SocketAddr = format!("{}:{}", cfg.api.host, cfg.api.port)
@@ -841,7 +845,10 @@ async fn start_node(
     tokio::spawn(async move {
         let listener = tokio::net::TcpListener::bind(api_addr).await.unwrap();
         info!("HTTP API server starting on {}", api_addr);
-        if let Err(e) = axum::serve(listener, api_router).await {
+        if let Err(e) = axum::serve(
+            listener,
+            api_router.into_make_service_with_connect_info::<SocketAddr>(),
+        ).await {
             error!("HTTP API server error: {}", e);
         }
     });

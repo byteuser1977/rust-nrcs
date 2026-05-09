@@ -132,7 +132,7 @@ impl WebSocketConnection {
             rx,
         ).await {
             Ok(Ok(Ok(response_str))) => {
-                debug!("[ConnectionPool] Response received for request {} from {}", request_id, self.addr);
+                debug!("[ConnectionPool] Response received for request {} from {} ({} bytes)", request_id, self.addr, response_str.len());
                 serde_json::from_str::<serde_json::Value>(&response_str)
                     .map_err(|e| P2PError::deserialization_error(format!("{}", e)))
             }
@@ -145,7 +145,7 @@ impl WebSocketConnection {
                 Err(P2PError::from_str(ErrorCode::InternalError, format!("{}", e)))
             }
             Err(_) => {
-                warn!("[ConnectionPool] Timeout waiting for response {} from {}", request_id, self.addr);
+                warn!("[ConnectionPool] Timeout waiting for response {} from {} after {}ms", request_id, self.addr, config.read_timeout_ms);
                 // 清理过期的 pending request
                 let mut pending = self.pending_requests.write().await;
                 pending.remove(&request_id);

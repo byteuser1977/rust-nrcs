@@ -16,6 +16,10 @@ pub struct ApiConfig {
     pub cors_allowed_origins: Vec<String>,
     /// 是否启用调试日志
     pub debug: bool,
+    /// 允许访问 API 的白名单 IP 列表（对应 Java: nrcs.allowedBotHosts）
+    /// 空 Vec 表示允许所有连接
+    #[serde(default)]
+    pub allowed_bot_hosts: Vec<String>,
 }
 
 impl Default for ApiConfig {
@@ -26,6 +30,7 @@ impl Default for ApiConfig {
             database_url: "postgres://user:password@localhost/nrcs_db".to_string(),
             cors_allowed_origins: vec!["*".to_string()],
             debug: false,
+            allowed_bot_hosts: Vec::new(),
         }
     }
 }

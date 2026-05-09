@@ -4,32 +4,48 @@
 //! 参考: com.bytechain.nrcs.http.test.APITestServlet
 
 use axum::{
-    extract::Query,
+    extract::{ConnectInfo, Query, State},
     http::{header, StatusCode},
     response::Response,
 };
 use std::collections::HashMap;
+use std::net::SocketAddr;
 
 use crate::api_registry::{get_all_handlers, get_apis_by_tag};
 use crate::api_tag::ApiTag;
+use crate::state::ApiState;
 
 pub async fn api_test_page(
+    State(state): State<ApiState>,
+    ConnectInfo(remote_addr): ConnectInfo<SocketAddr>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Response {
-    build_test_page_response(&params, "/test", "/nrcs")
+    build_test_page_response(&state, &params, "/test", "/nrcs", remote_addr)
 }
 
 pub async fn api_test_page_proxy(
+    State(state): State<ApiState>,
+    ConnectInfo(remote_addr): ConnectInfo<SocketAddr>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Response {
-    build_test_page_response(&params, "/test-proxy", "/nrcs-proxy")
+    build_test_page_response(&state, &params, "/test-proxy", "/nrcs-proxy", remote_addr)
 }
 
 fn build_test_page_response(
+    state: &ApiState,
     params: &HashMap<String, String>,
     servlet_path: &str,
     form_action: &str,
+    remote_addr: SocketAddr,
 ) -> Response {
+    // 访问控制（对应 Java: API.isAllowed(remoteHost)）
+    if !is_allowed(state, remote_addr) {
+        return Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body("Forbidden".into())
+            .unwrap();
+    }
+
     let request_tag = params.get("requestTag").map(|s| s.as_str()).unwrap_or("");
     let request_type = params.get("requestType");
     let request_types = params.get("requestTypes");
@@ -37,6 +53,7 @@ fn build_test_page_response(
     let has_request_types = params.contains_key("requestTypes");
 
     let html = generate_test_html(
+        state,
         servlet_path,
         form_action,
         request_tag,
@@ -57,8 +74,23 @@ fn build_test_page_response(
         .unwrap()
 }
 
+/// 访问控制检查（对应 Java: API.isAllowed(remoteHost)）
+/// 当 allowed_bot_hosts 为空时，允许所有连接（默认行为）
+fn is_allowed(state: &ApiState, remote_addr: SocketAddr) -> bool {
+    if state.allowed_bot_hosts.is_empty() {
+        return true;
+    }
+    let remote_ip = remote_addr.ip().to_string();
+    if state.allowed_bot_hosts.contains(&remote_ip) {
+        return true;
+    }
+    // 检查是否有 "*" 通配符（允许所有）
+    state.allowed_bot_hosts.contains(&"*".to_string())
+}
+
 #[allow(clippy::too_many_arguments)]
 fn generate_test_html(
+    state: &ApiState,
     servlet_path: &str,
     form_action: &str,
     request_tag: &str,
@@ -147,7 +179,7 @@ fn generate_test_html(
     }
 
     html.push_str(FOOTER_1);
-    html.push_str(&build_js_calls(servlet_path, &api_calls));
+    html.push_str(&build_js_calls(state, servlet_path, &api_calls));
     html.push_str(FOOTER_2);
 
     html
@@ -356,11 +388,11 @@ fn is_textarea(parameter: &str) -> bool {
     parameter == "website"
 }
 
-fn build_js_calls(servlet_path: &str, api_calls: &[String]) -> String {
+fn build_js_calls(state: &ApiState, servlet_path: &str, api_calls: &[String]) -> String {
     let mut buf = String::new();
 
     buf.push_str("\n    $('#nodeType').val('");
-    buf.push_str(get_node_type());
+    buf.push_str(get_node_type(state));
     buf.push_str("');\n");
     buf.push_str("    $('#servletPath').val('");
     buf.push_str(servlet_path);
@@ -375,7 +407,9 @@ fn build_js_calls(servlet_path: &str, api_calls: &[String]) -> String {
     buf
 }
 
-fn get_node_type() -> &'static str {
+fn get_node_type(_state: &ApiState) -> &'static str {
+    // 对应 Java: Constant.isLightClient / APIProxy.enableAPIProxy
+    // Rust 当前仅支持 Full Node 模式
     "Full Node"
 }
 

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository};
+use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, DbPool};
 use tx_engine::TransactionProcessor;
 use ::account::AccountManager;
 use p2p::P2PManager;
@@ -43,4 +43,8 @@ pub struct ApiState {
     pub account_asset_repo: Arc<dyn AccountAssetRepository>,
     pub p2p_manager: Option<Arc<P2PManager>>,
     pub forging_service: Option<Arc<dyn ForgingApi>>,
+    pub db_pool: Option<DbPool>,
+    /// 允许访问 API 的 IP 白名单 (对应 Java: API.allowedBotHosts)
+    /// None 或 Vec::empty() 表示允许所有 (默认)
+    pub allowed_bot_hosts: Vec<String>,
 }

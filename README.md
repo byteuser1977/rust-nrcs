@@ -161,6 +161,61 @@ open http://localhost:8080/test-proxy
 - 相同的表单交互逻辑（ats.js + ats.util.js）
 - 支持 `/test`（本地）和 `/test-proxy`（代理）双模式
 
+### 访问 Database Shell
+
+启动节点后，通过浏览器访问以下地址打开 **数据库 SQL 交互终端**：
+
+```bash
+open http://localhost:8080/dbshell
+```
+
+> **默认端口**：`config/default.toml` 中 `api.port = 8080`，如已修改请使用对应端口
+
+#### 功能说明
+
+| 功能 | 说明 |
+|------|------|
+| **SQL 执行** | 在输入框中输入任意 SQL 语句，回车提交，结果追加显示 |
+| **终端式交互** | 每次执行结果追加到输出区域，支持连续操作 |
+| **查询结果格式化** | SELECT 查询结果以表格形式展示（列对齐 + 行数统计） |
+| **修改语句反馈** | INSERT/UPDATE/DELETE 显示影响行数 |
+| **help 命令** | 输入 `help` 查看使用帮助 |
+| **PRAGMA 支持** | 支持 SQLite PRAGMA 命令（如 `PRAGMA table_info(block)`） |
+
+#### 密码保护
+
+Database Shell 默认启用密码保护，通过环境变量配置：
+
+```bash
+# 设置管理员密码
+export NRCS_ADMIN_PASSWORD=your_secure_password
+
+# 禁用密码保护（仅建议在本地开发环境使用）
+export NRCS_DISABLE_ADMIN_PASSWORD=true
+
+# 启动节点
+cargo run -p nrcs-node
+```
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `NRCS_ADMIN_PASSWORD` | 管理员密码，访问 /dbshell 时需要输入 | 空（未配置时拒绝访问） |
+| `NRCS_DISABLE_ADMIN_PASSWORD` | 设为 `true` 禁用密码保护 | 未设置 |
+
+#### 安全机制
+
+- **防暴力破解**：同一 IP 连续 25 次密码错误后锁定 1 小时
+- **IP 追踪**：最多追踪 1000 个 IP 的错误计数，超出时淘汰最旧记录
+- **无密码配置保护**：未设置密码时拒绝访问（而非允许无密码访问）
+
+#### 与 Java NRCS 兼容
+
+本功能与 Java 版 [DbShellServlet](nrcs-main/src/main/java/com/bytechain/nrcs/http/DbShellServlet.java) 对齐：
+- 相同的 Web 终端式交互体验（同步 XHR + 结果追加）
+- 相同的密码保护机制（adminPassword + 防暴力破解锁定）
+- 相同的 URL 和表单结构（`/dbshell`，`line` 参数）
+- 差异：Java 使用 H2 Shell 工具执行 SQL，Rust 使用 SQLx 直接执行
+
 ### 运行测试
 
 ```bash

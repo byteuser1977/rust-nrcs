@@ -29,6 +29,7 @@ reqwest = { version = "0.11", features = ["json"] }
 blockchain-types = { path = "../blockchain-types" }
 
 orm = { path = "../orm" }
+sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "postgres", "sqlite", "any"] }
 tx-engine = { path = "../tx-engine" }
 account = { path = "../account" }
 crypto = { path = "../crypto" }
@@ -45,6 +46,7 @@ serde_bytes = "0.11.19"
 async-trait = "0.1"
 once_cell = "1.19"
 parking_lot = "0.12"
+urlencoding = "2.1"
 
 [dev-dependencies]
 criterion = "0.5"

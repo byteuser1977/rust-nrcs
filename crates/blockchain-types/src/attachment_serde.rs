@@ -1995,7 +1995,7 @@ mod tests {
 
     #[test]
     fn test_binary_serialize_asset_issuance() {
-        let json_str = r#"{"name":"TEST","description":"Test Asset","quantityQNT":"100000","decimals":2}"#;
+        let json_str = r#"{"name":"TEST","description":"Test Asset","quantityQNT":"100000","decimals":2,"version.AssetIssuance":1}"#;
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
@@ -2011,7 +2011,7 @@ mod tests {
 
     #[test]
     fn test_binary_serialize_asset_transfer() {
-        let json_str = r#"{"asset":"12345678901234567","quantityQNT":"1000"}"#;
+        let json_str = r#"{"asset":"12345678901234567","quantityQNT":"1000","version.AssetTransfer":1}"#;
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
@@ -2030,7 +2030,7 @@ mod tests {
 
     #[test]
     fn test_binary_serialize_payment_with_message() {
-        let json_str = r#"{"message":"Hello World"}"#;
+        let json_str = r#"{"message":"Hello World","version.Message":1}"#;
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 
@@ -2049,7 +2049,7 @@ mod tests {
 
     #[test]
     fn test_detect_flags() {
-        let json_str = r#"{"message":"hello","recipientPublicKey":"abc123"}"#;
+        let json_str = r#"{"message":"hello","recipientPublicKey":"abc123","version.Message":1,"version.PublicKeyAnnouncement":1}"#;
         let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
         let att_map = val.as_object().unwrap();
 

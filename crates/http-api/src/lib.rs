@@ -12,6 +12,7 @@ pub mod api_tag;
 pub mod api_registry;
 pub mod config;
 pub mod core;
+pub mod db_shell;
 pub mod dto;
 pub mod error;
 pub mod handlers;
