@@ -1006,6 +1006,8 @@ impl AccountRepository for SqliteAccountRepository {
             }
         }
 
+        let update_height = if account_id == CREATOR_ID { 0 } else { height };
+
         let result = sqlx::query(
             r#"
             UPDATE account
@@ -1014,7 +1016,7 @@ impl AccountRepository for SqliteAccountRepository {
             "#,
         )
         .bind(amount)
-        .bind(height)
+        .bind(update_height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -1030,7 +1032,7 @@ impl AccountRepository for SqliteAccountRepository {
                 "#,
             )
             .bind(amount)
-            .bind(height)
+            .bind(if account_id == CREATOR_ID { 0 } else { height })
             .bind(account_id)
             .execute(&self.pool)
             .await
@@ -1058,6 +1060,8 @@ impl AccountRepository for SqliteAccountRepository {
             }
         }
 
+        let update_height = if account_id == CREATOR_ID { 0 } else { height };
+
         let result = sqlx::query(
             r#"
             UPDATE account
@@ -1066,7 +1070,7 @@ impl AccountRepository for SqliteAccountRepository {
             "#,
         )
         .bind(amount)
-        .bind(height)
+        .bind(update_height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -1082,7 +1086,7 @@ impl AccountRepository for SqliteAccountRepository {
                 "#,
             )
             .bind(amount)
-            .bind(height)
+            .bind(if account_id == CREATOR_ID { 0 } else { height })
             .bind(account_id)
             .execute(&self.pool)
             .await
@@ -1113,6 +1117,9 @@ impl AccountRepository for SqliteAccountRepository {
                 }
             }
         }
+
+        let update_height = if account_id == CREATOR_ID { 0 } else { height };
+
         let result = sqlx::query(
             r#"
             UPDATE account
@@ -1122,7 +1129,7 @@ impl AccountRepository for SqliteAccountRepository {
         )
         .bind(amount)
         .bind(amount)
-        .bind(height)
+        .bind(update_height)
         .bind(account_id)
         .execute(&self.pool)
         .await
@@ -1139,7 +1146,7 @@ impl AccountRepository for SqliteAccountRepository {
             )
             .bind(amount)
             .bind(amount)
-            .bind(height)
+            .bind(if account_id == CREATOR_ID { 0 } else { height })
             .bind(account_id)
             .execute(&self.pool)
             .await
