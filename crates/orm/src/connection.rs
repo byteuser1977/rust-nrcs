@@ -123,7 +123,12 @@ pub async fn create_pool(config: &DatabaseConfig) -> anyhow::Result<AnyPool> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to connect to database: {}", e))?;
 
-    info!("Successfully connected to {} database", config.db_type);
+    info!(
+        "Database connection established successfully | type={} | url={} | max_connections={}",
+        config.db_type,
+        mask_url(&config.url),
+        config.max_connections
+    );
     Ok(pool)
 }
 
@@ -135,6 +140,30 @@ pub fn detect_database_type(url: &str) -> DatabaseType {
         DatabaseType::PostgreSQL
     } else {
         DatabaseType::SQLite
+    }
+}
+
+/// Mask sensitive information (username and password) in database URL
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(
+///     mask_url("postgres://user:pass@localhost:5432/db"),
+///     "postgres://****:****@localhost:5432/db"
+/// );
+/// ```
+pub fn mask_url(url: &str) -> String {
+    if let Some(at_pos) = url.find('@') {
+        if let Some(scheme_end) = url.find("://") {
+            let scheme = &url[..scheme_end + 3];
+            let host_part = &url[at_pos..];
+            format!("{}****:****{}", scheme, host_part)
+        } else {
+            url.to_string()
+        }
+    } else {
+        url.to_string()
     }
 }
 
@@ -163,5 +192,29 @@ mod tests {
         let config = DatabaseConfig::from_url("sqlite:///tmp/nrcs.db");
         assert_eq!(config.db_type, DatabaseType::SQLite);
         assert_eq!(config.url, "sqlite:///tmp/nrcs.db");
+    }
+
+    #[test]
+    fn test_mask_url_with_credentials() {
+        assert_eq!(
+            mask_url("postgres://user:pass@localhost:5432/db"),
+            "postgres://****:****@localhost:5432/db"
+        );
+    }
+
+    #[test]
+    fn test_mask_url_without_credentials() {
+        assert_eq!(
+            mask_url("sqlite://./nrcs.db?mode=rwc"),
+            "sqlite://./nrcs.db?mode=rwc"
+        );
+    }
+
+    #[test]
+    fn test_mask_url_complex_credentials() {
+        assert_eq!(
+            mask_url("postgresql://admin:secret123@db.example.com:5432/production"),
+            "postgresql://****:****@db.example.com:5432/production"
+        );
     }
 }
