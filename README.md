@@ -2,6 +2,8 @@
 
 NRCS 区块链节点 Rust 实现，从 Java 版本重构，完全兼容 NRCS Java 节点。
 
+<br />
+
 ## 项目亮点
 
 ### 核心成就
@@ -13,26 +15,26 @@ NRCS 区块链节点 Rust 实现，从 Java 版本重构，完全兼容 NRCS Jav
 
 ### 近期优化（2026-05-07）
 
-| 优化项 | 说明 |
-|--------|------|
-| **事件驱动架构** | 完整实现 Java NRCS 兼容的事件监听器系统（AccountEvent、LedgerEvent、FundingMonitor） |
-| **多表联动更新** | 修复 SQLite/PostgreSQL 的 `increase_quantity()`/`decrease_quantity()` 同步更新问题，解决双重支付错误 |
-| **账户创建修复** | 修复 `get_or_create()` 硬编码 height=0 问题，改为动态获取当前区块高度 |
-| **数据一致性检查** | 新增 DataConsistencyChecker，自动检测跨表数据不一致（余额/资产/货币） |
-| **账本系统完整实现** | 50+ LedgerEvent 类型 + LedgerEntry 结构体，完全兼容 Java NRCS AccountLedger |
-| **FundingMonitor 完整版** | 账户监控服务，支持余额阈值检测和自动充值（日志模式已就绪） |
+| 优化项                    | 说明                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| **事件驱动架构**             | 完整实现 Java NRCS 兼容的事件监听器系统（AccountEvent、LedgerEvent、FundingMonitor）                 |
+| **多表联动更新**             | 修复 SQLite/PostgreSQL 的 `increase_quantity()`/`decrease_quantity()` 同步更新问题，解决双重支付错误 |
+| **账户创建修复**             | 修复 `get_or_create()` 硬编码 height=0 问题，改为动态获取当前区块高度                                  |
+| **数据一致性检查**            | 新增 DataConsistencyChecker，自动检测跨表数据不一致（余额/资产/货币）                                    |
+| **账本系统完整实现**           | 50+ LedgerEvent 类型 + LedgerEntry 结构体，完全兼容 Java NRCS AccountLedger                  |
+| **FundingMonitor 完整版** | 账户监控服务，支持余额阈值检测和自动充值（日志模式已就绪）                                                      |
 
 ### 近期优化（2026-05-05）
 
-| 优化项 | 说明 |
-|--------|------|
-| **PostgreSQL 测试全量通过** | 32 个 PostgreSQL 集成测试全部通过，ORM 双引擎均已生产就绪 |
-| **PostgreSQL 标识符修复** | 修复 pg.rs 中表名/列名大小写引用问题，迁移脚本标识符加引号 |
-| **Node PostgreSQL 分支启用** | 取消注释 PostgreSQL 分支，支持直接使用 PostgreSQL 启动节点 |
-| **日志系统重构** | info 日志精简（~90 处降级为 debug）、tracing 配置化（RUST_LOG / config / 默认三级优先级）、SQL 查询日志降为 debug |
-| **ORM 事务感知方法** | 新增 `insert_tx`/`update_next_block_id_tx`/`delete_by_db_id_tx` 等事务版本方法，p2p crate 不再直接依赖 sqlx |
-| **数据库无关类型** | `DbPool`（AnyPool）/ `DbTransaction` 类型别名，屏蔽底层数据库差异 |
-| **常量化** | 硬编码值统一使用 `BLOCK_VERSION`、`ONE_NRCS` 等常量 |
+| 优化项                      | 说明                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| **PostgreSQL 测试全量通过**    | 32 个 PostgreSQL 集成测试全部通过，ORM 双引擎均已生产就绪                                                      |
+| **PostgreSQL 标识符修复**     | 修复 pg.rs 中表名/列名大小写引用问题，迁移脚本标识符加引号                                                           |
+| **Node PostgreSQL 分支启用** | 取消注释 PostgreSQL 分支，支持直接使用 PostgreSQL 启动节点                                                   |
+| **日志系统重构**               | info 日志精简（\~90 处降级为 debug）、tracing 配置化（RUST\_LOG / config / 默认三级优先级）、SQL 查询日志降为 debug       |
+| **ORM 事务感知方法**           | 新增 `insert_tx`/`update_next_block_id_tx`/`delete_by_db_id_tx` 等事务版本方法，p2p crate 不再直接依赖 sqlx |
+| **数据库无关类型**              | `DbPool`（AnyPool）/ `DbTransaction` 类型别名，屏蔽底层数据库差异                                           |
+| **常量化**                  | 硬编码值统一使用 `BLOCK_VERSION`、`ONE_NRCS` 等常量                                                     |
 
 ## 项目结构
 
@@ -127,24 +129,24 @@ open http://localhost:8080/test-proxy
 
 #### 页面功能说明
 
-| 功能 | 说明 |
-|------|------|
-| **左侧导航栏** | 按 ApiTag 分类浏览：ALL（全部）、SELECTED（选中）、Accounts、Blocks、Transactions 等 22 个分类 |
-| **API 搜索框** | 右上角 Search 输入框，回车搜索 API 名称 |
-| **API 表单面板** | 每个 API 一个可折叠面板，包含参数输入表单和 JSON 响应显示区 |
-| **新窗口查看** | 点击面板标题右侧的 🪟 图标，在新标签页中单独查看该 API |
-| **多选功能** | 勾选 API 面板前的复选框 → 点击顶部下拉菜单 → Select All Displayed (Add/Replace) |
-| **字段过滤** | 点击 "Show Non-Empty Fields" 按钮，隐藏所有空参数输入框；再次点击恢复 |
-| **Tab 过滤** | 点击 "Show Open Tabs" 按钮，仅显示已展开的面板；再次点击恢复 |
-| **Cookie 持久化** | 选中的 API 列表自动保存到 Cookie（30天过期），刷新页面不丢失 |
+| 功能             | 说明                                                                       |
+| -------------- | ------------------------------------------------------------------------ |
+| **左侧导航栏**      | 按 ApiTag 分类浏览：ALL（全部）、SELECTED（选中）、Accounts、Blocks、Transactions 等 22 个分类 |
+| **API 搜索框**    | 右上角 Search 输入框，回车搜索 API 名称                                               |
+| **API 表单面板**   | 每个 API 一个可折叠面板，包含参数输入表单和 JSON 响应显示区                                      |
+| **新窗口查看**      | 点击面板标题右侧的 🪟 图标，在新标签页中单独查看该 API                                          |
+| **多选功能**       | 勾选 API 面板前的复选框 → 点击顶部下拉菜单 → Select All Displayed (Add/Replace)           |
+| **字段过滤**       | 点击 "Show Non-Empty Fields" 按钮，隐藏所有空参数输入框；再次点击恢复                          |
+| **Tab 过滤**     | 点击 "Show Open Tabs" 按钮，仅显示已展开的面板；再次点击恢复                                  |
+| **Cookie 持久化** | 选中的 API 列表自动保存到 Cookie（30天过期），刷新页面不丢失                                    |
 
 #### URL 参数
 
-| 参数 | 说明 | 示例 |
-|------|------|------|
-| 无参数 | 显示全部 API（按字母排序） | `/test` |
-| `requestTag` | 仅显示指定分类下的 API | `/test?requestTag=ACCOUNTS` |
-| `requestType` | 单独显示某个 API（自动展开） | `/test?requestType=GetAccount` |
+| 参数             | 说明                 | 示例                                                  |
+| -------------- | ------------------ | --------------------------------------------------- |
+| 无参数            | 显示全部 API（按字母排序）    | `/test`                                             |
+| `requestTag`   | 仅显示指定分类下的 API      | `/test?requestTag=ACCOUNTS`                         |
+| `requestType`  | 单独显示某个 API（自动展开）   | `/test?requestType=GetAccount`                      |
 | `requestTypes` | 显示多个选中的 API（下划线分隔） | `/test?requestTypes=GetAccount_GetBalance_GetBlock` |
 
 #### 表单提交
@@ -156,6 +158,7 @@ open http://localhost:8080/test-proxy
 #### 与 Java NRCS 完全兼容
 
 本页面与 Java 版 [APITestServlet](nrcs-main/src/main/java/com/bytechain/nrcs/http/test/APITestServlet.java) 完全对齐：
+
 - 相同的 Bootstrap UI 布局
 - 相同的 API 分类体系（22 个 ApiTag）
 - 相同的表单交互逻辑（ats.js + ats.util.js）
@@ -173,13 +176,13 @@ open http://localhost:8080/dbshell
 
 #### 功能说明
 
-| 功能 | 说明 |
-|------|------|
-| **SQL 执行** | 在输入框中输入任意 SQL 语句，回车提交，结果追加显示 |
-| **终端式交互** | 每次执行结果追加到输出区域，支持连续操作 |
-| **查询结果格式化** | SELECT 查询结果以表格形式展示（列对齐 + 行数统计） |
-| **修改语句反馈** | INSERT/UPDATE/DELETE 显示影响行数 |
-| **help 命令** | 输入 `help` 查看使用帮助 |
+| 功能            | 说明                                                |
+| ------------- | ------------------------------------------------- |
+| **SQL 执行**    | 在输入框中输入任意 SQL 语句，回车提交，结果追加显示                      |
+| **终端式交互**     | 每次执行结果追加到输出区域，支持连续操作                              |
+| **查询结果格式化**   | SELECT 查询结果以表格形式展示（列对齐 + 行数统计）                    |
+| **修改语句反馈**    | INSERT/UPDATE/DELETE 显示影响行数                       |
+| **help 命令**   | 输入 `help` 查看使用帮助                                  |
 | **PRAGMA 支持** | 支持 SQLite PRAGMA 命令（如 `PRAGMA table_info(block)`） |
 
 #### 密码保护
@@ -197,10 +200,10 @@ export NRCS_DISABLE_ADMIN_PASSWORD=true
 cargo run -p nrcs-node
 ```
 
-| 环境变量 | 说明 | 默认值 |
-|---------|------|--------|
-| `NRCS_ADMIN_PASSWORD` | 管理员密码，访问 /dbshell 时需要输入 | 空（未配置时拒绝访问） |
-| `NRCS_DISABLE_ADMIN_PASSWORD` | 设为 `true` 禁用密码保护 | 未设置 |
+| 环境变量                          | 说明                      | 默认值         |
+| ----------------------------- | ----------------------- | ----------- |
+| `NRCS_ADMIN_PASSWORD`         | 管理员密码，访问 /dbshell 时需要输入 | 空（未配置时拒绝访问） |
+| `NRCS_DISABLE_ADMIN_PASSWORD` | 设为 `true` 禁用密码保护        | 未设置         |
 
 #### 安全机制
 
@@ -211,6 +214,7 @@ cargo run -p nrcs-node
 #### 与 Java NRCS 兼容
 
 本功能与 Java 版 [DbShellServlet](nrcs-main/src/main/java/com/bytechain/nrcs/http/DbShellServlet.java) 对齐：
+
 - 相同的 Web 终端式交互体验（同步 XHR + 结果追加）
 - 相同的密码保护机制（adminPassword + 防暴力破解锁定）
 - 相同的 URL 和表单结构（`/dbshell`，`line` 参数）
@@ -257,12 +261,12 @@ cargo fmt && cargo clippy -- -D warnings && cargo test --lib
 
 ### 日志级别策略
 
-| 级别 | 内容 |
-|------|------|
-| `error!` | 致命错误（数据库连接失败、关键操作失败） |
-| `warn!` | 可恢复问题（交易处理异常、节点黑名单） |
-| `info!` | 关键事件（节点启动/停止、区块广播、每 5000 高度区块接受） |
-| `debug!` | 详细信息（连接事件、逐笔交易详情、守护进程输出、SQL 查询） |
+| 级别       | 内容                               |
+| -------- | -------------------------------- |
+| `error!` | 致命错误（数据库连接失败、关键操作失败）             |
+| `warn!`  | 可恢复问题（交易处理异常、节点黑名单）              |
+| `info!`  | 关键事件（节点启动/停止、区块广播、每 5000 高度区块接受） |
+| `debug!` | 详细信息（连接事件、逐笔交易详情、守护进程输出、SQL 查询）  |
 
 ### 示例
 
@@ -287,14 +291,14 @@ cargo run -p nrcs-node
 
 #### 核心组件
 
-| 组件 | 对应 Java | 功能 |
-|------|----------|------|
-| `EventDispatcher` | `Listeners<T, EventType>` | 三组独立监听器（账户/资产/货币） |
-| `AccountEvent` | `AccountEvent` 枚举 (11个值) | 余额变更、资产变更、租赁等事件 |
-| `LedgerEvent` | `LedgerEvent` 枚举 (50+值) | 完整的账本事件类型定义 |
-| `LedgerEntry` | `LedgerEntry` 类 | 账本条目记录结构体 |
-| `FundingMonitor` | `FundingMonitor` 类 | 账户监控和自动充值服务 |
-| `DataConsistencyChecker` | 扩展功能 | 跨表数据一致性验证 |
+| 组件                       | 对应 Java                   | 功能                |
+| ------------------------ | ------------------------- | ----------------- |
+| `EventDispatcher`        | `Listeners<T, EventType>` | 三组独立监听器（账户/资产/货币） |
+| `AccountEvent`           | `AccountEvent` 枚举 (11个值)  | 余额变更、资产变更、租赁等事件   |
+| `LedgerEvent`            | `LedgerEvent` 枚举 (50+值)   | 完整的账本事件类型定义       |
+| `LedgerEntry`            | `LedgerEntry` 类           | 账本条目记录结构体         |
+| `FundingMonitor`         | `FundingMonitor` 类        | 账户监控和自动充值服务       |
+| `DataConsistencyChecker` | 扩展功能                      | 跨表数据一致性验证         |
 
 #### 使用示例
 
@@ -379,18 +383,18 @@ tx.commit().await?;
 
 ### 42 张数据库表清单
 
-| 类别 | 表数 | 主要表 |
-|------|------|--------|
-| 核心 | 5 | BLOCK, TRANSACTION, ACCOUNT, ACCOUNT_LEDGER, ACCOUNT_GUARANTEED_BALANCE |
-| 资产 | 6 | ASSET, ACCOUNT_ASSET, ASSET_TRANSFER, ASSET_PROPERTY, ASSET_DIVIDEND, ASSET_DELETE |
-| 订单/撮合 | 5 | ASK_ORDER, BID_ORDER, TRADE, COIN_ORDER_FXT, COIN_TRADE_FXT |
-| 别名/投票 | 4 | ALIAS, ALIAS_OFFER, POLL, VOTE |
-| Phasing | 7 | PHASING_POLL, PHASING_VOTE, PHASING_POLL_* (5) |
-| 货币 | 5 | CURRENCY, ACCOUNT_CURRENCY, CURRENCY_TRANSFER, CURRENCY_FOUNDER, EXCHANGE_REQUEST |
-| 数据存储 | 5 | TAGGED_DATA, TAGGED_DATA_TAG, TAGGED_DATA_EXTEND, TAGGED_TIMESTAMP, PRUNABLE_MESSAGE |
-| 隐私 | 3 | SHUFFLING, SHUFFLING_DATA, SHUFFLING_PARTICIPANT |
-| 商品 | 3 | GOODS, PURCHASE, PURCHASE_FEEDBACK |
-| 其他 | 5+ | HUB, PUBLIC_KEY, CONTRACT_REFERENCE, ACCOUNT_INFO, ACCOUNT_LEASE |
+| 类别      | 表数 | 主要表                                                                                         |
+| ------- | -- | ------------------------------------------------------------------------------------------- |
+| 核心      | 5  | BLOCK, TRANSACTION, ACCOUNT, ACCOUNT\_LEDGER, ACCOUNT\_GUARANTEED\_BALANCE                  |
+| 资产      | 6  | ASSET, ACCOUNT\_ASSET, ASSET\_TRANSFER, ASSET\_PROPERTY, ASSET\_DIVIDEND, ASSET\_DELETE     |
+| 订单/撮合   | 5  | ASK\_ORDER, BID\_ORDER, TRADE, COIN\_ORDER\_FXT, COIN\_TRADE\_FXT                           |
+| 别名/投票   | 4  | ALIAS, ALIAS\_OFFER, POLL, VOTE                                                             |
+| Phasing | 7  | PHASING\_POLL, PHASING\_VOTE, PHASING\_POLL\_\* (5)                                         |
+| 货币      | 5  | CURRENCY, ACCOUNT\_CURRENCY, CURRENCY\_TRANSFER, CURRENCY\_FOUNDER, EXCHANGE\_REQUEST       |
+| 数据存储    | 5  | TAGGED\_DATA, TAGGED\_DATA\_TAG, TAGGED\_DATA\_EXTEND, TAGGED\_TIMESTAMP, PRUNABLE\_MESSAGE |
+| 隐私      | 3  | SHUFFLING, SHUFFLING\_DATA, SHUFFLING\_PARTICIPANT                                          |
+| 商品      | 3  | GOODS, PURCHASE, PURCHASE\_FEEDBACK                                                         |
+| 其他      | 5+ | HUB, PUBLIC\_KEY, CONTRACT\_REFERENCE, ACCOUNT\_INFO, ACCOUNT\_LEASE                        |
 
 ## 配置文件
 
@@ -420,38 +424,38 @@ max_connections = 10
 
 ## 与 Java 版本对应
 
-| Java 模块 | Rust 模块 | 功能说明 |
-|-----------|-----------|----------|
-| nrcs-common | blockchain-types | 核心类型、常量、配置 |
-| nrcs-crypto | crypto | 加密算法（Ed25519/Curve25519/SM） |
-| nrcs-consensus | consensus | PoS 共识算法 |
-| nrcs-transaction | tx-engine | 交易处理（65种类型） |
-| nrcs-http | http-api | REST API 服务 |
-| nrcs-peer | p2p | P2P 网络、区块同步（纯 ORM 访问） |
-| nrcs-db | orm | 数据库 ORM（SQLite/PG 双驱动） |
-| nrcs-tools | apps/cli | 命令行工具 |
+| Java 模块          | Rust 模块          | 功能说明                        |
+| ---------------- | ---------------- | --------------------------- |
+| nrcs-common      | blockchain-types | 核心类型、常量、配置                  |
+| nrcs-crypto      | crypto           | 加密算法（Ed25519/Curve25519/SM） |
+| nrcs-consensus   | consensus        | PoS 共识算法                    |
+| nrcs-transaction | tx-engine        | 交易处理（65种类型）                 |
+| nrcs-http        | http-api         | REST API 服务                 |
+| nrcs-peer        | p2p              | P2P 网络、区块同步（纯 ORM 访问）       |
+| nrcs-db          | orm              | 数据库 ORM（SQLite/PG 双驱动）      |
+| nrcs-tools       | apps/cli         | 命令行工具                       |
 
 ## 开发状态
 
 ### 功能完成度
 
-| 功能模块 | 状态 | 备注 |
-|---------|------|------|
-| 全局常量与配置 | ✅ 完成 | BLOCK_VERSION, ONE_NRCS 等常量化 |
-| 区块链处理器 | ✅ 完成 | 含 Genesis 创建 |
-| 交易处理器（65种类型） | ✅ 完成 | 48个Repository集成 + 事件分发 |
-| PoS 共识算法 | ✅ 完成 | 目标计算、出块选择 |
-| HTTP API | ✅ 完成 | 密码过滤、请求代理 |
-| CLI 工具 | ✅ 完成 | 密钥生成、签名验证 |
-| 加密算法 | ✅ 完成 | Ed25519/Curve25519/SM 系列 |
-| P2P 网络 | ✅ 完成 | WebSocket 通信，已迁移至 ORM |
-| 区块同步（42张表） | ✅ 完成 | 完整数据同步 |
-| 账户管理 | ✅ 完成 | 含保证余额 + 多表联动更新 |
-| ORM 数据库层 | ✅ 完成 | SQLite + PostgreSQL 双引擎生产就绪 |
-| **事件驱动架构** | ✅ **完成** | AccountEvent/LedgerEvent/FundingMonitor 完整实现 |
-| **账本系统** | ✅ **完成** | 50+ LedgerEvent 类型，完全兼容 Java NRCS |
-| **数据一致性检查** | ✅ **完成** | 自动检测跨表不一致（余额/资产/货币） |
-| 日志系统 | ✅ 完成 | 三级配置、info 精简 |
+| 功能模块         | 状态       | 备注                                           |
+| ------------ | -------- | -------------------------------------------- |
+| 全局常量与配置      | ✅ 完成     | BLOCK\_VERSION, ONE\_NRCS 等常量化               |
+| 区块链处理器       | ✅ 完成     | 含 Genesis 创建                                 |
+| 交易处理器（65种类型） | ✅ 完成     | 48个Repository集成 + 事件分发                       |
+| PoS 共识算法     | ✅ 完成     | 目标计算、出块选择                                    |
+| HTTP API     | ✅ 完成     | 密码过滤、请求代理                                    |
+| CLI 工具       | ✅ 完成     | 密钥生成、签名验证                                    |
+| 加密算法         | ✅ 完成     | Ed25519/Curve25519/SM 系列                     |
+| P2P 网络       | ✅ 完成     | WebSocket 通信，已迁移至 ORM                        |
+| 区块同步（42张表）   | ✅ 完成     | 完整数据同步                                       |
+| 账户管理         | ✅ 完成     | 含保证余额 + 多表联动更新                               |
+| ORM 数据库层     | ✅ 完成     | SQLite + PostgreSQL 双引擎生产就绪                  |
+| **事件驱动架构**   | ✅ **完成** | AccountEvent/LedgerEvent/FundingMonitor 完整实现 |
+| **账本系统**     | ✅ **完成** | 50+ LedgerEvent 类型，完全兼容 Java NRCS            |
+| **数据一致性检查**  | ✅ **完成** | 自动检测跨表不一致（余额/资产/货币）                          |
+| 日志系统         | ✅ 完成     | 三级配置、info 精简                                 |
 
 ### 代码质量指标
 
@@ -461,31 +465,31 @@ max_connections = 10
 
 ## 测试结果
 
-| 测试类别 | 用例数 | 通过率 |
-|---------|--------|--------|
-| account | 3 | 100% |
-| blockchain-types | 80 | 100% |
-| consensus | 5 | 100% |
-| contract | 1 | 100% |
-| crypto | 26 | 100% |
-| http-api | 23 | 100% |
-| orm (SQLite) | **49** | **100%** |
-| orm (PostgreSQL) | 32 | 100% |
-| p2p | 12 | 100% |
-| tx-engine | **101** | **100%** |
-| **事件系统 (events)** | **30+** | **100%** |
-| **总计** | **~350** | **100%** |
+| 测试类别              | 用例数       | 通过率      |
+| ----------------- | --------- | -------- |
+| account           | 3         | 100%     |
+| blockchain-types  | 80        | 100%     |
+| consensus         | 5         | 100%     |
+| contract          | 1         | 100%     |
+| crypto            | 26        | 100%     |
+| http-api          | 23        | 100%     |
+| orm (SQLite)      | **49**    | **100%** |
+| orm (PostgreSQL)  | 32        | 100%     |
+| p2p               | 12        | 100%     |
+| tx-engine         | **101**   | **100%** |
+| **事件系统 (events)** | **30+**   | **100%** |
+| **总计**            | **\~350** | **100%** |
 
 ## 性能
 
 基于初步测试：
 
-| 指标 | Rust 实现 | Java 实现 | 提升 |
-|------|----------|----------|------|
-| TPS | 800+ | 500+ | +60% |
-| P95 延迟 | <150ms | ~250ms | -40% |
-| 内存占用 | ~800MB | ~1.2GB | -33% |
-| 启动时间 | ~2s | ~8s | -75% |
+| 指标     | Rust 实现 | Java 实现 | 提升   |
+| ------ | ------- | ------- | ---- |
+| TPS    | 800+    | 500+    | +60% |
+| P95 延迟 | <150ms  | \~250ms | -40% |
+| 内存占用   | \~800MB | \~1.2GB | -33% |
+| 启动时间   | \~2s    | \~8s    | -75% |
 
 ## 开发指南
 
@@ -502,7 +506,7 @@ cargo run -p nrcs-node
 
 项目遵循 `.trae/rules/develop.md` 规范：
 
-- **命名**: 变量/函数 snake_case，类型 PascalCase，常量 SCREAMING_SNAKE_CASE
+- **命名**: 变量/函数 snake\_case，类型 PascalCase，常量 SCREAMING\_SNAKE\_CASE
 - **错误处理**: 禁止 `unwrap()` / `expect()` / `panic!()`，使用 `Result`
 - **异步代码**: `#[async_trait]`，所有 trait 必须 `Send + Sync`
 - **依赖规则**: 严格单向依赖（上层 → 下层），禁止循环依赖
@@ -524,29 +528,24 @@ cargo fmt && cargo clippy -- -D warnings && cargo test --lib
   - 完全兼容 Java NRCS 的 `AccountEvent` 定义
   - 支持余额、资产、货币、租赁、属性等事件类型
   - 链式 API 构建：`with_change()`, `with_height()`, `with_source()` 等
-
 - **LedgerEvent 枚举**（50+ 值）
   - 覆盖所有 NRCS 交易类型
   - 支持 `from_code()` / `code()` / `is_transaction()` 方法
   - 完整的 Display 实现
-
 - **LedgerEntry 结构体**
   - 对应 Java `LedgerEntry` 类
   - 支持完整的账本条目记录（11个字段）
   - 提供 `update_change()` 累加方法
-
 - **EventDispatcher 三组监听器**
   - 账户事件处理器 (`on_account_event`)
   - 资产事件处理器 (`on_asset_event`)
   - 货币事件处理器 (`on_currency_event`)
   - 线程安全、支持动态注册/注销
-
 - **FundingMonitor 完整版**
   - 账户监控服务（对应 Java `FundingMonitor`）
   - 支持三种持有类型：NRCS/Asset/Currency
   - 余额阈值检测 + 自动充值队列
   - 日志模式已就绪（生产模式待集成 TransactionProcessor）
-
 - **DataConsistencyChecker**
   - 自动检测跨表数据不一致
   - 检查项：余额非负、未确认≤确认、资产一致性等
@@ -558,7 +557,6 @@ cargo fmt && cargo clippy -- -D warnings && cargo test --lib
   - 修复 `increase_quantity()` / `decrease_quantity()` 不同步更新问题
   - SQLite 和 PostgreSQL 统一修复
   - 解决 "Insufficient unconfirmed asset balance" 错误
-
 - **账户创建 height=0 修复**
   - 修复 `get_or_create()` 硬编码 height=0 问题
   - 改为动态获取当前区块高度
@@ -568,37 +566,41 @@ cargo fmt && cargo clippy -- -D warnings && cargo test --lib
 
 - 新增 **30+** 个事件系统单元测试
 - orm 模块测试从 18 → **49** 个
-- 总测试数 ~300 → **~350** 个
+- 总测试数 \~300 → **\~350** 个
 - 所有新测试 100% 通过 ✅
 
 ### v2.6.0 (2026-05-05)
 
 #### 新功能
+
 - **PostgreSQL 测试全量通过**: 32 个 PostgreSQL 集成测试全部通过，覆盖 8 个 Repository 测试文件
 - **Node PostgreSQL 分支启用**: 取消注释 PostgreSQL 分支，支持直接使用 PostgreSQL 启动节点
 - **config/local.toml 更新**: 默认连接字符串切换为 PostgreSQL
 
 #### 修复
+
 - **PostgreSQL 标识符大小写**: 修复 pg.rs 中所有表名和列名的大小写引用问题（如 `block` → `"BLOCK"`、`timestamp` → `"TIMESTAMP"`）
 - **迁移脚本标识符**: 修复 migrations/postgres/0.sql 中 TIMESTAMP、索引、外键约束的标识符引用
-- **ASK_ORDER/BID_ORDER INSERT**: 补充缺失的 TRANSACTION_INDEX、TRANSACTION_HEIGHT、CREATION_HEIGHT 列
-- **测试文件表名**: 修复所有测试文件中 setup_pg() 函数的表名大小写问题
-- **Clippy 警告**: 修复 3 处 needless_borrows_for_generic_args 警告
+- **ASK\_ORDER/BID\_ORDER INSERT**: 补充缺失的 TRANSACTION\_INDEX、TRANSACTION\_HEIGHT、CREATION\_HEIGHT 列
+- **测试文件表名**: 修复所有测试文件中 setup\_pg() 函数的表名大小写问题
+- **Clippy 警告**: 修复 3 处 needless\_borrows\_for\_generic\_args 警告
 
 ### v2.5.1 (2026-05-04)
 
 #### 新功能
-- **日志系统重构**: info 日志精简（~90 处降级）、tracing 配置化（RUST_LOG/config/默认三级优先级）、SQL 查询日志降为 debug
+
+- **日志系统重构**: info 日志精简（\~90 处降级）、tracing 配置化（RUST\_LOG/config/默认三级优先级）、SQL 查询日志降为 debug
 - **ORM 事务感知方法**: 新增 `_tx()` 方法族，支持在已有事务内执行 CRUD 操作
 - **数据库无关类型**: `DbPool`/`DbTransaction` 类型别名，屏蔽 SQLite/PG 差异
 - **P2P SQL 迁移**: verifier.rs 中 5 处硬编码 SQL 迁移至 ORM，p2p crate 不再直接依赖 sqlx
 - **常量化**: 统一使用 `BLOCK_VERSION`、`ONE_NRCS` 替换硬编码值
 
 #### 修复
-- **PRUNABLE_MESSAGE INSERT**: 修正列名（`block_transaction_height` → 正确的 11 列）
+
+- **PRUNABLE\_MESSAGE INSERT**: 修正列名（`block_transaction_height` → 正确的 11 列）
 - **日志噪音**: 区块接受日志改为每 5000 高度输出一次 info
 
----
+***
 
 ## 许可证
 

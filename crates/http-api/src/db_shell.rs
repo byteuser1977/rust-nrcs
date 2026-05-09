@@ -217,10 +217,26 @@ async fn execute_sql(state: &ApiState, sql: &str) -> String {
                 }
                 let mut output = String::new();
                 let cols = rows[0].columns();
-                let col_widths: Vec<usize> = cols
-                    .iter()
-                    .map(|c| c.name().len().max(8))
-                    .collect();
+                
+                // 计算每列的最大宽度（基于列名和所有数据内容）
+                let mut col_widths: Vec<usize> = cols.iter().map(|c| c.name().len()).collect();
+                
+                // 遍历所有行，更新每列的最大宽度
+                for row in &rows {
+                    for (i, col) in cols.iter().enumerate() {
+                        let val = get_cell_value(row, col.name());
+                        let display = val.unwrap_or_else(|| "NULL".to_string());
+                        let display_len = display.len();
+                        if display_len > col_widths[i] {
+                            col_widths[i] = display_len;
+                        }
+                    }
+                }
+                
+                // 确保最小宽度为8
+                for w in col_widths.iter_mut() {
+                    *w = (*w).max(8);
+                }
 
                 for (i, col) in cols.iter().enumerate() {
                     if i > 0 {
@@ -360,7 +376,7 @@ const HEADER: &str = r#"<!DOCTYPE html>
     </script>
     <style type="text/css">
         body { font-family: monospace; margin: 20px; background: #1e1e1e; color: #d4d4d4; }
-        pre.result { background: #000; color: #0f0; padding: 10px; min-height: 200px; white-space: pre-wrap; word-wrap: break-word; border: 1px solid #333; }
+        pre.result { background: #000; color: #0f0; padding: 10px; height: calc(100vh - 150px); white-space: pre; overflow-x: auto; overflow-y: auto; border: 1px solid #333; }
         input[type="text"] { font-family: monospace; font-size: 14px; background: #2d2d2d; color: #d4d4d4; border: 1px solid #555; padding: 5px; }
         input[type="password"] { font-family: monospace; font-size: 14px; background: #2d2d2d; color: #d4d4d4; border: 1px solid #555; padding: 5px; }
         input[type="submit"] { font-family: monospace; font-size: 14px; background: #0e639c; color: #fff; border: none; padding: 5px 15px; cursor: pointer; }
