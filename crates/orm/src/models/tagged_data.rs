@@ -14,7 +14,7 @@ pub struct TaggedDataModel {
     pub tags: Option<String>,
     pub parsed_tags: Option<String>,
     #[sqlx(rename = "type_")]
-    pub type_: Option<String>,
+    pub r#type: Option<String>,
     pub data: Vec<u8>,
     pub is_text: bool,
     pub filename: Option<String>,

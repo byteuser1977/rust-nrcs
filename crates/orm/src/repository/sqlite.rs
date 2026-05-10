@@ -3099,7 +3099,7 @@ impl Repository<CurrencyModel> for SqliteCurrencyRepository {
         .bind(&currency.name_lower)
         .bind(&currency.code)
         .bind(&currency.description)
-        .bind(currency.type_)
+        .bind(currency.r#type)
         .bind(currency.initial_supply)
         .bind(currency.reserve_supply)
         .bind(currency.max_supply)
@@ -3196,7 +3196,7 @@ impl TaggedDataRepository for SqliteTaggedDataRepository {
 
     async fn find_by_type(&self, data_type: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
         let records = sqlx::query_as::<_, TaggedDataModel>(
-            "SELECT * FROM tagged_data WHERE type = ? AND latest = 1 ORDER BY height DESC LIMIT ?"
+            "SELECT * FROM tagged_data WHERE type_ = ? AND latest = 1 ORDER BY height DESC LIMIT ?"
         )
         .bind(data_type)
         .bind(limit)
@@ -3238,7 +3238,7 @@ impl Repository<TaggedDataModel> for SqliteTaggedDataRepository {
         .bind(&data.description)
         .bind(&data.tags)
         .bind(&data.parsed_tags)
-        .bind(&data.type_)
+        .bind(&data.r#type)
         .bind(&data.data)
         .bind(data.is_text)
         .bind(&data.filename)

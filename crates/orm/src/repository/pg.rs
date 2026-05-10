@@ -572,7 +572,7 @@ impl PgPublicKeyRepository {
 impl PublicKeyRepository for PgPublicKeyRepository {
     async fn find_latest_by_account_id(&self, account_id: i64) -> RepositoryResult<Option<AccountPublicKey>> {
         let row: Option<(Vec<u8>, i32)> = sqlx::query_as(
-            r#"SELECT "public_key", "height" "public_key" WHERE "account_id" = $1 AND "latest" = TRUE ORDER BY "height" DESC LIMIT 1"#
+            r#"SELECT "public_key", "height" FROM "public_key" WHERE "account_id" = $1 AND "latest" = TRUE ORDER BY "height" DESC LIMIT 1"#
         )
         .bind(account_id)
         .fetch_optional(&self.pool)
@@ -1558,7 +1558,7 @@ impl Repository<CurrencyModel> for PgCurrencyRepository {
         .bind(&currency.name_lower)
         .bind(&currency.code)
         .bind(&currency.description)
-        .bind(currency.type_)
+        .bind(currency.r#type)
         .bind(currency.initial_supply)
         .bind(currency.reserve_supply)
         .bind(currency.max_supply)
@@ -3321,8 +3321,13 @@ impl Repository<AskOrderModel> for PgAskOrderRepository {
         Err(RepositoryError::Validation("update not implemented for ask_order".to_string()))
     }
 
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("delete not implemented for ask_order".to_string()))
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query(r#"UPDATE "ask_order" SET "latest" = FALSE WHERE "db_id" = $1"#)
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<AskOrderModel>> {
@@ -3458,8 +3463,13 @@ impl Repository<BidOrderModel> for PgBidOrderRepository {
         Err(RepositoryError::Validation("update not implemented for bid_order".to_string()))
     }
 
-    async fn delete(&self, _db_id: i64) -> RepositoryResult<()> {
-        Err(RepositoryError::Validation("delete not implemented for bid_order".to_string()))
+    async fn delete(&self, db_id: i64) -> RepositoryResult<()> {
+        sqlx::query(r#"UPDATE "bid_order" SET "latest" = FALSE WHERE "db_id" = $1"#)
+            .bind(db_id)
+            .execute(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+        Ok(())
     }
 
     async fn find_all(&self, limit: Option<i64>, offset: Option<i64>) -> RepositoryResult<Vec<BidOrderModel>> {
@@ -3520,11 +3530,11 @@ impl TaggedDataRepository for PgTaggedDataRepository {
         Ok(records)
     }
 
-    async fn find_by_type(&self, type_: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
+    async fn find_by_type(&self, r#type: &str, limit: i64) -> RepositoryResult<Vec<TaggedDataModel>> {
         let records = sqlx::query_as::<_, TaggedDataModel>(
             r#"SELECT * FROM "tagged_data" WHERE "type" = $1 AND "latest" = TRUE ORDER BY "height" DESC LIMIT $2"#
         )
-        .bind(type_)
+        .bind(r#type)
         .bind(limit)
         .fetch_all(&self.pool)
         .await
@@ -3564,7 +3574,7 @@ impl Repository<TaggedDataModel> for PgTaggedDataRepository {
         .bind(&data.description)
         .bind(&data.tags)
         .bind(&data.parsed_tags)
-        .bind(&data.type_)
+        .bind(&data.r#type)
         .bind(&data.data)
         .bind(data.is_text)
         .bind(&data.filename)

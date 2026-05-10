@@ -2160,7 +2160,7 @@ impl DatabaseTransactionProcessor {
         let initial_supply = self.parse_long_field(tx, "initialSupply").unwrap_or(0);
         let max_supply = self.parse_long_field(tx, "maxSupply").unwrap_or(initial_supply);
         let decimals = self.parse_long_field(tx, "decimals").unwrap_or(0) as i16;
-        let type_ = self.parse_long_field(tx, "type").unwrap_or(0) as i32;
+        let r#type = self.parse_long_field(tx, "type").unwrap_or(0) as i32;
         let min_reserve_per_unit_nqt = self.parse_long_field(tx, "minReservePerUnitNQT").unwrap_or(0);
         let min_difficulty = self.parse_long_field(tx, "minDifficulty").unwrap_or(0) as i16;
         let max_difficulty = self.parse_long_field(tx, "maxDifficulty").unwrap_or(0) as i16;
@@ -2226,7 +2226,7 @@ impl DatabaseTransactionProcessor {
             name_lower: name.to_lowercase(),
             code: code.clone(),
             description,
-            type_,
+            r#type,
             initial_supply,
             reserve_supply,
             max_supply,
@@ -3844,7 +3844,7 @@ impl DatabaseTransactionProcessor {
                         description,
                         tags,
                         parsed_tags: None,
-                        type_: self.parse_string_field(tx, "type"),
+                        r#type: self.parse_string_field(tx, "type"),
                         data: data.unwrap_or_default().into_bytes(),
                         is_text,
                         filename: self.parse_string_field(tx, "filename"),

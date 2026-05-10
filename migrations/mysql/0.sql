@@ -691,7 +691,7 @@ CREATE TABLE IF NOT EXISTS shuffling
  stage SMALLINT NOT NULL,
  assignee_account_id BIGINT,
  registrant_count SMALLINT NOT NULL,
- RECIPIENT_public_keyS varchar(5000),
+ recipient_public_keys varchar(5000),
  height INTEGER NOT NULL,
  latest TINYINT(1) DEFAULT TRUE NOT NULL
 );
@@ -720,7 +720,7 @@ CREATE TABLE IF NOT EXISTS shuffling_participant
  next_account_id BIGINT,
  participant_index SMALLINT NOT NULL,
  state SMALLINT NOT NULL,
- BLAME_data varchar(5000),
+ blame_data varchar(5000),
  key_seeds varchar(5000),
  data_transaction_full_hash BLOB,
  height INTEGER NOT NULL,
