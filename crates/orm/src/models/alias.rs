@@ -7,7 +7,7 @@ use blockchain_types::{AccountId, AliasId, AliasOfferId, Amount, Height, Result,
 use blockchain_types::prelude::*;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct AliasModel {
     pub db_id: i64,
     pub id: i64,
@@ -48,7 +48,7 @@ impl AliasModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct AliasOfferModel {
     pub db_id: i64,
     pub id: i64,

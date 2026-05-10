@@ -766,7 +766,12 @@ async fn test_api_test_page() {
         .method("GET")
         .body(Body::empty())
         .unwrap();
-    
+
     let response = router.oneshot(request).await.unwrap();
-    assert!(response.status() == StatusCode::OK || response.status() == StatusCode::NOT_FOUND);
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), 200_000).await.unwrap();
+    let body_str = String::from_utf8(body.to_vec()).unwrap();
+    assert!(body_str.contains("<!DOCTYPE html>"), "Test page should return HTML");
+    assert!(body_str.contains("ats.js"), "Test page should reference ats.js");
 }

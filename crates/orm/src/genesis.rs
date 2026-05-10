@@ -366,23 +366,23 @@ mod tests {
 
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS block (
-                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                ID INTEGER NOT NULL,
-                VERSION INTEGER NOT NULL,
-                TIMESTAMP INTEGER NOT NULL,
-                PREVIOUS_BLOCK_ID INTEGER,
-                TOTAL_AMOUNT INTEGER NOT NULL,
-                TOTAL_FEE INTEGER NOT NULL,
-                PAYLOAD_LENGTH INTEGER NOT NULL,
-                PREVIOUS_BLOCK_HASH BLOB,
-                CUMULATIVE_DIFFICULTY BLOB NOT NULL,
-                BASE_TARGET INTEGER NOT NULL,
-                NEXT_BLOCK_ID INTEGER,
-                HEIGHT INTEGER NOT NULL,
-                GENERATION_SIGNATURE BLOB,
-                BLOCK_SIGNATURE BLOB,
-                PAYLOAD_HASH BLOB,
-                GENERATOR_ID INTEGER NOT NULL
+                db_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER NOT NULL,
+                version INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL,
+                previous_block_id INTEGER,
+                total_amount INTEGER NOT NULL,
+                total_fee INTEGER NOT NULL,
+                payload_length INTEGER NOT NULL,
+                previous_block_hash BLOB,
+                cumulative_difficulty BLOB NOT NULL,
+                base_target INTEGER NOT NULL,
+                next_block_id INTEGER,
+                height INTEGER NOT NULL,
+                generation_signature BLOB,
+                block_signature BLOB,
+                payload_hash BLOB,
+                generator_id INTEGER NOT NULL
             )
         "#)
         .execute(&pool)
@@ -391,15 +391,15 @@ mod tests {
 
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS account (
-                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                ID INTEGER NOT NULL,
-                BALANCE INTEGER NOT NULL,
-                UNCONFIRMED_BALANCE INTEGER NOT NULL,
-                FORGED_BALANCE INTEGER NOT NULL,
-                ACTIVE_LESSEE_ID INTEGER,
-                HAS_CONTROL_PHASING INTEGER NOT NULL DEFAULT 0,
-                HEIGHT INTEGER NOT NULL,
-                LATEST INTEGER NOT NULL DEFAULT 1
+                db_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER NOT NULL,
+                balance INTEGER NOT NULL,
+                unconfirmed_balance INTEGER NOT NULL,
+                forged_balance INTEGER NOT NULL,
+                active_lessee_id INTEGER,
+                has_control_phasing INTEGER NOT NULL DEFAULT 0,
+                height INTEGER NOT NULL,
+                latest INTEGER NOT NULL DEFAULT 1
             )
         "#)
         .execute(&pool)
@@ -408,17 +408,17 @@ mod tests {
 
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS account_ledger (
-                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                ACCOUNT_ID INTEGER NOT NULL,
-                EVENT_TYPE INTEGER NOT NULL,
-                EVENT_ID INTEGER NOT NULL,
-                HOLDING_TYPE INTEGER NOT NULL,
-                HOLDING_ID INTEGER,
-                "CHANGE" INTEGER NOT NULL,
-                BALANCE INTEGER NOT NULL,
-                BLOCK_ID INTEGER NOT NULL,
-                HEIGHT INTEGER NOT NULL,
-                TIMESTAMP INTEGER NOT NULL
+                db_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                event_type INTEGER NOT NULL,
+                event_id INTEGER NOT NULL,
+                holding_type INTEGER NOT NULL,
+                holding_id INTEGER,
+                "change" INTEGER NOT NULL,
+                balance INTEGER NOT NULL,
+                block_id INTEGER NOT NULL,
+                height INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL
             )
         "#)
         .execute(&pool)
@@ -427,35 +427,35 @@ mod tests {
 
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS "transaction" (
-                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                ID INTEGER NOT NULL,
-                DEADLINE INTEGER NOT NULL,
-                RECIPIENT_ID INTEGER,
-                AMOUNT INTEGER NOT NULL,
-                FEE INTEGER NOT NULL,
-                FULL_HASH BLOB NOT NULL,
-                HEIGHT INTEGER NOT NULL,
-                BLOCK_ID INTEGER NOT NULL,
-                SIGNATURE BLOB NOT NULL,
-                TIMESTAMP INTEGER NOT NULL,
-                TYPE INTEGER NOT NULL,
-                SUBTYPE INTEGER NOT NULL,
-                SENDER_ID INTEGER NOT NULL,
-                BLOCK_TIMESTAMP INTEGER NOT NULL,
-                REFERENCED_TRANSACTION_FULL_HASH BLOB,
-                TRANSACTION_INDEX INTEGER NOT NULL,
-                PHASED INTEGER NOT NULL DEFAULT 0,
-                ATTACHMENT_BYTES BLOB,
-                VERSION INTEGER NOT NULL DEFAULT 0,
-                HAS_MESSAGE INTEGER NOT NULL DEFAULT 0,
-                HAS_ENCRYPTED_MESSAGE INTEGER NOT NULL DEFAULT 0,
-                HAS_PUBLIC_KEY_ANNOUNCEMENT INTEGER NOT NULL DEFAULT 0,
-                HAS_PRUNABLE_MESSAGE INTEGER NOT NULL DEFAULT 0,
-                HAS_PRUNABLE_ATTACHMENT INTEGER NOT NULL DEFAULT 0,
-                EC_BLOCK_HEIGHT INTEGER,
-                EC_BLOCK_ID INTEGER,
-                HAS_ENCRYPTTOSELF_MESSAGE INTEGER NOT NULL DEFAULT 0,
-                HAS_PRUNABLE_ENCRYPTED_MESSAGE INTEGER NOT NULL DEFAULT 0
+                db_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER NOT NULL,
+                deadline INTEGER NOT NULL,
+                recipient_id INTEGER,
+                amount INTEGER NOT NULL,
+                fee INTEGER NOT NULL,
+                full_hash BLOB NOT NULL,
+                height INTEGER NOT NULL,
+                block_id INTEGER NOT NULL,
+                signature BLOB NOT NULL,
+                timestamp INTEGER NOT NULL,
+                type INTEGER NOT NULL,
+                subtype INTEGER NOT NULL,
+                sender_id INTEGER NOT NULL,
+                block_timestamp INTEGER NOT NULL,
+                referenced_transaction_full_hash BLOB,
+                transaction_index INTEGER NOT NULL,
+                phased INTEGER NOT NULL DEFAULT 0,
+                attachment_bytes BLOB,
+                version INTEGER NOT NULL DEFAULT 0,
+                has_message INTEGER NOT NULL DEFAULT 0,
+                has_encrypted_message INTEGER NOT NULL DEFAULT 0,
+                has_public_key_announcement INTEGER NOT NULL DEFAULT 0,
+                has_prunable_message INTEGER NOT NULL DEFAULT 0,
+                has_prunable_attachment INTEGER NOT NULL DEFAULT 0,
+                ec_block_height INTEGER,
+                ec_block_id INTEGER,
+                has_encrypttoself_message INTEGER NOT NULL DEFAULT 0,
+                has_prunable_encrypted_message INTEGER NOT NULL DEFAULT 0
             )
         "#)
         .execute(&pool)
@@ -464,10 +464,10 @@ mod tests {
 
         sqlx::query(r#"
             CREATE TABLE IF NOT EXISTS account_guaranteed_balance (
-                DB_ID INTEGER PRIMARY KEY AUTOINCREMENT,
-                ACCOUNT_ID INTEGER NOT NULL,
-                ADDITIONS INTEGER NOT NULL,
-                HEIGHT INTEGER NOT NULL
+                db_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                additions INTEGER NOT NULL,
+                height INTEGER NOT NULL
             )
         "#)
         .execute(&pool)

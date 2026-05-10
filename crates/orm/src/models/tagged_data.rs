@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct TaggedDataModel {
     pub db_id: i64,
     pub id: i64,
@@ -13,6 +13,7 @@ pub struct TaggedDataModel {
     pub description: Option<String>,
     pub tags: Option<String>,
     pub parsed_tags: Option<String>,
+    #[sqlx(rename = "type_")]
     pub type_: Option<String>,
     pub data: Vec<u8>,
     pub is_text: bool,
@@ -25,7 +26,7 @@ pub struct TaggedDataModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct TaggedDataExtendModel {
     pub db_id: i64,
     pub id: i64,
@@ -35,7 +36,7 @@ pub struct TaggedDataExtendModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct TaggedDataTimestampModel {
     pub db_id: i64,
     pub id: i64,
@@ -48,7 +49,7 @@ pub struct TaggedDataTimestampModel {
 ///
 /// 对应 Java: TaggedDataTag.java
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct TaggedDataTagModel {
     pub db_id: i64,
     pub id: i64,
@@ -73,7 +74,7 @@ impl TaggedDataTagModel {
 ///
 /// 对应 Java: TaggedTimestamp.java
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct TaggedTimestampModel {
     pub db_id: i64,
     pub id: i64,

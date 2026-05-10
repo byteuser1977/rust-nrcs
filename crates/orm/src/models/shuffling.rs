@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct ShufflingModel {
     pub db_id: i64,
     pub id: i64,
@@ -23,7 +23,7 @@ pub struct ShufflingModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct ShufflingDataModel {
     pub db_id: i64,
     pub shuffling_id: i64,
@@ -34,7 +34,7 @@ pub struct ShufflingDataModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct ShufflingParticipantModel {
     pub db_id: i64,
     pub shuffling_id: i64,

@@ -47,7 +47,7 @@ impl PeerRepository for SqlitePeerRepository {
     /// 插入或更新节点（对应 Java: PeerDb.savePeers()）
     async fn upsert(&self, peer: &PeerModel) -> RepositoryResult<()> {
         sqlx::query(
-            "INSERT OR REPLACE INTO PEER (ADDRESS, LAST_UPDATED, SERVICES) VALUES (?, ?, ?)"
+            "INSERT OR REPLACE INTO peer (address, last_updated, services) VALUES (?, ?, ?)"
         )
         .bind(&peer.address)
         .bind(peer.last_updated)
@@ -62,7 +62,7 @@ impl PeerRepository for SqlitePeerRepository {
     /// 根据地址查找节点（对应 Java: PeerDb.loadPeers() 中的单条查询）
     async fn find_by_address(&self, address: &str) -> RepositoryResult<Option<PeerModel>> {
         let result = sqlx::query_as::<_, PeerModel>(
-            "SELECT * FROM PEER WHERE ADDRESS = ?"
+            "SELECT * FROM peer WHERE address = ?"
         )
         .bind(address)
         .fetch_optional(&self.pool)
@@ -77,7 +77,7 @@ impl PeerRepository for SqlitePeerRepository {
         let limit = limit.unwrap_or(1000);
 
         let peers = sqlx::query_as::<_, PeerModel>(
-            "SELECT * FROM PEER ORDER BY LAST_UPDATED DESC LIMIT ?"
+            "SELECT * FROM peer ORDER BY last_updated DESC LIMIT ?"
         )
         .bind(limit)
         .fetch_all(&self.pool)
@@ -89,7 +89,7 @@ impl PeerRepository for SqlitePeerRepository {
 
     /// 删除指定节点
     async fn delete_by_address(&self, address: &str) -> RepositoryResult<()> {
-        sqlx::query("DELETE FROM PEER WHERE ADDRESS = ?")
+        sqlx::query("DELETE FROM peer WHERE address = ?")
         .bind(address)
         .execute(&self.pool)
         .await
@@ -101,7 +101,7 @@ impl PeerRepository for SqlitePeerRepository {
     /// 获取节点总数
     async fn count(&self) -> RepositoryResult<i64> {
         let (count,) = sqlx::query_as::<_, (i64,)>(
-            "SELECT COUNT(*) FROM PEER"
+            "SELECT COUNT(*) FROM peer"
         )
         .fetch_one(&self.pool)
         .await
@@ -113,7 +113,7 @@ impl PeerRepository for SqlitePeerRepository {
     /// 清理过期节点（对应 Java: 清理旧节点逻辑）
     async fn cleanup_old_peers(&self, threshold: i64) -> RepositoryResult<u64> {
         let result = sqlx::query(
-            "DELETE FROM PEER WHERE LAST_UPDATED < ? OR LAST_UPDATED IS NULL"
+            "DELETE FROM peer WHERE last_updated < ? OR last_updated IS NULL"
         )
         .bind(threshold)
         .execute(&self.pool)

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct PeerModel {
     pub address: String,
     pub last_updated: Option<i32>,
@@ -12,7 +12,7 @@ pub struct PeerModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct HubModel {
     pub db_id: i64,
     pub account_id: Option<i64>,
@@ -23,7 +23,7 @@ pub struct HubModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct ScanModel {
     pub rescan: bool,
     pub height: i32,
@@ -31,7 +31,7 @@ pub struct ScanModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct UnconfirmedTransactionModel {
     pub db_id: i64,
     pub id: i64,
@@ -45,7 +45,7 @@ pub struct UnconfirmedTransactionModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct ReferencedTransactionModel {
     pub db_id: i64,
     pub transaction_id: i64,
@@ -53,7 +53,7 @@ pub struct ReferencedTransactionModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct ContractReferenceModel {
     pub db_id: i64,
     pub id: i64,
@@ -67,7 +67,7 @@ pub struct ContractReferenceModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct AccountFxtModel {
     pub id: i64,
     pub balance: Vec<u8>,

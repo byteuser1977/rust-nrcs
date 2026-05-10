@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct PhasingPollModel {
     pub db_id: i64,
     pub id: i64,
@@ -22,7 +22,7 @@ pub struct PhasingPollModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct PhasingPollLinkedTransactionModel {
     pub db_id: i64,
     pub transaction_id: i64,
@@ -32,7 +32,7 @@ pub struct PhasingPollLinkedTransactionModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct PhasingPollResultModel {
     pub db_id: i64,
     pub id: i64,
@@ -42,7 +42,7 @@ pub struct PhasingPollResultModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct PhasingPollVoterModel {
     pub db_id: i64,
     pub transaction_id: i64,
@@ -51,7 +51,7 @@ pub struct PhasingPollVoterModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct PhasingVoteModel {
     pub db_id: i64,
     pub vote_id: i64,
@@ -61,7 +61,7 @@ pub struct PhasingVoteModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct PhasingPollHashedSecretModel {
     pub db_id: i64,
     pub hashed_secret: Vec<u8>,

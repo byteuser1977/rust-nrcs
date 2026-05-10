@@ -17,17 +17,23 @@ use crate::state::ApiState;
 
 pub async fn api_test_page(
     State(state): State<ApiState>,
-    ConnectInfo(remote_addr): ConnectInfo<SocketAddr>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Response {
+    let remote_addr = connect_info
+        .map(|ci| ci.0)
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 0)));
     build_test_page_response(&state, &params, "/test", "/nrcs", remote_addr)
 }
 
 pub async fn api_test_page_proxy(
     State(state): State<ApiState>,
-    ConnectInfo(remote_addr): ConnectInfo<SocketAddr>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Response {
+    let remote_addr = connect_info
+        .map(|ci| ci.0)
+        .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 0)));
     build_test_page_response(&state, &params, "/test-proxy", "/nrcs-proxy", remote_addr)
 }
 

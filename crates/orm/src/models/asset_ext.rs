@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct AssetTransferModel {
     pub db_id: i64,
     pub id: i64,
@@ -32,7 +32,7 @@ impl AssetTransferModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct AssetDeleteModel {
     pub db_id: i64,
     pub id: i64,
@@ -44,7 +44,7 @@ pub struct AssetDeleteModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct AssetDividendModel {
     pub db_id: i64,
     pub id: i64,
@@ -62,7 +62,7 @@ pub struct AssetDividendModel {
 /// 对应 Java: AssetHistory.java, BaseAssetHistory.java
 /// 记录资产转移历史
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct AssetHistoryModel {
     pub db_id: i64,
     pub id: i64,
@@ -92,7 +92,7 @@ impl AssetHistoryModel {
 }
 
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct AssetControlPhasingModel {
     pub db_id: i64,
     pub asset_id: i64,
@@ -118,7 +118,7 @@ pub struct AssetControlPhasingModel {
 /// 对应 Java: AssetProperty.java, BaseAssetProperty.java
 /// 存储资产的自定义属性
 #[derive(Debug, Clone, PartialEq, FromRow, Serialize, Deserialize)]
-#[sqlx(rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(rename_all = "snake_case")]
 pub struct AssetPropertyModel {
     pub db_id: i64,
     pub id: i64,
