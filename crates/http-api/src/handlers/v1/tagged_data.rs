@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetTaggedDataHandler;
 
@@ -136,17 +137,13 @@ impl RequestHandler for UploadTaggedDataHandler {
         Some("file")
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _name = req.require_string("name")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let name = req.get_string("name").unwrap_or_default(); let data = req.get_string("data").unwrap_or_default(); let channel = req.get_string("channel").unwrap_or_default(); let tags = req.get_string("tags").unwrap_or_default(); let type_ = req.get_string("type").unwrap_or_default(); let isText = req.get_bool("isText");
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 5, 0, None, 0, Some(json!({"name": name, "data": data, "channel": channel, "tags": tags, "type": type_, "isText": isText})), state,
+        ).await
     }
 }
 
@@ -267,7 +264,7 @@ impl RequestHandler for GetChannelTaggedDataHandler {
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -293,7 +290,7 @@ impl RequestHandler for GetDataTagCountHandler {
 
     async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -322,7 +319,7 @@ impl RequestHandler for GetDataTagsHandler {
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -352,7 +349,7 @@ impl RequestHandler for GetDataTagsLikeHandler {
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }

@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetAssetHandler;
 
@@ -337,20 +338,13 @@ impl RequestHandler for IssueAssetHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _name = req.require_string("name")?;
-        let _description = req.get_string("description");
-        let _quantity = req.require_string("quantityQNT")?;
-        let _decimals = req.get_i32("decimals").unwrap_or(0);
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let name = req.get_string("name").unwrap_or_default(); let description = req.get_string("description").unwrap_or_default(); let quantityQNT = req.get_string("quantityQNT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let decimals = req.get_i32("decimals").unwrap_or(0); let mintable = req.get_bool("mintable");
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 2, 0, None, 0, Some(json!({"name": name, "description": description, "quantityQNT": quantityQNT.to_string(), "decimals": decimals, "mintable": mintable})), state,
+        ).await
     }
 }
 
@@ -376,19 +370,13 @@ impl RequestHandler for TransferAssetHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _recipient = req.require_u64("recipient")?;
-        let _asset_id = req.require_u64("asset")?;
-        let _quantity = req.require_string("quantityQNT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let asset = req.get_string("asset").unwrap_or_default(); let quantityQNT = req.get_string("quantityQNT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let recipient_id = req.require_u64("recipient")?;
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 2, 1, Some(recipient_id), 0, Some(json!({"asset": asset, "quantityQNT": quantityQNT.to_string()})), state,
+        ).await
     }
 }
 
@@ -414,19 +402,13 @@ impl RequestHandler for PlaceAskOrderHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _asset_id = req.require_u64("asset")?;
-        let _quantity = req.require_string("quantityQNT")?;
-        let _price = req.require_string("priceNQT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("order", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let asset = req.get_string("asset").unwrap_or_default(); let quantityQNT = req.get_string("quantityQNT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let priceNQT = req.get_string("priceNQT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 2, 3, None, 0, Some(json!({"asset": asset, "quantityQNT": quantityQNT.to_string(), "priceNQT": priceNQT.to_string()})), state,
+        ).await
     }
 }
 
@@ -452,19 +434,13 @@ impl RequestHandler for PlaceBidOrderHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _asset_id = req.require_u64("asset")?;
-        let _quantity = req.require_string("quantityQNT")?;
-        let _price = req.require_string("priceNQT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("order", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let asset = req.get_string("asset").unwrap_or_default(); let quantityQNT = req.get_string("quantityQNT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let priceNQT = req.get_string("priceNQT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 2, 4, None, 0, Some(json!({"asset": asset, "quantityQNT": quantityQNT.to_string(), "priceNQT": priceNQT.to_string()})), state,
+        ).await
     }
 }
 
@@ -490,16 +466,13 @@ impl RequestHandler for CancelAskOrderHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _order_id = req.require_u64("order")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let order = req.get_string("order").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 2, 5, None, 0, Some(json!({"order": order})), state,
+        ).await
     }
 }
 
@@ -525,16 +498,13 @@ impl RequestHandler for CancelBidOrderHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _order_id = req.require_u64("order")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let order = req.get_string("order").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 2, 6, None, 0, Some(json!({"order": order})), state,
+        ).await
     }
 }
 
@@ -804,7 +774,7 @@ impl RequestHandler for GetExpectedAssetDeletesHandler {
         let _asset_id = req.require_u64("asset")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -832,7 +802,7 @@ impl RequestHandler for GetExpectedAssetTransfersHandler {
         let _asset_id = req.require_u64("asset")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("transfers", json!([]));
 
         Ok(builder.build())
     }
@@ -860,7 +830,7 @@ impl RequestHandler for GetAvailableToBuyHandler {
         let _currency = req.require_string("currency")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -888,7 +858,7 @@ impl RequestHandler for GetAvailableToSellHandler {
         let _currency = req.require_string("currency")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -919,7 +889,7 @@ impl RequestHandler for GetBuyOffersHandler {
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -950,7 +920,7 @@ impl RequestHandler for GetSellOffersHandler {
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -978,7 +948,7 @@ impl RequestHandler for GetOfferHandler {
         let _offer_id = req.require_u64("offer")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("offers", json!([]));
 
         Ok(builder.build())
     }
@@ -1006,7 +976,7 @@ impl RequestHandler for GetExpectedBuyOffersHandler {
         let _currency = req.require_string("currency")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("offers", json!([]));
 
         Ok(builder.build())
     }
@@ -1034,7 +1004,7 @@ impl RequestHandler for GetExpectedSellOffersHandler {
         let _currency = req.require_string("currency")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("offers", json!([]));
 
         Ok(builder.build())
     }

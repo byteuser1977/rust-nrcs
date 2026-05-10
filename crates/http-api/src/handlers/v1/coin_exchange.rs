@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetCoinExchangeOrderHandler;
 
@@ -161,20 +162,13 @@ impl RequestHandler for ExchangeCoinsHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _exchange = req.require_u64("exchange")?;
-        let _pair_currency = req.get_i32("pairCurrency").unwrap_or(0);
-        let _quantity = req.require_string("quantityQNT")?;
-        let _rate = req.require_string("rateNQT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("order", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let currency = req.get_string("currency").unwrap_or_default(); let rateNQT = req.get_string("rateNQT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let units = req.get_string("units").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 6, 0, None, 0, Some(json!({"currency": currency, "rateNQT": rateNQT.to_string(), "units": units.to_string()})), state,
+        ).await
     }
 }
 

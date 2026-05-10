@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetPhasingPollHandler;
 
@@ -127,16 +128,13 @@ impl RequestHandler for ApproveTransactionHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _transaction_id = req.require_u64("transaction")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
         
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 4, 0, None, 0, None, state,
+        ).await
     }
 }
 
@@ -271,17 +269,13 @@ impl RequestHandler for SetPhasingOnlyControlHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _control_voting_model = req.get_i32("controlVotingModel");
-        let _control_quorum = req.get_i32("controlQuorum");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        
 
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-
-        Ok(builder.build())
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 4, 0, None, 0, None, state,
+        ).await
     }
 }
 
@@ -314,17 +308,13 @@ impl RequestHandler for SetPhasingAssetControlHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _asset = req.require_u64("asset")?;
-        let _control_voting_model = req.get_i32("controlVotingModel");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        
 
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-
-        Ok(builder.build())
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 4, 0, None, 0, None, state,
+        ).await
     }
 }
 

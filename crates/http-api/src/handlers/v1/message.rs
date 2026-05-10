@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use crate::handlers::v1::create_transaction::CreateTransactionHelper;
 
 pub struct SendMessageHandler;
 
@@ -21,7 +22,14 @@ impl SendMessageHandler {
 #[async_trait]
 impl RequestHandler for SendMessageHandler {
     fn parameters(&self) -> Vec<&'static str> {
-        vec!["secretPhrase", "recipient", "message", "messageIsText", "messageToEncrypt", "messageToEncryptIsText", "encryptedMessageData", "encryptedMessageNonce", "encryptedMessageIsText", "compressMessageToEncrypt", "feeNQT", "deadline", "referencedTransactionFullHash", "broadcast"]
+        vec!["secretPhrase", "publicKey", "recipient", "message", "messageIsText", "messageIsPrunable",
+             "messageToEncrypt", "messageToEncryptIsText", "encryptedMessageData", "encryptedMessageNonce",
+             "encryptedMessageIsPrunable", "compressMessageToEncrypt", "feeNQT", "deadline",
+             "referencedTransactionFullHash", "broadcast",
+             "phased", "phasingFinishHeight", "phasingVotingModel", "phasingQuorum", "phasingMinBalance",
+             "phasingHolding", "phasingMinBalanceModel", "phasingWhitelisted", "phasingLinkedFullHash",
+             "phasingHashedSecret", "phasingHashedSecretAlgorithm",
+             "recipientPublicKey", "ecBlockId", "ecBlockHeight", "phasingParams", "timestamp"]
     }
     
     fn api_tags(&self) -> Vec<ApiTag> {
@@ -32,19 +40,27 @@ impl RequestHandler for SendMessageHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _recipient = req.require_u64("recipient")?;
-        let _message = req.get_string("message");
-        let _message_is_text = req.get_bool("messageIsText");
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let recipient = req.get_u64("recipient");
+
+        let params = CreateTransactionHelper::parse_common_params(req)?;
+
+        let mut attachment_json = serde_json::Map::new();
+        if let Some(ref msg) = params.message {
+            attachment_json.insert("message".to_string(), json!(msg));
+            let is_text = params.message_is_text.unwrap_or(true);
+            attachment_json.insert("messageIsText".to_string(), json!(is_text));
+        }
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &params,
+            blockchain_types::transaction::TYPE_MESSAGING,
+            blockchain_types::transaction::SUBTYPE_MESSAGING_ARBITRARY_MESSAGE,
+            recipient,
+            0,
+            Some(serde_json::Value::Object(attachment_json)),
+            state,
+        ).await
     }
 }
 

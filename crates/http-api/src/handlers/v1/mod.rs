@@ -3,6 +3,7 @@
 //! 与 Java 版本 Handler 完全对齐
 
 #![allow(clippy::new_without_default)]
+#![allow(non_snake_case)]
 
 pub mod account;
 pub mod account_control;
@@ -12,6 +13,8 @@ pub mod asset_ext;
 pub mod block;
 pub mod blockchain;
 pub mod coin_exchange;
+pub mod contract;
+pub mod create_transaction;
 pub mod currency;
 pub mod currency_ext;
 pub mod debug;
@@ -41,6 +44,7 @@ pub use asset_ext::*;
 pub use block::*;
 pub use blockchain::*;
 pub use coin_exchange::*;
+pub use contract::*;
 pub use currency::*;
 pub use currency_ext::*;
 pub use debug::*;

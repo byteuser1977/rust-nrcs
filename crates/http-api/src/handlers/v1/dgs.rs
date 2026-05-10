@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetDGSGoodHandler;
 
@@ -28,22 +29,21 @@ impl RequestHandler for GetDGSGoodHandler {
         vec![ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _goods_id = req.require_u64("goods")?;
-        
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let goods_id = req.require_u64("goods")?;
+
+        let goods = state.dgs_service.get_goods(goods_id).await;
+
         let mut builder = RsRespBuilder::new();
-        builder
-            .insert("goods", "0")
-            .insert("name", "")
-            .insert("description", "")
-            .insert("quantity", 0i32)
-            .insert("priceNQT", "0")
-            .insert("seller", "0")
-            .insert("sellerRS", "NRCS-0-0-0")
-            .insert("tags", "")
-            .insert("delisted", false)
-            .insert("timestamp", 0i32);
-        
+        match goods {
+            Some(g) => {
+                builder.insert("goods", json!(g));
+            }
+            None => {
+                return Err(ApiError::Validation("Goods not found".to_string()));
+            }
+        }
+
         Ok(builder.build())
     }
 }
@@ -66,15 +66,19 @@ impl RequestHandler for GetDGSGoodsHandler {
         vec![ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _seller = req.get_u64("seller");
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
-        let _in_stock_only = req.get_bool("inStockOnly");
-        
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let seller = req.get_u64("seller");
+        let first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let last_index = req.get_i32("lastIndex").unwrap_or(-1);
+        let in_stock_only = req.get_bool("inStockOnly");
+
+        let goods = state.dgs_service.get_goods_list(seller, in_stock_only, first_index, last_index).await;
+
+        let goods_json: Vec<serde_json::Value> = goods.iter().map(|g| json!(g)).collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("goods", json!([]));
-        
+        builder.insert("goods", json!(goods_json));
+
         Ok(builder.build())
     }
 }
@@ -126,23 +130,21 @@ impl RequestHandler for GetDGSPurchaseHandler {
         vec![ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _purchase_id = req.require_u64("purchase")?;
-        
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let purchase_id = req.require_u64("purchase")?;
+
+        let purchase = state.dgs_service.get_purchase(purchase_id).await;
+
         let mut builder = RsRespBuilder::new();
-        builder
-            .insert("purchase", "0")
-            .insert("goods", "0")
-            .insert("name", "")
-            .insert("quantity", 0i32)
-            .insert("priceNQT", "0")
-            .insert("buyer", "0")
-            .insert("buyerRS", "NRCS-0-0-0")
-            .insert("seller", "0")
-            .insert("sellerRS", "NRCS-0-0-0")
-            .insert("timestamp", 0i32)
-            .insert("pending", true);
-        
+        match purchase {
+            Some(p) => {
+                builder.insert("purchase", json!(p));
+            }
+            None => {
+                return Err(ApiError::Validation("Purchase not found".to_string()));
+            }
+        }
+
         Ok(builder.build())
     }
 }
@@ -165,15 +167,19 @@ impl RequestHandler for GetDGSPurchasesHandler {
         vec![ApiTag::Dgs]
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _seller = req.get_u64("seller");
-        let _buyer = req.get_u64("buyer");
-        let _first_index = req.get_i32("firstIndex").unwrap_or(0);
-        let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
-        
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let seller = req.get_u64("seller");
+        let buyer = req.get_u64("buyer");
+        let first_index = req.get_i32("firstIndex").unwrap_or(0);
+        let last_index = req.get_i32("lastIndex").unwrap_or(-1);
+
+        let purchases = state.dgs_service.get_purchases(seller, buyer, first_index, last_index).await;
+
+        let purchases_json: Vec<serde_json::Value> = purchases.iter().map(|p| json!(p)).collect();
+
         let mut builder = RsRespBuilder::new();
-        builder.insert("purchases", json!([]));
-        
+        builder.insert("purchases", json!(purchases_json));
+
         Ok(builder.build())
     }
 }
@@ -200,20 +206,27 @@ impl RequestHandler for DGSListingHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _name = req.require_string("name")?;
-        let _description = req.get_string("description");
-        let _quantity = req.get_i32("quantity").unwrap_or(1);
-        let _price = req.require_string("priceNQT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let name = req.require_string("name")?;
+        let description = req.get_string("description").unwrap_or_default();
+        let quantity = req.get_i32("quantity").unwrap_or(1);
+        let price_nqt = req.get_string("priceNQT")
+            .and_then(|s| s.parse::<u64>().ok())
+            .ok_or_else(|| ApiError::MissingParameter("priceNQT".to_string()))?;
+        let tags = req.get_string("tags").unwrap_or_default();
+
+        let attachment = json!({
+            "name": name,
+            "description": description,
+            "quantity": quantity,
+            "priceNQT": price_nqt.to_string(),
+            "tags": tags
+        });
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 5, 0, None, 0, Some(attachment), state,
+        ).await
     }
 }
 
@@ -239,16 +252,17 @@ impl RequestHandler for DGSDelistingHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _goods_id = req.require_u64("goods")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let goods_id = req.require_u64("goods")?;
+
+        let attachment = json!({
+            "goods": goods_id.to_string()
+        });
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 5, 1, None, 0, Some(attachment), state,
+        ).await
     }
 }
 
@@ -274,18 +288,25 @@ impl RequestHandler for DGSPurchaseHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _goods_id = req.require_u64("goods")?;
-        let _quantity = req.get_i32("quantity").unwrap_or(1);
-        let _price = req.require_string("priceNQT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let goods_id = req.require_u64("goods")?;
+        let quantity = req.get_i32("quantity").unwrap_or(1);
+        let price_nqt = req.get_string("priceNQT")
+            .and_then(|s| s.parse::<u64>().ok())
+            .ok_or_else(|| ApiError::MissingParameter("priceNQT".to_string()))?;
+        let delivery_deadline = req.get_i32("deliveryDeadlineTimestamp").unwrap_or(0);
+
+        let attachment = json!({
+            "goods": goods_id.to_string(),
+            "quantity": quantity,
+            "priceNQT": price_nqt.to_string(),
+            "deliveryDeadlineTimestamp": delivery_deadline
+        });
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 5, 2, None, price_nqt, Some(attachment), state,
+        ).await
     }
 }
 
@@ -312,16 +333,25 @@ impl RequestHandler for DGSDeliveryHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _purchase_id = req.require_u64("purchase")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let purchase_id = req.require_u64("purchase")?;
+        let goods_data = req.get_string("goodsData").unwrap_or_default();
+        let goods_nonce = req.get_string("goodsNonce").unwrap_or_default();
+        let discount_nqt = req.get_string("discountNQT")
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0);
+
+        let attachment = json!({
+            "purchase": purchase_id.to_string(),
+            "goodsData": goods_data,
+            "goodsNonce": goods_nonce,
+            "discountNQT": discount_nqt.to_string()
+        });
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 5, 3, None, discount_nqt, Some(attachment), state,
+        ).await
     }
 }
 
@@ -347,16 +377,17 @@ impl RequestHandler for DGSFeedbackHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _purchase_id = req.require_u64("purchase")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let purchase_id = req.require_u64("purchase")?;
+
+        let attachment = json!({
+            "purchase": purchase_id.to_string()
+        });
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 5, 4, None, 0, Some(attachment), state,
+        ).await
     }
 }
 
@@ -382,17 +413,21 @@ impl RequestHandler for DGSRefundHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _purchase_id = req.require_u64("purchase")?;
-        let _refund = req.get_string("refundNQT");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let purchase_id = req.require_u64("purchase")?;
+        let refund_nqt = req.get_string("refundNQT")
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0);
 
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
+        let attachment = json!({
+            "purchase": purchase_id.to_string(),
+            "refundNQT": refund_nqt.to_string()
+        });
 
-        Ok(builder.build())
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 5, 5, None, refund_nqt, Some(attachment), state,
+        ).await
     }
 }
 

@@ -3,6 +3,7 @@
 //! 与 Java 版本 GetFundingMonitor, StartFundingMonitor 等完全对齐
 
 use async_trait::async_trait;
+use serde_json::json;
 
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
@@ -33,7 +34,7 @@ impl RequestHandler for GetFundingMonitorHandler {
         let _property = req.get_string("property");
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("monitors", json!([]));
 
         Ok(builder.build())
     }
@@ -71,7 +72,7 @@ impl RequestHandler for StartFundingMonitorHandler {
         let _amount = req.require_string("amount")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -109,7 +110,7 @@ impl RequestHandler for StopFundingMonitorHandler {
         let _holding = req.get_u64("holding");
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }

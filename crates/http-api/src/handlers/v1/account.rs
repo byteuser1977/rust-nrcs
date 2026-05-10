@@ -12,6 +12,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetAccountHandler;
 
@@ -495,18 +496,13 @@ impl RequestHandler for SetAccountInfoHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _name = req.get_string("name");
-        let _description = req.get_string("description");
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let name = req.get_string("name").unwrap_or_default(); let description = req.get_string("description").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 4, 0, None, 0, Some(json!({"name": name, "description": description})), state,
+        ).await
     }
 }
 
@@ -532,18 +528,13 @@ impl RequestHandler for SetAccountPropertyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _recipient = req.get_u64("recipient");
-        let _property = req.require_string("property")?;
-        let _value = req.get_string("value");
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let property = req.get_string("property").unwrap_or_default(); let value = req.get_string("value").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 4, 1, None, 0, Some(json!({"property": property, "value": value})), state,
+        ).await
     }
 }
 

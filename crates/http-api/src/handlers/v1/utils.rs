@@ -1,6 +1,6 @@
 //! 工具类 API Handlers
 //!
-//! 与 Java 版本 Hash, HexConvert 等完全对齐
+//! 与 Java 版本 Hash, HexConvert, ParseTransaction 等完全对齐
 
 use async_trait::async_trait;
 use serde_json::json;
@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use crate::handlers::v1::create_transaction::CreateTransactionHelper;
 
 pub struct HashHandler;
 
@@ -183,71 +184,47 @@ impl RequestHandler for ParseTransactionHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let transaction_bytes_hex = req.get_string("transactionBytes");
-        
-        if let Some(hex_str) = transaction_bytes_hex {
-            let bytes = hex::decode(&hex_str).unwrap_or_default();
-            
-            if bytes.len() >= 100 {
-                let version = bytes[0] & 0x0F;
-                let tx_type = (bytes[1] >> 4) & 0x0F;
-                let subtype = bytes[1] & 0x0F;
-                let timestamp = i32::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5]]);
-                let deadline = u16::from_le_bytes([bytes[6], bytes[7]]);
-                
-                let mut sender_pk = [0u8; 32];
-                sender_pk.copy_from_slice(&bytes[8..40]);
-                
-                let mut recipient_bytes = [0u8; 8];
-                recipient_bytes.copy_from_slice(&bytes[40..48]);
-                let recipient = u64::from_le_bytes(recipient_bytes);
-                
-                let mut amount_bytes = [0u8; 8];
-                amount_bytes.copy_from_slice(&bytes[48..56]);
-                let amount = u64::from_le_bytes(amount_bytes);
-                
-                let mut fee_bytes = [0u8; 8];
-                fee_bytes.copy_from_slice(&bytes[56..64]);
-                let fee = u64::from_le_bytes(fee_bytes);
-                
-                let mut full_hash = [0u8; 32];
-                full_hash.copy_from_slice(&bytes[68..100]);
-                
-                let mut builder = RsRespBuilder::new();
-                builder
-                    .insert("version", version as i32)
-                    .insert("type", tx_type as i32)
-                    .insert("subtype", subtype as i32)
-                    .insert("timestamp", timestamp)
-                    .insert("deadline", deadline as i32)
-                    .insert("senderPublicKey", hex::encode(sender_pk))
-                    .insert("recipient", recipient.to_string())
-                    .insert("recipientRS", format_account_rs(recipient))
-                    .insert("amountNQT", amount.to_string())
-                    .insert("feeNQT", fee.to_string())
-                    .insert("fullHash", hex::encode(full_hash));
-                
-                return Ok(builder.build());
-            }
-        }
-        
+        let tx = CreateTransactionHelper::parse_transaction_from_bytes_or_json(req)?;
+
         let mut builder = RsRespBuilder::new();
         builder
-            .insert("transaction", "")
-            .insert("timestamp", 0i32)
-            .insert("height", 0i32)
-            .insert("sender", "0")
-            .insert("senderRS", "NRCS-0-0-0")
-            .insert("senderPublicKey", "")
-            .insert("recipient", "0")
-            .insert("recipientRS", "NRCS-0-0-0")
-            .insert("amountNQT", "0")
-            .insert("feeNQT", "0")
-            .insert("type", 0u8)
-            .insert("subtype", 0u8)
-            .insert("fullHash", "")
-            .insert("signature", "");
-        
+            .insert("transaction", tx.id.to_string())
+            .insert("timestamp", tx.timestamp)
+            .insert("height", tx.height)
+            .insert("sender", tx.sender_id.to_string())
+            .insert("senderRS", format_account_rs(tx.sender_id))
+            .insert("senderPublicKey", hex::encode(tx.sender_public_key.0))
+            .insert("amountNQT", tx.amount.to_string())
+            .insert("feeNQT", tx.fee.to_string())
+            .insert("type", u8::from(tx.type_id) as i32)
+            .insert("subtype", tx.subtype as i32)
+            .insert("fullHash", hex::encode(tx.full_hash.0))
+            .insert("signature", hex::encode(tx.signature.0))
+            .insert("phased", tx.phased)
+            .insert("deadline", tx.deadline as i32)
+            .insert("version", tx.version as i32);
+
+        if let Some(recipient) = tx.recipient_id {
+            builder
+                .insert("recipient", recipient.to_string())
+                .insert("recipientRS", format_account_rs(recipient));
+        }
+
+        if let Some(ref hash) = tx.referenced_transaction_full_hash {
+            builder.insert("referencedTransactionFullHash", hex::encode(hash.0));
+        }
+
+        if let Some(eb_height) = tx.ec_block_height {
+            builder.insert("ecBlockHeight", eb_height);
+        }
+        if let Some(eb_id) = tx.ec_block_id {
+            builder.insert("ecBlockId", eb_id.to_string());
+        }
+
+        if let Some(ref att) = tx.attachment_json {
+            builder.insert("attachment", json!(att.clone()));
+        }
+
         Ok(builder.build())
     }
 }

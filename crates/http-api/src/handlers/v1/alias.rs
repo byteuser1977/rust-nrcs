@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetAliasHandler;
 
@@ -157,18 +158,13 @@ impl RequestHandler for SetAliasHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _alias_name = req.require_string("aliasName")?;
-        let _alias_uri = req.get_string("aliasURI");
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let aliasName = req.get_string("aliasName").unwrap_or_default(); let aliasURI = req.get_string("aliasURI").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 1, 1, None, 0, Some(json!({"aliasName": aliasName, "aliasURI": aliasURI})), state,
+        ).await
     }
 }
 
@@ -194,17 +190,13 @@ impl RequestHandler for DeleteAliasHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _alias_id = req.get_u64("alias");
-        let _alias_name = req.get_string("aliasName");
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let alias = req.get_string("alias").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 1, 4, None, 0, Some(json!({"alias": alias})), state,
+        ).await
     }
 }
 
@@ -230,19 +222,13 @@ impl RequestHandler for SellAliasHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _alias_id = req.get_u64("alias");
-        let _alias_name = req.get_string("aliasName");
-        let _price = req.require_string("priceNQT")?;
-        let _recipient = req.get_u64("recipient");
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let alias = req.get_string("alias").unwrap_or_default(); let priceNQT = req.get_string("priceNQT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 1, 2, None, 0, Some(json!({"alias": alias, "priceNQT": priceNQT.to_string()})), state,
+        ).await
     }
 }
 
@@ -268,17 +254,12 @@ impl RequestHandler for BuyAliasHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _alias_id = req.get_u64("alias");
-        let _alias_name = req.get_string("aliasName");
-        let _amount = req.require_string("amountNQT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let alias = req.get_string("alias").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 1, 3, None, 0, Some(json!({"alias": alias})), state,
+        ).await
     }
 }

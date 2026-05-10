@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetAccountControlHandler;
 
@@ -63,17 +64,13 @@ impl RequestHandler for SetAccountControlHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _control = req.get_string("control");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
         
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 4, 0, None, 0, None, state,
+        ).await
     }
 }
 
@@ -140,16 +137,13 @@ impl RequestHandler for DeleteAccountPropertyHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _property = req.require_string("property")?;
-        let _secret_phrase = req.require_string("secretPhrase")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let property = req.get_string("property").unwrap_or_default();
 
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-
-        Ok(builder.build())
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 4, 2, None, 0, Some(json!({"property": property})), state,
+        ).await
     }
 }
 
@@ -175,16 +169,12 @@ impl RequestHandler for SetAccountLongValuePropertyHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _property = req.require_string("property")?;
-        let _value = req.get_string("value");
-        let _secret_phrase = req.require_string("secretPhrase")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let property = req.get_string("property").unwrap_or_default(); let value = req.get_string("value").unwrap_or_default();
 
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-
-        Ok(builder.build())
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 4, 3, None, 0, Some(json!({"property": property, "value": value})), state,
+        ).await
     }
 }

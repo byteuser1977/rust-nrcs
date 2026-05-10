@@ -780,3 +780,207 @@ impl RequestHandler for GetAllBundlerRatesHandler {
         Ok(builder.build())
     }
 }
+
+/// 启动打包器 Handler
+///
+/// 对应 NRCS Java: `StartBundler`
+///
+/// 功能：启动一个交易打包器，支持通过 bundlingRulesJSON 或单独参数指定规则
+pub struct StartBundlerHandler;
+
+impl StartBundlerHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for StartBundlerHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec![
+            "secretPhrase",
+            "minRateNQTPerFXT",
+            "totalFeesLimitFQT",
+            "overpayFQTPerFXT",
+            "feeCalculatorName",
+            "filter",
+            "bundlingRulesJSON",
+        ]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Forging]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    fn allow_required_block_parameters(&self) -> bool {
+        false
+    }
+
+    fn require_full_client(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let secret_phrase = req.require_string("secretPhrase")?;
+        let total_fees_limit_fqt = req.get_u64("totalFeesLimitFQT").unwrap_or(0);
+
+        let bundling_rules_json = req.get_string("bundlingRulesJSON");
+        let rules = if let Some(rules_json_str) = bundling_rules_json {
+            let parsed: Result<Vec<serde_json::Value>, _> =
+                serde_json::from_str(&rules_json_str);
+            match parsed {
+                Ok(rules_arr) => {
+                    let mut rules = Vec::new();
+                    for rule_val in rules_arr {
+                        let min_rate = rule_val
+                            .get("minRateNQTPerFXT")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<u64>().ok())
+                            .or_else(|| rule_val.get("minRateNQTPerFXT").and_then(|v| v.as_u64()))
+                            .unwrap_or(0);
+                        let overpay = rule_val
+                            .get("overpayFQTPerFXT")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<u64>().ok())
+                            .or_else(|| rule_val.get("overpayFQTPerFXT").and_then(|v| v.as_u64()))
+                            .unwrap_or(0);
+                        let fee_calc = rule_val
+                            .get("feeCalculatorName")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("MinFeeCalculator")
+                            .to_string();
+                        let filters = rule_val
+                            .get("filters")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|f| {
+                                        f.get("name").and_then(|n| n.as_str()).map(|s| s.to_string())
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        rules.push(BundlerRule {
+                            min_rate_nqt_per_fxt: min_rate,
+                            overpay_fqt_per_fxt: overpay,
+                            fee_calculator_name: fee_calc,
+                            filters,
+                        });
+                    }
+                    rules
+                }
+                Err(_) => {
+                    return Err(ApiError::IncorrectValue("bundlingRulesJSON".to_string()));
+                }
+            }
+        } else {
+            let min_rate_nqt_per_fxt = req.require_u64("minRateNQTPerFXT")?;
+            let overpay_fqt_per_fxt = req.get_u64("overpayFQTPerFXT").unwrap_or(0);
+            let fee_calculator_name = req
+                .get_string("feeCalculatorName")
+                .unwrap_or_else(|| "MinFeeCalculator".to_string());
+            let filters: Vec<String> = req
+                .params
+                .keys()
+                .filter(|k| *k == "filter")
+                .filter_map(|k| req.params.get(k).cloned())
+                .collect();
+            vec![BundlerRule {
+                min_rate_nqt_per_fxt,
+                overpay_fqt_per_fxt,
+                fee_calculator_name,
+                filters,
+            }]
+        };
+
+        let bundler_info = state
+            .bundler_service
+            .start_bundler(&secret_phrase, total_fees_limit_fqt, rules)
+            .await
+            .map_err(ApiError::Internal)?;
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert_bundler_info(&bundler_info);
+
+        Ok(builder.build())
+    }
+}
+
+/// 停止打包器 Handler
+///
+/// 对应 NRCS Java: `StopBundler`
+///
+/// 功能：停止指定的打包器，支持通过 secretPhrase 或 adminPassword 认证
+pub struct StopBundlerHandler;
+
+impl StopBundlerHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for StopBundlerHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "secretPhrase", "adminPassword"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Forging]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let secret_phrase = req.get_string("secretPhrase");
+        let account_id = req.get_u64("account");
+        let _admin_password = req.get_string("adminPassword");
+
+        let mut builder = RsRespBuilder::new();
+
+        if let Some(sp) = secret_phrase {
+            let sp_account_id = crate::bundler_service::MemoryBundlerService::account_id_from_secret_phrase(&sp);
+            if let Some(acc_id) = account_id {
+                if sp_account_id != acc_id {
+                    return Err(ApiError::Validation("Incorrect account".to_string()));
+                }
+            }
+            let stopped = state
+                .bundler_service
+                .stop_bundler(sp_account_id)
+                .await
+                .map_err(ApiError::Internal)?;
+            builder.insert("stoppedAccountBundlers", stopped.is_some());
+        } else if let Some(acc_id) = account_id {
+            let stopped = state
+                .bundler_service
+                .stop_bundler(acc_id)
+                .await
+                .map_err(ApiError::Internal)?;
+            builder.insert("stoppedAccountBundlers", stopped.is_some());
+        } else {
+            let stopped = state
+                .bundler_service
+                .stop_all_bundlers()
+                .await
+                .map_err(ApiError::Internal)?;
+            builder.insert("stoppedAllBundlers", !stopped.is_empty());
+        }
+
+        Ok(builder.build())
+    }
+}

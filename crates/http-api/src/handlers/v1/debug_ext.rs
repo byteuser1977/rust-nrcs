@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct DumpPeersHandler;
 
@@ -233,13 +234,13 @@ impl RequestHandler for FullResetHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _admin_password = req.require_string("adminPassword")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        
 
-        let mut builder = RsRespBuilder::new();
-        builder.insert("done", true);
-
-        Ok(builder.build())
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 0, 0, None, 0, None, state,
+        ).await
     }
 }
 

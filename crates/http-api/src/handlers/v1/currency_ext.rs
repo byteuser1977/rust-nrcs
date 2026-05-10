@@ -265,3 +265,33 @@ impl RequestHandler for GetCurrencyPhasedTransactionsHandler {
         Ok(builder.build())
     }
 }
+
+pub struct GetExpectedCurrencyTransfersHandler;
+
+impl GetExpectedCurrencyTransfersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedCurrencyTransfersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["currency", "account", "includeCurrencyInfo"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ms]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _currency_id = req.get_u64("currency");
+        let _account_id = req.get_u64("account");
+        let _include_currency_info = req.get_bool("includeCurrencyInfo");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("transfers", json!([]));
+
+        Ok(builder.build())
+    }
+}

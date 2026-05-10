@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetCurrencyHandler;
 
@@ -252,20 +253,13 @@ impl RequestHandler for IssueCurrencyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _name = req.require_string("name")?;
-        let _code = req.require_string("code")?;
-        let _description = req.get_string("description");
-        let _type_ = req.get_i32("type").unwrap_or(0);
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let name = req.get_string("name").unwrap_or_default(); let code = req.get_i32("code").unwrap_or(0); let description = req.get_string("description").unwrap_or_default(); let type_ = req.get_string("type").unwrap_or_default(); let initialSupply = req.get_i32("initialSupply").unwrap_or(0); let reserveSupply = req.get_i32("reserveSupply").unwrap_or(0); let maxSupply = req.get_i32("maxSupply").unwrap_or(0); let issuanceHeight = req.get_i32("issuanceHeight").unwrap_or(0); let minReservePerUnitNQT = req.get_string("minReservePerUnitNQT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let minDifficulty = req.get_i32("minDifficulty").unwrap_or(0); let maxDifficulty = req.get_i32("maxDifficulty").unwrap_or(0); let rules = req.get_bool("rules");
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 6, 0, None, 0, Some(json!({"name": name, "code": code, "description": description, "type": type_, "initialSupply": initialSupply, "reserveSupply": reserveSupply, "maxSupply": maxSupply, "issuanceHeight": issuanceHeight, "minReservePerUnitNQT": minReservePerUnitNQT.to_string(), "minDifficulty": minDifficulty, "maxDifficulty": maxDifficulty, "rules": rules})), state,
+        ).await
     }
 }
 
@@ -291,19 +285,13 @@ impl RequestHandler for TransferCurrencyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _recipient = req.require_u64("recipient")?;
-        let _currency_id = req.require_u64("currency")?;
-        let _units = req.require_string("unitsQNT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let currency = req.get_string("currency").unwrap_or_default(); let units = req.get_string("units").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let recipient_id = req.require_u64("recipient")?;
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 6, 1, Some(recipient_id), 0, Some(json!({"currency": currency, "units": units.to_string()})), state,
+        ).await
     }
 }
 
@@ -329,18 +317,13 @@ impl RequestHandler for CurrencyBuyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _currency_id = req.require_u64("currency")?;
-        let _rate = req.require_string("rateNQT")?;
-        let _units = req.require_string("unitsQNT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let currency = req.get_string("currency").unwrap_or_default(); let rateNQT = req.get_string("rateNQT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let units = req.get_string("units").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 6, 3, None, 0, Some(json!({"currency": currency, "rateNQT": rateNQT.to_string(), "units": units.to_string()})), state,
+        ).await
     }
 }
 
@@ -366,18 +349,13 @@ impl RequestHandler for CurrencySellHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _currency_id = req.require_u64("currency")?;
-        let _rate = req.require_string("rateNQT")?;
-        let _units = req.require_string("unitsQNT")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let currency = req.get_string("currency").unwrap_or_default(); let rateNQT = req.get_string("rateNQT").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let units = req.get_string("units").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 6, 4, None, 0, Some(json!({"currency": currency, "rateNQT": rateNQT.to_string(), "units": units.to_string()})), state,
+        ).await
     }
 }
 
@@ -432,15 +410,12 @@ impl RequestHandler for DeleteCurrencyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _currency_id = req.require_u64("currency")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let currency = req.get_string("currency").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 6, 8, None, 0, Some(json!({"currency": currency})), state,
+        ).await
     }
 }

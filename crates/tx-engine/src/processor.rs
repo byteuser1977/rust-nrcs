@@ -349,6 +349,16 @@ pub trait TransactionProcessor: Send + Sync {
         }
         Ok(receipts)
     }
+
+    async fn broadcast(&self, tx: &Transaction) -> ProcessorResult<()> {
+        self.apply_unconfirmed(tx).await?;
+        Ok(())
+    }
+
+    async fn add_to_mempool(&self, tx: &Transaction) -> ProcessorResult<()> {
+        self.validate(tx).await?;
+        Ok(())
+    }
 }
 
 pub struct DatabaseTransactionProcessor {
@@ -1116,7 +1126,7 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
 
         if fee_nqt != 0 {
             self.account_repo.add_to_balance(sender_id, -fee_nqt, self.current_height()).await?;
-            debug!("Deducted phased fee={} from sender={}", fee_nqt, sender_id);
+            debug!("Deducted phased fee={} from sender={} at height={}", fee_nqt, sender_id,self.current_height());
         }
 
         Ok(())

@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetShufflingHandler;
 
@@ -130,19 +131,13 @@ impl RequestHandler for ShufflingCreateHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _holding = req.get_u64("holding");
-        let _amount = req.require_string("amount")?;
-        let _participant_count = req.require_i32("participantCount")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let holding = req.get_string("holding").unwrap_or_default(); let holding_type = req.get_i32("holdingType").unwrap_or(0); let amount = req.get_string("amount").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0); let participantCount = req.get_i32("participantCount").unwrap_or(0); let registrationPeriod = req.get_i32("registrationPeriod").unwrap_or(0);
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 7, 0, None, 0, Some(json!({"holding": holding, "holdingType": holding_type, "amount": amount.to_string(), "participantCount": participantCount, "registrationPeriod": registrationPeriod})), state,
+        ).await
     }
 }
 
@@ -168,16 +163,13 @@ impl RequestHandler for ShufflingRegisterHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _shuffling_id = req.get_u64("shuffling");
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let shuffling = req.get_string("shuffling").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 7, 1, None, 0, Some(json!({"shuffling": shuffling})), state,
+        ).await
     }
 }
 
@@ -203,16 +195,13 @@ impl RequestHandler for ShufflingProcessHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _shuffling_id = req.require_u64("shuffling")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let shuffling = req.get_string("shuffling").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 7, 2, None, 0, Some(json!({"shuffling": shuffling})), state,
+        ).await
     }
 }
 
@@ -238,16 +227,13 @@ impl RequestHandler for ShufflingVerifyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _shuffling_id = req.require_u64("shuffling")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let shuffling = req.get_string("shuffling").unwrap_or_default(); let shufflingStateHash = req.get_string("shufflingStateHash").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 7, 3, None, 0, Some(json!({"shuffling": shuffling, "shufflingStateHash": shufflingStateHash})), state,
+        ).await
     }
 }
 
@@ -273,16 +259,13 @@ impl RequestHandler for ShufflingCancelHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _shuffling_id = req.require_u64("shuffling")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let shuffling = req.get_string("shuffling").unwrap_or_default();
 
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-
-        Ok(builder.build())
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 7, 4, None, 0, Some(json!({"shuffling": shuffling})), state,
+        ).await
     }
 }
 
@@ -310,7 +293,7 @@ impl RequestHandler for GetAssignedShufflingsHandler {
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("shufflings", json!([]));
 
         Ok(builder.build())
     }
@@ -341,7 +324,7 @@ impl RequestHandler for GetHoldingShufflingsHandler {
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("shufflings", json!([]));
 
         Ok(builder.build())
     }
@@ -369,7 +352,7 @@ impl RequestHandler for GetShufflersHandler {
         let _admin_password = req.get_string("adminPassword");
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("shufflings", json!([]));
 
         Ok(builder.build())
     }
@@ -397,7 +380,7 @@ impl RequestHandler for GetShufflingParticipantsHandler {
         let _shuffling_id = req.require_u64("shuffling")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("shufflings", json!([]));
 
         Ok(builder.build())
     }
@@ -434,7 +417,7 @@ impl RequestHandler for StartShufflerHandler {
         let _shuffling_full_hash = req.require_string("shufflingFullHash")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("shufflings", json!([]));
 
         Ok(builder.build())
     }
@@ -471,7 +454,7 @@ impl RequestHandler for StopShufflerHandler {
         let _shuffling_full_hash = req.require_string("shufflingFullHash")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("shufflings", json!([]));
 
         Ok(builder.build())
     }

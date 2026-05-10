@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use crate::handlers::v1::create_transaction::CreateTransactionHelper;
 
 pub struct GetTransactionHandler;
 
@@ -210,7 +211,12 @@ impl SendMoneyHandler {
 #[async_trait]
 impl RequestHandler for SendMoneyHandler {
     fn parameters(&self) -> Vec<&'static str> {
-        vec!["secretPhrase", "recipient", "amountNQT", "feeNQT", "deadline", "referencedTransactionFullHash", "broadcast"]
+        vec!["secretPhrase", "publicKey", "recipient", "amountNQT", "feeNQT", "deadline", "referencedTransactionFullHash", "broadcast",
+             "message", "messageIsText", "messageIsPrunable",
+             "messageToEncrypt", "messageToEncryptIsText", "encryptedMessageData", "encryptedMessageNonce", "encryptedMessageIsPrunable", "compressMessageToEncrypt",
+             "phased", "phasingFinishHeight", "phasingVotingModel", "phasingQuorum", "phasingMinBalance", "phasingHolding", "phasingMinBalanceModel",
+             "phasingWhitelisted", "phasingLinkedFullHash", "phasingHashedSecret", "phasingHashedSecretAlgorithm",
+             "recipientPublicKey", "ecBlockId", "ecBlockHeight", "phasingParams", "timestamp"]
     }
     
     fn api_tags(&self) -> Vec<ApiTag> {
@@ -221,25 +227,23 @@ impl RequestHandler for SendMoneyHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _recipient = req.require_u64("recipient")?;
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let recipient = req.require_u64("recipient")?;
         let amount_str = req.require_string("amountNQT")?;
-        let fee_str = req.require_string("feeNQT")?;
-        let _deadline = req.require_i32("deadline")?;
-        
-        let _amount: u64 = amount_str.parse().unwrap_or(0);
-        let _fee: u64 = fee_str.parse().unwrap_or(0);
-        
-        let mut builder = RsRespBuilder::new();
-        
-        builder
-            .insert("transaction", "0")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "")
-            .insert("signatureHash", "");
-        
-        Ok(builder.build())
+        let amount_nqt: u64 = amount_str.parse()
+            .map_err(|_| ApiError::IncorrectValue("amountNQT".to_string()))?;
+
+        let params = CreateTransactionHelper::parse_common_params(req)?;
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &params,
+            blockchain_types::transaction::TYPE_PAYMENT,
+            blockchain_types::transaction::SUBTYPE_PAYMENT_ORDINARY_PAYMENT,
+            Some(recipient),
+            amount_nqt,
+            None,
+            state,
+        ).await
     }
 }
 
@@ -265,15 +269,20 @@ impl RequestHandler for BroadcastTransactionHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _tx_bytes_hex = req.get_string("transactionBytes");
-        
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let tx = CreateTransactionHelper::parse_transaction_from_bytes_or_json(req)?;
+
+        state.tx_processor
+            .broadcast(&tx)
+            .await
+            .map_err(ApiError::TxEngine)?;
+
         let mut builder = RsRespBuilder::new();
         builder
-            .insert("transaction", "0")
-            .insert("fullHash", "")
-            .insert("numberPeersSentTo", 0i32);
-        
+            .insert("transaction", tx.id.to_string())
+            .insert("fullHash", hex::encode(tx.full_hash.0))
+            .insert("numberPeersSentTo", 1i32);
+
         Ok(builder.build())
     }
 }
@@ -300,17 +309,41 @@ impl RequestHandler for SendTransactionHandler {
         true
     }
 
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _tx_bytes_hex = req.get_string("transactionBytes");
-        let _tx_json = req.get_string("transactionJSON");
-        let _secret_phrase = req.get_string("secretPhrase");
-        let _broadcast = req.get_bool("broadcast");
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let mut tx = CreateTransactionHelper::parse_transaction_from_bytes_or_json(req)?;
+
+        let secret_phrase = req.get_string("secretPhrase");
+        let broadcast = req.get_string("broadcast")
+            .map(|v| !v.eq_ignore_ascii_case("false"))
+            .unwrap_or(true);
+
+        if let Some(ref sp) = secret_phrase {
+            CreateTransactionHelper::sign_transaction_with_passphrase(&mut tx, sp)?;
+        }
+
+        if broadcast && secret_phrase.is_some() {
+            state.tx_processor
+                .broadcast(&tx)
+                .await
+                .map_err(ApiError::TxEngine)?;
+        } else {
+            state.tx_processor
+                .validate(&tx)
+                .await
+                .map_err(ApiError::TxEngine)?;
+        }
 
         let mut builder = RsRespBuilder::new();
         builder
-            .insert("transaction", "0")
-            .insert("fullHash", "")
-            .insert("numberPeersSentTo", 0i32);
+            .insert("transaction", tx.id.to_string())
+            .insert("fullHash", hex::encode(tx.full_hash.0));
+
+        if secret_phrase.is_some() {
+            builder
+                .insert("transactionBytes", hex::encode(tx.get_bytes()))
+                .insert("signatureHash", hex::encode(crypto::sha256(&tx.signature.0)))
+                .insert("broadcasted", broadcast);
+        }
 
         Ok(builder.build())
     }

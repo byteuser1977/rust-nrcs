@@ -9,6 +9,7 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use super::create_transaction::CreateTransactionHelper;
 
 pub struct GetPollHandler;
 
@@ -162,19 +163,13 @@ impl RequestHandler for CreatePollHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _name = req.require_string("name")?;
-        let _description = req.get_string("description");
-        let _finish_height = req.require_i32("finishHeight")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "")
-            .insert("transactionBytes", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let name = req.get_string("name").unwrap_or_default(); let description = req.get_string("description").unwrap_or_default(); let finishHeight = req.get_i32("finishHeight").unwrap_or(0); let votingModel = req.get_i32("votingModel").unwrap_or(0); let minNumberOfOptions = req.get_i32("minNumberOfOptions").unwrap_or(0); let maxNumberOfOptions = req.get_i32("maxNumberOfOptions").unwrap_or(0); let minRangeValue = req.get_i32("minRangeValue").unwrap_or(0); let maxRangeValue = req.get_i32("maxRangeValue").unwrap_or(0); let options = req.get_string("options").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 1, 0, None, 0, Some(json!({"name": name, "description": description, "finishHeight": finishHeight, "votingModel": votingModel, "minNumberOfOptions": minNumberOfOptions, "maxNumberOfOptions": maxNumberOfOptions, "minRangeValue": minRangeValue, "maxRangeValue": maxRangeValue, "options": options})), state,
+        ).await
     }
 }
 
@@ -201,16 +196,13 @@ impl RequestHandler for CastVoteHandler {
         true
     }
     
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
-        let _poll_id = req.require_u64("poll")?;
-        
-        let mut builder = RsRespBuilder::new();
-        builder
-            .insert("transaction", "")
-            .insert("fullHash", "");
-        
-        Ok(builder.build())
+    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let common_params = CreateTransactionHelper::parse_common_params(req)?;
+        let poll = req.get_string("poll").unwrap_or_default(); let vote = req.get_string("vote").unwrap_or_default();
+
+        CreateTransactionHelper::create_and_broadcast_transaction(
+            &common_params, 1, 0, None, 0, Some(json!({"poll": poll, "vote": vote})), state,
+        ).await
     }
 }
 

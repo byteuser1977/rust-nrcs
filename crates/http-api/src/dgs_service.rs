@@ -89,9 +89,6 @@ pub trait DGSServiceApi: Send + Sync {
         new_price_nqt: u64,
     ) -> Result<DGSGoods, String>;
 
-    /// 修改商品数量
-    ///
-    /// 对应 NRCS Java: `DGSQuantityChange.processRequest()`
     async fn change_quantity(
         &self,
         goods_id: u64,
@@ -99,9 +96,26 @@ pub trait DGSServiceApi: Send + Sync {
         delta_quantity: i32,
     ) -> Result<DGSGoods, String>;
 
-    /// 获取商品数量统计
-    ///
-    /// 对应 NRCS Java: `GetDGSGoodsCount.processRequest()`
+    async fn get_goods(&self, goods_id: u64) -> Option<DGSGoods>;
+
+    async fn get_goods_list(
+        &self,
+        seller_id: Option<u64>,
+        in_stock_only: bool,
+        first_index: i32,
+        last_index: i32,
+    ) -> Vec<DGSGoods>;
+
+    async fn get_purchase(&self, purchase_id: u64) -> Option<DGSPurchase>;
+
+    async fn get_purchases(
+        &self,
+        seller_id: Option<u64>,
+        buyer_id: Option<u64>,
+        first_index: i32,
+        last_index: i32,
+    ) -> Vec<DGSPurchase>;
+
     async fn get_goods_count(&self, seller_id: Option<u64>, in_stock_only: bool) -> i64;
 
     /// 获取商品的购买次数统计
@@ -258,6 +272,77 @@ impl DGSServiceApi for MemoryDGSService {
             }
             None => Err(format!("Goods {} not found", goods_id)),
         }
+    }
+
+    async fn get_goods(&self, goods_id: u64) -> Option<DGSGoods> {
+        let goods_map = self.goods.read().await;
+        goods_map.get(&goods_id).cloned()
+    }
+
+    async fn get_goods_list(
+        &self,
+        seller_id: Option<u64>,
+        in_stock_only: bool,
+        first_index: i32,
+        last_index: i32,
+    ) -> Vec<DGSGoods> {
+        let goods_map = self.goods.read().await;
+        let mut matching: Vec<DGSGoods> = goods_map
+            .values()
+            .filter(|g| !g.delisted)
+            .filter(|g| {
+                if let Some(seller) = seller_id {
+                    g.seller_id == seller
+                } else {
+                    true
+                }
+            })
+            .filter(|g| {
+                if in_stock_only {
+                    g.quantity > 0
+                } else {
+                    true
+                }
+            })
+            .cloned()
+            .collect();
+        matching.sort_by_key(|g| g.id);
+        Self::paginate(&matching, first_index, last_index)
+    }
+
+    async fn get_purchase(&self, purchase_id: u64) -> Option<DGSPurchase> {
+        let purchases_map = self.purchases.read().await;
+        purchases_map.get(&purchase_id).cloned()
+    }
+
+    async fn get_purchases(
+        &self,
+        seller_id: Option<u64>,
+        buyer_id: Option<u64>,
+        first_index: i32,
+        last_index: i32,
+    ) -> Vec<DGSPurchase> {
+        let purchases_map = self.purchases.read().await;
+        let mut matching: Vec<DGSPurchase> = purchases_map
+            .values()
+            .filter(|p| {
+                if let Some(seller) = seller_id {
+                    p.seller_id == seller
+                } else {
+                    true
+                }
+            })
+            .filter(|p| {
+                if let Some(buyer) = buyer_id {
+                    p.buyer_id == buyer
+                } else {
+                    true
+                }
+            })
+            .cloned()
+            .collect();
+        matching.sort_by_key(|p| p.id);
+        Self::paginate(&matching, first_index, last_index)
     }
 
     async fn get_goods_count(&self, seller_id: Option<u64>, in_stock_only: bool) -> i64 {

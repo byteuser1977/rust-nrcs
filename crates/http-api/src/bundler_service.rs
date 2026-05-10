@@ -102,6 +102,11 @@ pub trait BundlerServiceApi: Send + Sync {
     /// 对应 NRCS Java: `Bundler.stopBundler()`
     async fn stop_bundler(&self, account_id: u64) -> Result<Option<BundlerInfo>, String>;
 
+    /// 停止所有打包器
+    ///
+    /// 对应 NRCS Java: `Bundler.stopAllBundlers()`
+    async fn stop_all_bundlers(&self) -> Result<Vec<BundlerInfo>, String>;
+
     /// 添加打包规则
     ///
     /// 对应 NRCS Java: `Bundler.addBundlingRule()`
@@ -173,7 +178,7 @@ impl MemoryBundlerService {
     /// 计算账户 ID 从公钥
     ///
     /// 对应 NRCS Java: `Account.getId(publicKey)`
-    fn account_id_from_secret_phrase(secret_phrase: &str) -> u64 {
+    pub fn account_id_from_secret_phrase(secret_phrase: &str) -> u64 {
         let seed = crypto::sha256(secret_phrase.as_bytes());
         let kp = crypto::keypair_from_seed(&seed);
         let public_key = kp.public_key();
@@ -230,6 +235,12 @@ impl BundlerServiceApi for MemoryBundlerService {
     async fn stop_bundler(&self, account_id: u64) -> Result<Option<BundlerInfo>, String> {
         let mut bundlers = self.bundlers.write().await;
         Ok(bundlers.remove(&account_id))
+    }
+
+    async fn stop_all_bundlers(&self) -> Result<Vec<BundlerInfo>, String> {
+        let mut bundlers = self.bundlers.write().await;
+        let removed: Vec<BundlerInfo> = bundlers.drain().map(|(_, v)| v).collect();
+        Ok(removed)
     }
 
     async fn add_bundling_rule(

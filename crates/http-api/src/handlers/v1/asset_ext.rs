@@ -458,7 +458,7 @@ impl RequestHandler for GetAssetDeletesHandler {
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
@@ -488,7 +488,7 @@ impl RequestHandler for GetAssetPhasedTransactionsHandler {
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }

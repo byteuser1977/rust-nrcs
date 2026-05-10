@@ -235,7 +235,7 @@ impl RequestHandler for SetLoggingHandler {
         let _admin_password = req.get_string("adminPassword");
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO");
+        builder.insert("done", true);
 
         Ok(builder.build())
     }
