@@ -338,6 +338,19 @@ pub async fn ensure_genesis(
         ledger_repo.insert(&recipient_ledger).await?;
     }
 
+    let creator_account = AccountModel {
+        db_id: 0,
+        id: generator_id,
+        balance: gen_cumulative_balance,
+        unconfirmed_balance: gen_cumulative_balance,
+        forged_balance: 0,
+        active_lessee_id: None,
+        has_control_phasing: false,
+        height,
+        latest: true,
+    };
+    account_repo.insert(&creator_account).await?;
+
     Ok(())
 }
 
