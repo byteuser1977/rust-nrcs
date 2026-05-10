@@ -8,7 +8,7 @@ use axum::{
 };
 use http_api::{routes::create_router, state::ApiState};
 use blockchain_types::prelude::*;
-use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, RepositoryResult, BlockModel, TransactionModel, AssetModel, AccountAssetModel};
+use orm::{BlockRepository, TransactionRepository, AssetRepository, AccountAssetRepository, RepositoryResult, RepositoryError, BlockModel, TransactionModel, AssetModel, AccountAssetModel, DbTransaction};
 use account::AccountManager;
 use tx_engine::TransactionProcessor;
 use async_trait::async_trait;
@@ -212,6 +212,18 @@ impl BlockRepository for MockBlockRepository {
     async fn delete_blocks_by_ids(&self, _db_ids: &[i64]) -> RepositoryResult<()> {
         Ok(())
     }
+
+    async fn insert_tx(&self, _item: &BlockModel, _tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn update_next_block_id_tx(&self, _previous_block_id: i64, _next_block_id: i64, _tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn delete_by_db_id_tx(&self, _db_id: i64, _tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -270,6 +282,14 @@ impl TransactionRepository for MockTransactionRepository {
     }
 
     async fn delete_transactions_by_ids(&self, _db_ids: &[i64]) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn insert_tx(&self, _item: &TransactionModel, _tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
+        Ok(())
+    }
+
+    async fn delete_by_db_id_tx(&self, _db_id: i64, _tx: &mut DbTransaction<'_>) -> RepositoryResult<()> {
         Ok(())
     }
 }
@@ -421,6 +441,11 @@ fn create_test_state() -> ApiState {
         account_asset_repo,
         p2p_manager: None,
         forging_service: None,
+        bundler_service: Arc::new(http_api::bundler_service::MemoryBundlerService::new()),
+        dgs_service: Arc::new(http_api::dgs_service::MemoryDGSService::new()),
+        account_query_service: Arc::new(http_api::account_query_service::MemoryAccountQueryService::new()),
+        db_pool: None,
+        allowed_bot_hosts: vec![],
     }
 }
 

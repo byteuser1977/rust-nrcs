@@ -215,7 +215,7 @@ impl BundlerServiceApi for MemoryBundlerService {
         let bundler_info = BundlerInfo {
             account_id,
             public_key: Some(public_key_hex),
-            total_fees_limit_fqt: total_fees_limit_fqt,
+            total_fees_limit_fqt,
             current_total_fees_fqt: 0,
             announced_min_rate_nqt_per_fxt: announced_min_rate,
             bundling_rules: rules,

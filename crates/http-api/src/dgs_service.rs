@@ -379,11 +379,7 @@ impl DGSServiceApi for MemoryDGSService {
                     true
                 }
             })
-            .filter(|p| {
-                // 注意：buyer_id 参数在 Java 中实际是 boolean 类型，表示是否按买家过滤
-                // 这里简化处理
-                true
-            })
+            .filter(|_p| true)
             .filter(|p| {
                 if let Some(completed_flag) = completed {
                     p.delivered == completed_flag
@@ -419,7 +415,7 @@ impl DGSServiceApi for MemoryDGSService {
     async fn get_tags(&self, in_stock_only: bool, first_index: i32, last_index: i32) -> Vec<String> {
         let goods_map = self.goods.read().await;
         
-        let mut tags: std::collections::HashSet<String> = goods_map
+        let tags: std::collections::HashSet<String> = goods_map
             .values()
             .filter(|g| !g.delisted)
             .filter(|g| {

@@ -147,7 +147,7 @@ fn test_attachment_none_pack_unpack() {
 
 #[test]
 fn test_attachment_payment_pack_unpack() {
-    let attachment = Attachment::Payment(PaymentAttachment::new(Some("test".to_string())));
+    let attachment = Attachment::Payment(PaymentAttachment::new(Some("test".to_string()), true));
     let packed = attachment.pack().expect("pack failed");
     let unpacked = Attachment::unpack(&packed).expect("unpack failed");
     if let Attachment::Payment(p) = unpacked {

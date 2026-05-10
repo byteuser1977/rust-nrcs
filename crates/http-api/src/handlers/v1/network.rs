@@ -375,7 +375,7 @@ impl RequestHandler for AddBundlingRuleHandler {
             .bundler_service
             .add_bundling_rule(&secret_phrase, rule)
             .await
-            .map_err(|e| ApiError::Internal(e))?;
+            .map_err(ApiError::Internal)?;
 
         match result {
             Some(bundler_info) => {
@@ -423,7 +423,7 @@ impl RequestHandler for BlacklistAPIProxyPeerHandler {
             .bundler_service
             .blacklist_api_proxy_peer(&peer)
             .await
-            .map_err(|e| ApiError::Internal(e))?;
+            .map_err(ApiError::Internal)?;
 
         let mut builder = RsRespBuilder::new();
         builder.insert("done", true);
@@ -465,7 +465,7 @@ impl RequestHandler for BlacklistBundlerHandler {
             .bundler_service
             .blacklist_bundler(account)
             .await
-            .map_err(|e| ApiError::Internal(e))?;
+            .map_err(ApiError::Internal)?;
 
         let mut builder = RsRespBuilder::new();
         builder.insert("removed", removed);
@@ -520,7 +520,7 @@ impl RequestHandler for BundleTransactionsHandler {
                 vec![BundlerRule::default()],
             )
             .await
-            .map_err(|e| ApiError::Internal(e))?;
+            .map_err(ApiError::Internal)?;
 
         // 触发一次打包运行（实际实现中会扫描未确认交易并打包）
         // 这里简化处理，返回打包器信息
@@ -726,7 +726,7 @@ impl RequestHandler for SetAPIProxyPeerHandler {
             .bundler_service
             .set_api_proxy_peer(&peer)
             .await
-            .map_err(|e| ApiError::Internal(e))?;
+            .map_err(ApiError::Internal)?;
 
         let mut builder = RsRespBuilder::new();
         builder.insert("done", true);

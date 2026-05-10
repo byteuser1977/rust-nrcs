@@ -8,7 +8,6 @@
 //! - 账户资产余额查询
 //! - 账户租赁信息查询
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

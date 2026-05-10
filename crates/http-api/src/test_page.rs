@@ -424,106 +424,11 @@ const HEADER_1: &str = r#"<!DOCTYPE html>
     <link href='ui/css/font-awesome.min.css' rel='stylesheet' type='text/css' />
     <link href='ui/css/highlight.style.css' rel='stylesheet' type='text/css' />
     <style type='text/css'>
-        body { font-family: monospace; background: #1e1e1e; color: #d4d4d4; }
-        
-        /* 导航栏暗色主题 */
-        .navbar-default { background-color: #2d2d2d; border-color: #404040; }
-        .navbar-default .navbar-brand { color: #569cd6 !important; }
-        .navbar-default .navbar-nav > li > a { color: #d4d4d4 !important; }
-        .navbar-default .navbar-nav > li > a:hover { color: #569cd6 !important; }
-        
-        /* 容器和面板暗色主题 */
-        .container { min-width: 90%; }
-        .panel-default { border-color: #404040; background-color: #252526; }
-        .panel-default > .panel-heading { background-color: #2d2d2d; color: #569cd6; border-color: #404040; }
-        .panel-title a { color: #569cd6 !important; }
-        .panel-body { background-color: #252526; }
-        
-        /* 表格和表单暗色主题 */
-        table { border-collapse: collapse; width: 100%; }
-        td { padding: 8px 10px; }
-        input[type='text'], input[type='password'], textarea {
-            background-color: #0c0c0c;
-            color: #d4d4d4;
-            border: 1px solid #555;
-            padding: 5px;
-            font-family: monospace;
-            font-size: 14px;
-        }
-        input[type='text']:focus, input[type='password']:focus, textarea:focus {
-            border-color: #569cd6;
-            outline: none;
-        }
-        input[readonly] { background-color: #1a1a1a; color: #888; }
-        
-        /* 按钮暗色主题 */
-        .btn-default { 
-            background-color: #0e639c; 
-            color: #fff; 
-            border: none; 
-        }
-        .btn-default:hover { background-color: #1177bb; color: #fff; }
-        .btn-sm { font-size: 12px; }
-        
-        /* 结果输出区域暗色主题 */
-        pre.hljs { 
-            background-color: #000; 
-            color: #0f0; 
-            padding: 10px; 
-            height: calc(100vh - 400px);
-            overflow-x: auto;
-            overflow-y: auto;
-            border: 1px solid #333;
-            margin-bottom: 10px;
-        }
-        pre.hljs code.result { 
-            white-space: pre; 
-            font-family: monospace; 
-            font-size: 13px; 
-            color: #0f0;
-        }
-        
-        /* 侧边导航暗色主题 */
-        .nav-pills > li > a { 
-            color: #d4d4d4; 
-            background-color: transparent;
-            border-radius: 3px;
-        }
-        .nav-pills > li > a:hover { 
-            background-color: #333; 
-            color: #569cd6; 
-        }
-        .nav-pills > li.active > a { 
-            background-color: #0e639c; 
-            color: #fff; 
-        }
-        
-        /* 下拉菜单暗色主题 */
-        .dropdown-menu { 
-            background-color: #2d2d2d; 
-            border: 1px solid #404040; 
-        }
-        .dropdown-menu > li > a { 
-            color: #d4d4d4; 
-        }
-        .dropdown-menu > li > a:hover { 
-            background-color: #0e639c; 
-            color: #fff; 
-        }
-        
-        /* 链接颜色 */
-        a { color: #569cd6; }
-        a:hover { color: #4ec9b0; }
-        
-        /* 复选框和标签 */
-        label, h5, .panel-title { color: #d4d4d4; }
-        
-        /* 确保表单布局正常 - 不覆盖 Bootstrap 栅格系统 */
-        .panel-body form::after {
-            content: "";
-            display: table;
-            clear: both;
-        }
+        table {border-collapse: collapse;}
+        td {padding: 10px;}
+        .result {white-space: pre; font-family: monospace; overflow: auto;}
+        pre.hljs { background-color: #000; }
+        pre.hljs code.result { color: #0f0; }
     </style>
 </head>
 <body>
@@ -534,9 +439,9 @@ const HEADER_1: &str = r#"<!DOCTYPE html>
        </div>
        <div class='navbar-collapse collapse'>
            <ul class='nav navbar-nav navbar-right'>
-               <li><input type='text' class='form-control' id='nodeType' readonly style='margin-top:8px;background:#1a1a1a;color:#888;border:1px solid #555;'></li>
-               <li><input type='text' class='form-control' id='servletPath' readonly style='margin-top:8px;background:#1a1a1a;color:#888;border:1px solid #555;'></li>
-               <li><input type='text' class='form-control' id='search' placeholder='Search' style='margin-top:8px;background:#0c0c0c;color:#d4d4d4;border:1px solid #555;'></li>
+               <li><input type='text' class='form-control' id='nodeType'                     readonly style='margin-top:8px;'></li>
+               <li><input type='text' class='form-control' id='servletPath'                     readonly style='margin-top:8px;'></li>
+               <li><input type='text' class='form-control' id='search'                     placeholder='Search' style='margin-top:8px;'></li>
            </ul>
        </div>
    </div>

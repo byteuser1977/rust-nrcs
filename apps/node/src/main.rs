@@ -830,6 +830,9 @@ async fn start_node(
         forging_service: Some(forging_service),
         db_pool: Some(pool.clone()),
         allowed_bot_hosts: cfg.api.allowed_bot_hosts.clone(),
+        bundler_service: Arc::new(http_api::bundler_service::MemoryBundlerService::new()),
+        dgs_service: Arc::new(http_api::dgs_service::MemoryDGSService::new()),
+        account_query_service: Arc::new(http_api::account_query_service::MemoryAccountQueryService::new()),
     };
     
     let api_addr: SocketAddr = format!("{}:{}", cfg.api.host, cfg.api.port)
