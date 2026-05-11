@@ -383,6 +383,170 @@ const Sidebar = {
     
     document.head.appendChild(style);
   },
+
+  // ========== P2-UI-2: 子菜单展开/折叠交互 (Treeview) ==========
+  
+  /**
+   * 初始化 Treeview 菜单
+   * 
+   * 参考 NRCS Bootstrap treeview 组件:
+   * - 支持多级嵌套菜单
+   * - 展开/折叠动画
+   * - 键盘导航支持
+   * - 状态持久化 (localStorage)
+   */
+  initTreeview() {
+    const menuItems = this.sidebar?.querySelectorAll('.nav-item.has-submenu');
+    
+    if (!menuItems || menuItems.length === 0) {
+      console.debug('[Sidebar] No submenu items found');
+      return;
+    }
+    
+    // 为每个有子菜单的项添加事件监听
+    menuItems.forEach(item => {
+      const toggle = item.querySelector('.submenu-toggle, .nav-link');
+      const submenu = item.querySelector('.submenu, .sub-nav');
+      
+      if (!toggle || !submenu) return;
+      
+      // 检查是否应该默认展开 (从 localStorage 恢复)
+      const itemId = item.dataset.menuId || item.id;
+      const wasExpanded = localStorage.getItem(`sidebar_menu_${itemId}`) === 'expanded';
+      if (wasExpanded) {
+        item.classList.add('expanded');
+        submenu.style.display = 'block';
+      }
+      
+      // 点击切换子菜单
+      toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.toggleSubmenu(item);
+      });
+      
+      // 键盘支持: Enter/Space 切换
+      toggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.toggleSubmenu(item);
+        }
+        
+        // 键盘导航: 右箭头展开，左箭头折叠
+        if (e.key === 'ArrowRight' && !item.classList.contains('expanded')) {
+          e.preventDefault();
+          this.toggleSubmenu(item);
+        }
+        
+        if (e.key === 'ArrowLeft' && item.classList.contains('expanded')) {
+          e.preventDefault();
+          this.toggleSubmenu(item);
+        }
+      });
+      
+      // 设置 ARIA 属性
+      toggle.setAttribute('aria-expanded', item.classList.contains('expanded'));
+      toggle.setAttribute('aria-controls', submenu.id || `submenu-${itemId}`);
+      submenu.setAttribute('role', 'menu');
+    });
+    
+    console.log(`[Sidebar] Treeview initialized with ${menuItems.length} expandable items`);
+  },
+
+  /**
+   * 切换子菜单显示/隐藏
+   * 
+   * @param {HTMLElement} menuItem - 父级菜单项元素
+   */
+  toggleSubmenu(menuItem) {
+    const isExpanded = menuItem.classList.contains('expanded');
+    const submenu = menuItem.querySelector('.submenu, .sub-nav');
+    const toggle = menuItem.querySelector('.submenu-toggle, .nav-link');
+    
+    if (!submenu) return;
+    
+    if (isExpanded) {
+      // 折叠
+      menuItem.classList.remove('expanded');
+      submenu.style.maxHeight = `${submenu.scrollHeight}px`;
+      
+      // 触发重排以启用过渡动画
+      requestAnimationFrame(() => {
+        submenu.style.maxHeight = '0';
+        submenu.style.opacity = '0';
+      });
+      
+      setTimeout(() => {
+        submenu.style.display = 'none';
+        submenu.removeAttribute('style');
+      }, 300);  // 与 CSS 过渡时间匹配
+      
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      
+    } else {
+      // 展开
+      menuItem.classList.add('expanded');
+      submenu.style.display = 'block';
+      submenu.style.maxHeight = '0';
+      submenu.style.opacity = '0';
+      
+      // 触发重排以启用过渡动画
+      requestAnimationFrame(() => {
+        submenu.style.maxHeight = `${submenu.scrollHeight}px`;
+        submenu.style.opacity = '1';
+      });
+      
+      // 动画结束后清除内联样式
+      setTimeout(() => {
+        submenu.removeAttribute('style');
+      }, 300);
+      
+      if (toggle) toggle.setAttribute('aria-expanded', 'true');
+    }
+    
+    // 保存状态到 localStorage
+    const itemId = menuItem.dataset.menuId || menuItem.id;
+    if (itemId) {
+      localStorage.setItem(
+        `sidebar_menu_${itemId}`, 
+        isExpanded ? 'collapsed' : 'expanded'
+      );
+    }
+    
+    // 可选: 关闭同级其他展开的菜单 (手风琴模式)
+    // this.closeSiblingMenus(menuItem);
+  },
+
+  /**
+   * 关闭同级的其他展开菜单 (手风琴模式)
+   * 
+   * @param {HTMLElement} currentMenu - 当前操作的菜单项
+   */
+  closeSiblingMenus(currentMenu) {
+    const parent = currentMenu.parentElement;
+    const siblings = parent.querySelectorAll(':scope > .nav-item.has-submenu.expanded');
+    
+    siblings.forEach(sibling => {
+      if (sibling !== currentMenu && sibling !== parent) {
+        this.toggleSubmenu(sibling);
+      }
+    });
+  },
+
+  /**
+   * 展开所有子菜单
+   */
+  expandAllMenus() {
+    const items = this.sidebar?.querySelectorAll('.nav-item.has-submenu:not(.expanded)');
+    items?.forEach(item => this.toggleSubmenu(item));
+  },
+
+  /**
+   * 折叠所有子菜单
+   */
+  collapseAllMenus() {
+    const items = this.sidebar?.querySelectorAll('.nav-item.has-submenu.expanded');
+    items?.forEach(item => this.toggleSubmenu(item));
+  },
 };
 
 // 导出供全局使用

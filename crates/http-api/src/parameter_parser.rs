@@ -761,20 +761,11 @@ fn rs_decode(encoded: &str) -> Result<u64, ApiError> {
     if clean.is_empty() {
         return Err(ApiError::IncorrectParameter("account".to_string()));
     }
-    match base58_decode(&clean) {
-        Some(id) => Ok(id),
-        None => Err(ApiError::IncorrectParameter("account".to_string())),
-    }
-}
 
-fn base58_decode(s: &str) -> Option<u64> {
-    const ALPHABET: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    let mut result: u64 = 0;
-    for c in s.chars() {
-        let idx = ALPHABET.iter().position(|&b| b as char == c)?;
-        result = result.checked_mul(36)?.checked_add(idx as u64)?;
+    match crypto::reed_solomon::decode(&clean) {
+        Ok(id) => Ok(id),
+        Err(_) => Err(ApiError::IncorrectAccount),
     }
-    Some(result)
 }
 
 #[cfg(test)]
@@ -844,9 +835,12 @@ mod tests {
 
     #[test]
     fn test_get_account_id_nrcs_prefix() {
-        let req = make_req(&[("account", "NRCS-1234-5678-9ABC")]);
+        let test_id = 1234567890u64;
+        let encoded = crypto::reed_solomon::encode(test_id);
+        let req = make_req(&[("account", &format!("NRCS-{}", encoded))]);
         let result = ParameterParser::get_account_id(&req, true);
         assert!(result.is_ok());
+        assert_eq!(result.unwrap(), test_id);
     }
 
     #[test]

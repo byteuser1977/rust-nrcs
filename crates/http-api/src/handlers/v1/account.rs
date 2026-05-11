@@ -11,6 +11,7 @@ use serde_json::json;
 
 use crate::api_tag::ApiTag;
 use crate::error::ApiError;
+use crate::parameter_parser::ParameterParser;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
 use super::create_transaction::CreateTransactionHelper;
@@ -40,7 +41,7 @@ impl RequestHandler for GetAccountHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let account_id = req.require_u64("account")?;
+        let account_id = ParameterParser::get_account_id(req, true)?;
         let include_lessors = req.get_bool("includeLessors");
         let include_assets = req.get_bool("includeAssets");
         let include_currencies = req.get_bool("includeCurrencies");
@@ -151,7 +152,7 @@ impl RequestHandler for GetBalanceHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let account_id = req.require_u64("account")?;
+        let account_id = ParameterParser::get_account_id(req, true)?;
 
         let account = state.account_manager
             .get_account_info(account_id)
@@ -236,7 +237,7 @@ impl RequestHandler for GetAccountPublicKeyHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let account_id = req.require_u64("account")?;
+        let account_id = ParameterParser::get_account_id(req, true)?;
         
         let public_key = state.account_manager
             .get_public_key(account_id)
@@ -280,7 +281,7 @@ impl RequestHandler for GetAccountAssetsHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let account_id = req.require_u64("account")?;
+        let account_id = ParameterParser::get_account_id(req, true)?;
         let _asset_id = req.get_u64("asset");
         let _height = req.get_i32("height");
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
@@ -333,7 +334,7 @@ impl RequestHandler for GetAccountCurrenciesHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account_id = req.require_u64("account")?;
+        let _account_id = ParameterParser::get_account_id(req, true)?;
         let _currency_id = req.get_u64("currency");
         let _height = req.get_i32("height");
         
@@ -405,7 +406,7 @@ impl RequestHandler for GetAccountLessorsHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account_id = req.require_u64("account")?;
+        let _account_id = ParameterParser::get_account_id(req, true)?;
         let _height = req.get_i32("height");
         
         let mut builder = RsRespBuilder::new();
@@ -442,7 +443,7 @@ impl RequestHandler for GetEffectiveBalanceHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let account_id = req.require_u64("account")?;
+        let account_id = ParameterParser::get_account_id(req, true)?;
         
         let account = state.account_manager
             .get_account_info(account_id)
@@ -487,7 +488,7 @@ impl RequestHandler for GetGuaranteedBalanceHandler {
     }
     
     async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let account_id = req.require_u64("account")?;
+        let account_id = ParameterParser::get_account_id(req, true)?;
         let _confirmations = req.get_i32("numberOfConfirmations").unwrap_or(1440);
         
         let account = state.account_manager
@@ -624,7 +625,7 @@ impl RequestHandler for GetAccountBlockCountHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
+        let _account = ParameterParser::get_account_id(req, true)?;
 
         let mut builder = RsRespBuilder::new();
         builder.insert("numberOfBlocks", 0i32);
@@ -652,7 +653,7 @@ impl RequestHandler for GetAccountBlockIdsHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
+        let _account = ParameterParser::get_account_id(req, true)?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
@@ -682,7 +683,7 @@ impl RequestHandler for GetAccountBlocksHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
+        let _account = ParameterParser::get_account_id(req, true)?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         let _include_transactions = req.get_bool("includeTransactions");
@@ -713,7 +714,7 @@ impl RequestHandler for GetAccountExchangeRequestsHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
+        let _account = ParameterParser::get_account_id(req, true)?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
@@ -752,7 +753,7 @@ impl RequestHandler for GetAccountLedgerHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
+        let _account = ParameterParser::get_account_id(req, true)?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
         let _event = req.get_string("event");
@@ -815,7 +816,7 @@ impl RequestHandler for GetAccountPhasedTransactionsHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
+        let _account = ParameterParser::get_account_id(req, true)?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
@@ -845,7 +846,7 @@ impl RequestHandler for GetAccountCurrentAskOrdersHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
+        let _account = ParameterParser::get_account_id(req, true)?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
@@ -875,7 +876,7 @@ impl RequestHandler for GetAccountCurrentBidOrdersHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _account = req.require_u64("account")?;
+        let _account = ParameterParser::get_account_id(req, true)?;
         let _first_index = req.get_i32("firstIndex").unwrap_or(0);
         let _last_index = req.get_i32("lastIndex").unwrap_or(-1);
 
@@ -939,11 +940,7 @@ impl RequestHandler for GetAllWaitingTransactionsHandler {
 }
 
 fn format_account_rs(account_id: u64) -> String {
-    format!("NRCS-{}-{}-{}", 
-        account_id % 10000,
-        (account_id / 10000) % 10000,
-        (account_id / 100000000) % 10000
-    )
+    format!("NRCS-{}", crypto::reed_solomon::encode(account_id))
 }
 
 fn derive_account_id(secret_phrase: &str) -> u64 {

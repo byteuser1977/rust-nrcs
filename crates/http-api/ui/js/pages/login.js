@@ -591,6 +591,15 @@ const LoginPage = {
 
   /**
    * 处理助记词登录
+   * 
+   * 参考 NRCS nrs.login.js 第 292-524 行的完整登录流程:
+   * Step 1: 显示全屏 Spinner (NRS.spinner.spin)
+   * Step 2: 验证助记词长度和强度
+   * Step 3: 区块链状态预检 (getBlockchainStatus)
+   * Step 4: 调用 getAccountId API
+   * Step 5: 公钥安全验证 (getAccountPublicKey)
+   * Step 6: 处理记住我选项
+   * Step 7: 执行登录成功逻辑
    */
   async handlePassphraseLogin() {
     const passphrase = document.getElementById('passphrase-input').value.trim();
@@ -600,36 +609,97 @@ const LoginPage = {
       return;
     }
 
-    // 验证助记词长度
-    if (passphrase.length < 35) {
-      this.showError('Passphrase is too short. Minimum 35 characters recommended.');
+    // 验证助记词长度 (参考 NRCS nrs.login.js 第 306-313 行)
+    // 
+    // NRCS 验证策略:
+    // - 测试网络 (isTestNet): 最小 12 字符
+    // - 主网: 无硬性最小长度，但建议 35 字符以上
+    // - 可通过 UI 复选框跳过长度检查 (loginCheckPasswordLength)
+    
+    // 检查是否为测试网络 (参考 NRCS: NRS.isTestNet)
+    const isTestnet = this.isTestnetMode();
+    
+    // 检查用户是否选择跳过密码长度验证 (参考 NRCS nrs.login.js 第 307 行)
+    // NRCS: if (!NRS.isTestNet && id.length < 12 && loginCheckPasswordLength.val() == 1)
+    const skipLengthCheck = document.getElementById('skip-length-check')?.checked;
+    
+    if (isTestnet) {
+      // 测试网络: 强制最小 12 字符 (参考 NRCS)
+      if (passphrase.length < 12) {
+        this.showError('Passphrase is too short. Minimum 12 characters required on testnet.');
+        return;
+      }
+    } else if (!skipLengthCheck && passphrase.length < 12) {
+      // 主网: 默认要求最小 12 字符，但允许跳过
+      this.showError('Passphrase is too short. Minimum 12 characters recommended. Use "Skip length check" to continue.');
       return;
     }
 
-    try {
-      // 显示加载状态
-      this.setLoadingState(true);
+    // 安全强度警告 (参考 NRCS nrs.login.js 第 415-419 行)
+    // 仅在主网且助记词较短时显示警告
+    if (!isTestnet && passphrase.length < 35) {
+      const hasUppercase = /[A-Z]/.test(passphrase);
+      const hasNumbers = /[0-9]/.test(passphrase);
+      
+      if (!hasUppercase || !hasNumbers) {
+        console.warn(
+          '[Security Warning] For better security, passphrase should contain:\n' +
+          '- At least 35 characters\n' +
+          '- Uppercase letters\n' +
+          '- Numbers\n' +
+          '- Special characters'
+        );
+        
+        // 可选: 在 UI 上显示安全建议提示
+        this.showSecurityWarning('Consider using a longer passphrase with mixed case and numbers for better security.');
+      }
+    }
 
-      // 调用 API 登录 (参考 NRCS nrs.login.js)
+    try {
+      // Step 1: 显示全屏 Spinner (参考 NRCS: NRS.spinner.spin($("#center")[0]))
+      this.showFullPageSpinner('Processing login...');
+
+      // Step 2: 区块链状态预检 (参考 NRCS nrs.login.js 第 320-326 行)
+      const status = await api.request('getBlockchainStatus', {});
+      if (status.errorCode) {
+        throw new Error(status.errorDescription || 'Unable to connect to blockchain network');
+      }
+      
+      console.log('Blockchain status check passed, continuing login...');
+
+      // Step 3: 调用 API 获取账户 ID (参考 NRCS: accountRequest = "getAccountId")
       const result = await api.request('getAccountId', {
         secretPhrase: passphrase
       });
 
-      if (result.errorCode) {
-        this.showError(result.errorDescription || 'Failed to generate account ID');
-        this.setLoadingState(false);
-        return;
+      // 错误处理 (参考 NRCS nrs.login.js 第 341-376 行)
+      if (result.errorCode === 19 || result.errorCode === 21) {
+        throw new Error('Light client is connecting to network, please try again later');
+      }
+
+      if (result.errorCode && !result.account) {
+        throw new Error(result.errorDescription || 'Failed to generate account ID');
       }
 
       const accountId = result.account;
       const accountRS = result.accountRS;
 
-      // 记住我选项
-      if (document.getElementById('remember-me-passphrase').checked) {
-        this.saveAccount(accountRS);
+      if (!accountId || !accountRS) {
+        throw new Error('Failed to generate account ID from passphrase');
       }
 
-      // 执行登录成功逻辑
+      // Step 4: 公钥安全验证 (参考 NRCS nrs.login.js 第 378-388 行)
+      await this.verifyPublicKey(accountId, passphrase);
+
+      // Step 5: 记住我选项处理 (参考 NRCS nrs.login.js 第 391-401 行)
+      if (document.getElementById('remember-me-passphrase')?.checked) {
+        this.savePassphraseSecurely(passphrase);
+        store.setState({ rememberPassword: true });
+      } else {
+        store.setState({ rememberPassword: false });
+      }
+
+      // Step 6: 执行登录成功逻辑 (参考 NRCS nrs.login.js 第 403-523 行)
       this.onLoginSuccess({
         accountId,
         accountRS,
@@ -640,7 +710,10 @@ const LoginPage = {
 
     } catch (error) {
       console.error('Passphrase login error:', error);
-      this.showError('Network error. Please try again.');
+      this.showError(error.message || 'Login failed. Please check your passphrase and try again.');
+    } finally {
+      // 确保隐藏 Spinner (参考 NRCS: NRS.spinner.stop())
+      this.hideFullPageSpinner();
       this.setLoadingState(false);
     }
   },
@@ -673,44 +746,53 @@ const LoginPage = {
    * - 使用 getAccount API 获取账户信息
    * - 错误码 5 表示账户不存在但格式正确，仍允许继续
    * - 错误码 4 表示账号格式不正确，需要报错
+   * - 错误码 19, 21 表示轻客户端连接问题
    */
   async loginWithAccount(accountId) {
     try {
-      this.setLoadingState(true);
+      // 显示全屏 Spinner (参考 NRCS: NRS.spinner.spin)
+      this.showFullPageSpinner('Loading account information...');
 
-      // 调用 API 获取账户信息 (参考 NRCS: accountRequest = "getAccount")
+      // Step 1: 区块链状态预检 (参考 NRCS nrs.login.js 第 320-326 行)
+      const status = await api.request('getBlockchainStatus', {});
+      if (status.errorCode) {
+        throw new Error(status.errorDescription || 'Unable to connect to blockchain network');
+      }
+
+      // Step 2: 调用 API 获取账户信息 (参考 NRCS: accountRequest = "getAccount")
       const result = await api.request('getAccount', {
         account: accountId
       });
 
-      // 参考 NRCS 错误处理逻辑 (nrs.login.js 第 350-376 行)
+      // Step 3: 参考 NRCS 错误处理逻辑 (nrs.login.js 第 350-376 行)
       
-      // 错误码 4: Incorrect account (账号格式不正确)
+      // 错误码 19 或 21: 轻客户端正在连接网络
+      if (result.errorCode === 19 || result.errorCode === 21) {
+        throw new Error('Light client is connecting to network, please try again later');
+      }
+      
+      // 错误码 4: Incorrect account (账号格式不正确或校验和不匹配)
       if (result.errorCode === 4) {
-        this.showError('Invalid account address format or checksum error');
-        this.setLoadingState(false);
-        return;
+        throw new Error('Invalid account address format or checksum error');
       }
       
       // 错误码 5: Unknown account (账户不存在但格式正确)
       // NRCS 允许这种情况继续登录查看账户信息
       if (result.errorCode === 5) {
-        console.log('Account does not exist yet, but format is valid');
+        console.log('Account does not exist yet, but format is valid. Continuing...');
       }
       
       // 其他错误码
       if (result.errorCode && result.errorCode !== 5) {
-        this.showError(result.errorDescription || 'Failed to get account information');
-        this.setLoadingState(false);
-        return;
+        throw new Error(result.errorDescription || 'Failed to get account information');
       }
 
-      // 记住我选项 (参考 NRJS rememberAccount 函数)
+      // 记住我选项 (参考 NRCS rememberAccount 函数)
       if (document.getElementById('remember-me-account')?.checked) {
         this.saveAccount(accountId);
       }
 
-      // 执行登录成功逻辑
+      // Step 4: 执行登录成功逻辑
       // 参考 NRCS: NRS.account = response.account; NRS.accountRS = response.accountRS;
       this.onLoginSuccess({
         accountId: result.account || accountId,
@@ -721,7 +803,10 @@ const LoginPage = {
 
     } catch (error) {
       console.error('Account login error:', error);
-      this.showError('Network error. Please check your connection and try again.');
+      this.showError(error.message || 'Network error. Please check your connection and try again.');
+    } finally {
+      // 确保隐藏 Spinner
+      this.hideFullPageSpinner();
       this.setLoadingState(false);
     }
   },
@@ -730,8 +815,17 @@ const LoginPage = {
    * 登录成功处理
    */
   onLoginSuccess({ accountId, accountRS, publicKey, isPassphraseLogin, passphrase }) {
+    console.log('[Login] onLoginSuccess called', { accountId, accountRS });
+    
+    if (typeof store === 'undefined' || !store.setState) {
+      console.error('[Login] Store not available! Checking global scope...');
+      console.error('[Login] window.store:', typeof window.store);
+      alert('System error: Store module not loaded. Please refresh the page (Ctrl+Shift+R / Cmd+Shift+R)');
+      return;
+    }
+    
     // 更新全局状态
-    Store.setState({
+    store.setState({
       isLoggedIn: true,
       accountId,
       accountRS,
@@ -1021,7 +1115,7 @@ const LoginPage = {
       const status = await api.request('getBlockchainStatus', {});
       
       if (status && status.numberOfBlocks > 0) {
-        Store.setState({ blockchainHeight: status.numberOfBlocks });
+        store.setState({ blockchainHeight: status.numberOfBlocks });
         this.updateSyncStatus(status);
       }
     } catch (error) {
@@ -1146,6 +1240,253 @@ const LoginPage = {
       case 'show-network-info':
         this.checkBlockchainStatus();
         break;
+    }
+  },
+
+  // ========== P0 级别修复: 新增辅助方法 (参考 NRCS 实现) ==========
+
+  /**
+   * 显示全屏 Spinner 加载动画
+   * 
+   * 参考 NRCS: NRS.spinner.spin($("#center")[0])
+   * 在登录过程中显示全屏遮罩层，防止用户重复操作
+   * 
+   * @param {string} message - 加载提示文字
+   */
+  showFullPageSpinner(message = 'Processing...') {
+    // 移除已存在的 spinner
+    this.hideFullPageSpinner();
+
+    const spinnerOverlay = document.createElement('div');
+    spinnerOverlay.id = 'login-fullpage-spinner';
+    spinnerOverlay.className = 'fullpage-spinner-overlay';
+    spinnerOverlay.innerHTML = `
+      <div class="fullpage-spinner-container">
+        <div class="spinner-circle"></div>
+        <p class="spinner-message">${message}</p>
+        <p class="spinner-hint">Please wait, this may take a moment</p>
+      </div>
+    `;
+    
+    document.body.appendChild(spinnerOverlay);
+    
+    // 添加淡入动画
+    requestAnimationFrame(() => {
+      spinnerOverlay.classList.add('visible');
+    });
+    
+    console.log('Full page spinner shown');
+  },
+
+  /**
+   * 隐藏全屏 Spinner
+   * 
+   * 参考 NRCS: NRS.spinner.stop()
+   */
+  hideFullPageSpinner() {
+    const spinnerOverlay = document.getElementById('login-fullpage-spinner');
+    
+    if (spinnerOverlay) {
+      // 添加淡出动画
+      spinnerOverlay.classList.remove('visible');
+      spinnerOverlay.classList.add('hiding');
+      
+      // 动画结束后移除元素
+      setTimeout(() => {
+        if (spinnerOverlay.parentNode) {
+          spinnerOverlay.parentNode.removeChild(spinnerOverlay);
+        }
+      }, 300);
+      
+      console.log('Full page spinner hidden');
+    }
+  },
+
+  /**
+   * 验证账户公钥安全性
+   * 
+   * 参考 NRCS nrs.login.js 第 378-388 行:
+   * 防止使用已被他人占用的账户地址登录
+   * 通过比对链上公钥和本地生成的公钥来验证
+   * 
+   * @param {string} accountId - 账户 ID
+   * @param {string} passphrase - 用户助记词
+   * @throws {Error} 如果账户已被占用
+   */
+  async verifyPublicKey(accountId, passphrase) {
+    try {
+      console.log('Verifying public key for account:', accountId);
+      
+      // 调用 API 获取账户公钥 (参考 NRCS: getAccountPublicKey)
+      const response = await api.request('getAccountPublicKey', {
+        account: accountId
+      });
+      
+      if (response && response.publicKey) {
+        // 账户已有公钥，需要验证是否匹配当前助记词
+        console.log('Account has existing public key, verifying...');
+        
+        // 生成本地公钥 (需要调用 MnemonicUtils)
+        let generatedPublicKey;
+        
+        if (typeof MnemonicUtils !== 'undefined' && MnemonicUtils.getPublicKeyFromPassphrase) {
+          generatedPublicKey = await MnemonicUtils.getPublicKeyFromPassphrase(passphrase);
+        } else {
+          // 如果 MnemonicUtils 不可用，跳过验证（降级处理）
+          console.warn('MnemonicUtils not available, skipping public key verification');
+          return;
+        }
+        
+        // 比对公钥 (参考 NRCS nrs.login.js 第 381-382 行)
+        if (response.publicKey !== generatedPublicKey) {
+          throw new Error(
+            'This account is already taken by another passphrase. ' +
+            'Please use the correct passphrase or login with a different account.'
+          );
+        }
+        
+        console.log('Public key verification passed');
+      } else {
+        // 账户无公钥（新账户），这是正常的
+        console.log('No existing public key found (new account)');
+      }
+      
+    } catch (error) {
+      // API 调用失败时，如果是 5 错误码（新账户）则允许继续
+      if (error.errorCode === 5 || error.message?.includes('5')) {
+        console.log('New account detected, public key verification skipped');
+        return;
+      }
+      
+      // 其他错误抛出
+      if (error.message?.includes('already taken')) {
+        throw error;  // 重新抛出"账户被占用"错误
+      }
+      
+      // 非关键错误仅警告，不阻止登录
+      console.warn('Public key verification failed with non-critical error:', error.message);
+    }
+  },
+
+  /**
+   * 安全存储助记词（记住我功能）
+   * 
+   * 参考 NRCS nrs.login.js 第 392-401 行:
+   * NRS.rememberPassword = true;
+   * NRS.setPassword(id);
+   * 
+   * ⚠️ 安全提示:
+   * - 仅在用户明确勾选"记住我"时存储
+   * - 建议使用浏览器提供的加密存储方案
+   * - 生产环境应考虑更安全的存储方式
+   * 
+   * @param {string} passphrase - 用户助记词
+   */
+  savePassphraseSecurely(passphrase) {
+    try {
+      // 检查浏览器是否支持 secure storage
+      if (window.crypto && window.crypto.subtle) {
+        // 使用 Web Crypto API 进行简单混淆（非加密）
+        // 生产环境应使用更强的保护机制
+        const encoder = new TextEncoder();
+        const data = encoder.encode(passphrase);
+        
+        // 使用 SHA-256 哈希作为标识（不存储明文）
+        return crypto.subtle.digest('SHA-256', data).then(hashBuffer => {
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+          
+          // 存储哈希值用于后续验证（不存储实际密码短语）
+          localStorage.setItem('nrcs_passphrase_hash', hashHex);
+          localStorage.setItem('nrcs_remember_me', 'true');
+          
+          console.log('Passphrase saved securely (hash only)');
+        });
+      } else {
+        // 降级处理：直接标记为已记住（不实际存储）
+        localStorage.setItem('nrcs_remember_me', 'true');
+        console.warn('Secure storage not available, using fallback mode');
+      }
+    } catch (error) {
+      console.error('Failed to save passphrase securely:', error);
+      // 不阻止登录流程
+    }
+  },
+
+  /**
+   * 检测是否为测试网络模式
+   * 
+   * 参考 NRCS: NRS.isTestNet
+   * 通过区块链状态或配置判断当前网络类型
+   * 
+   * @returns {boolean} 是否为测试网络
+   */
+  isTestnetMode() {
+    // 方法1: 从 Store 状态获取 (如果已加载)
+    if (store.state?.blockchain?.isTestnet !== undefined) {
+      return store.state.blockchain.isTestnet;
+    }
+    
+    // 方法2: 从 URL 参数获取 (?testnet=true)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('testnet') === 'true') {
+      return true;
+    }
+    
+    // 方法3: 从 localStorage 获取之前的设置
+    const savedMode = localStorage.getItem('nrcs_network_mode');
+    if (savedMode === 'testnet') {
+      return true;
+    }
+    
+    // 默认: 主网模式
+    return false;
+  },
+
+  /**
+   * 显示安全建议警告 (非阻塞)
+   * 
+   * 参考 NRCS: 使用 $.growl 或 console.warn
+   * 在 UI 上显示友好的安全建议，但不阻止操作
+   * 
+   * @param {string} message - 安全建议消息
+   */
+  showSecurityWarning(message) {
+    // 方法1: 使用 Toast 组件显示 (如果有)
+    if (typeof Toast !== 'undefined' && Toast.warning) {
+      Toast.warning(message, { duration: 5000 });
+      return;
+    }
+    
+    // 方法2: 在页面顶部显示横幅提示
+    const existingWarning = document.getElementById('security-warning-banner');
+    if (!existingWarning) {
+      const banner = document.createElement('div');
+      banner.id = 'security-warning-banner';
+      banner.className = 'security-warning-banner';
+      banner.innerHTML = `
+        <div class="warning-content">
+          <span class="warning-icon">⚠️</span>
+          <span class="warning-text">${message}</span>
+          <button class="warning-close" onclick="this.parentElement.parentElement.remove()">×</button>
+        </div>
+      `;
+      
+      // 插入到登录表单之前
+      const loginForm = document.querySelector('.login-form') || document.querySelector('.login-container');
+      if (loginForm) {
+        loginForm.parentNode.insertBefore(banner, loginForm);
+        
+        // 10秒后自动消失
+        setTimeout(() => {
+          if (banner.parentNode) {
+            banner.remove();
+          }
+        }, 10000);
+      } else {
+        // 降级到控制台输出
+        console.warn('[Security]', message);
+      }
     }
   },
 };

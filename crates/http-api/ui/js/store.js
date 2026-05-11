@@ -72,6 +72,24 @@ class Store {
         loading: false,
         error: null,
       },
+      
+      // ========== P1-R3: 全局分页状态 (参考 NRCS nrs.js 第 620-630 行) ==========
+      // NRCS 分页变量:
+      // - NRS.pageNumber: 当前页码
+      // - NRS.hasMorePages: 是否有更多页
+      // - NRS.showPageNumbers: 是否显示分页控件
+      // - NRS.currentSubPage: 当前子页面
+      pagination: {
+        currentPage: 1,           // 当前页码 (参考 NRCS: NRS.pageNumber)
+        itemsPerPage: 50,         // 每页项目数 (NRCS 默认值)
+        hasMorePages: false,       // 是否有更多页 (参考 NRCS: NRS.hasMorePages)
+        showPageNumbers: false,    // 是否显示分页数字 (参考 NRCS: NRS.showPageNumbers)
+        currentSubPage: '',        // 当前子页面标识 (参考 NRCS: NRS.currentSubPage)
+        totalItems: 0,             // 总项目数
+        totalPages: 0,             // 总页数
+        firstIndex: 0,             // 起始索引 (用于 API 请求)
+        lastIndex: 49,             // 结束索引 (用于 API 请求)
+      },
     };
     
     this.listeners = new Map();
@@ -365,6 +383,176 @@ class Store {
     console.log('Listeners:', this.listeners.size, 'groups');
     console.log('History Length:', this.history.length);
     console.groupEnd();
+  }
+
+  // ========== P1-R3: 分页状态管理方法 (参考 NRCS nrs.js 第 770-781 行) ==========
+
+  /**
+   * 获取当前分页状态
+   * 
+   * @returns {Object} 分页状态对象
+   */
+  getPaginationState() {
+    return { ...this.state.pagination };
+  }
+
+  /**
+   * 设置当前页码
+   * 
+   * 参考 NRCS nrs.js 第 776 行:
+   * NRS.goToPageNumber = function (pageNumber) {
+   *     NRS.pageNumber = pageNumber;
+   *     NRS.pageLoading();
+   *     NRS.pages[NRS.currentPage]();
+   * };
+   * 
+   * @param {number} pageNumber - 目标页码 (从 1 开始)
+   */
+  setPageNumber(pageNumber) {
+    if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+      console.warn('Invalid page number:', pageNumber);
+      return;
+    }
+    
+    const pagination = { ...this.state.pagination };
+    pagination.currentPage = pageNumber;
+    
+    // 计算新的索引范围 (用于 API 请求)
+    pagination.firstIndex = (pageNumber - 1) * pagination.itemsPerPage;
+    pagination.lastIndex = pagination.firstIndex + pagination.itemsPerPage - 1;
+    
+    // 更新状态
+    this.setState('pagination', pagination);
+    
+    console.debug(`[Store] Page changed to ${pageNumber}, index range: [${pagination.firstIndex}-${pagination.lastIndex}]`);
+  }
+
+  /**
+   * 跳转到下一页
+   * 
+   * @returns {boolean} 是否成功跳转
+   */
+  nextPage() {
+    const { currentPage, totalPages, hasMorePages } = this.state.pagination;
+    
+    if (!hasMorePages && currentPage >= totalPages) {
+      console.debug('[Store] Already on last page');
+      return false;
+    }
+    
+    this.setPageNumber(currentPage + 1);
+    return true;
+  }
+
+  /**
+   * 跳转到上一页
+   * 
+   * @returns {boolean} 是否成功跳转
+   */
+  prevPage() {
+    const { currentPage } = this.state.pagination;
+    
+    if (currentPage <= 1) {
+      console.debug('[Store] Already on first page');
+      return false;
+    }
+    
+    this.setPageNumber(currentPage - 1);
+    return true;
+  }
+
+  /**
+   * 设置每页项目数
+   * 
+   * @param {number} itemsPerPage - 每页数量 (建议值: 10, 20, 50, 100)
+   */
+  setItemsPerPage(itemsPerPage) {
+    const validSizes = [10, 20, 50, 100];
+    
+    if (!validSizes.includes(itemsPerPage)) {
+      console.warn(`Invalid itemsPerPage: ${itemsPerPage}. Valid values: ${validSizes.join(', ')}`);
+      return;
+    }
+    
+    const pagination = { ...this.state.pagination };
+    pagination.itemsPerPage = itemsPerPage;
+    
+    // 重置到第一页（因为每页数量改变）
+    pagination.currentPage = 1;
+    pagination.firstIndex = 0;
+    pagination.lastIndex = itemsPerPage - 1;
+    
+    this.setState('pagination', pagination);
+    
+    console.debug(`[Store] Items per page changed to ${itemsPerPage}, reset to page 1`);
+  }
+
+  /**
+   * 更新分页元数据 (总项目数、总页数等)
+   * 
+   * 通常在 API 响应后调用，用于更新分页控件显示
+   * 
+   * @param {Object} meta - 分页元数据
+   * @param {number} meta.totalItems - 总项目数
+   * @param {boolean} meta.hasMorePages - 是否有更多页
+   * @param {boolean} meta.showPageNumbers - 是否显示分页数字
+   */
+  updatePaginationMeta(meta = {}) {
+    const pagination = { ...this.state.pagination };
+    
+    if (meta.totalItems !== undefined) {
+      pagination.totalItems = meta.totalItems;
+      pagination.totalPages = Math.ceil(meta.totalItems / pagination.itemsPerPage);
+    }
+    
+    if (meta.hasMorePages !== undefined) {
+      pagination.hasMorePages = meta.hasMorePages;
+    }
+    
+    if (meta.showPageNumbers !== undefined) {
+      pagination.showPageNumbers = meta.showPageNumbers;
+    }
+    
+    this.setState('pagination', pagination);
+    
+    console.debug(`[Store] Pagination meta updated:`, meta);
+  }
+
+  /**
+   * 重置分页状态到默认值
+   * 
+   * 参考 NRCS nrs.js 第 622-624 行:
+   * NRS.currentSubPage = "";
+   * NRS.pageNumber = 1;
+   * NRS.showPageNumbers = false;
+   */
+  resetPagination() {
+    this.setState('pagination', {
+      currentPage: 1,
+      itemsPerPage: 50,
+      hasMorePages: false,
+      showPageNumbers: false,
+      currentSubPage: '',
+      totalItems: 0,
+      totalPages: 0,
+      firstIndex: 0,
+      lastIndex: 49,
+    });
+    
+    console.debug('[Store] Pagination state reset to defaults');
+  }
+
+  /**
+   * 获取 API 请求参数中的分页参数
+   * 
+   * 方便在调用 API 时直接使用:
+   * api.getBlockchainTransactions(account, store.getPaginationParams().firstIndex, store.getPaginationParams().lastIndex)
+   * 
+   * @returns {Object} { firstIndex, lastIndex }
+   */
+  getPaginationParams() {
+    const { firstIndex, lastIndex } = this.state.pagination;
+    return { firstIndex, lastIndex };
   }
 }
 
