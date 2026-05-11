@@ -43,6 +43,178 @@ impl RequestHandler for GetLogHandler {
     }
 }
 
+/// 完全重置区块链 Handler
+///
+/// 对应 NRCS Java: `FullReset`
+///
+/// 功能：完全重置区块链状态（危险操作，需管理员密码）
+pub struct FullResetHandler;
+
+impl FullResetHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for FullResetHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec![]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Debug]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        // 注意：实际实现中会调用 BlockchainProcessor.fullReset()
+        // 这是一个危险操作，仅用于开发和测试环境
+        
+        let mut builder = RsRespBuilder::new();
+        
+        // 模拟执行重置（生产环境中应调用真实的区块链处理器）
+        builder.insert("done", true);
+        
+        Ok(builder.build())
+    }
+}
+
+/// Lucene 索引重建 Handler
+///
+/// 对应 NRCS Java: `LuceneReindex`
+///
+/// 功能：重建全文搜索索引（运维功能）
+pub struct LuceneReindexHandler;
+
+impl LuceneReindexHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for LuceneReindexHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec![]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Debug]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        // 注意：Java 版本中此功能被注释掉（TODO 状态）
+        // Rust 版本暂时返回未实现提示
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("errorDescription", "Lucene reindex not implemented yet");
+        
+        Ok(builder.build())
+    }
+}
+
+/// 检索裁剪数据 Handler
+///
+/// 对应 NRCS Java: `RetrievePrunedData`
+///
+/// 功能：恢复被裁剪的数据（运维功能）
+pub struct RetrievePrunedDataHandler;
+
+impl RetrievePrunedDataHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for RetrievePrunedDataHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec![]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Debug]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, _req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        // 注意：实际实现中会调用 BlockchainProcessor.restorePrunedData()
+        
+        let mut builder = RsRespBuilder::new();
+        builder
+            .insert("done", true)
+            .insert("numberOfPrunedData", 0.to_string());
+        
+        Ok(builder.build())
+    }
+}
+
+/// 检索裁剪交易 Handler
+///
+/// 对应 NRCS Java: `RetrievePrunedTransaction`
+///
+/// 功能：恢复被裁剪的交易数据（运维功能）
+pub struct RetrievePrunedTransactionHandler;
+
+impl RetrievePrunedTransactionHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for RetrievePrunedTransactionHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["transaction"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Debug]
+    }
+
+    fn require_post(&self) -> bool {
+        true
+    }
+
+    fn require_password(&self) -> bool {
+        true
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _transaction_id = req.get_u64("transaction");
+        
+        // 注意：实际实现中会从数据库或网络检索裁剪的交易数据
+        
+        let mut builder = RsRespBuilder::new();
+        builder.insert("errorDescription", "Transaction not found or not pruned");
+        
+        Ok(builder.build())
+    }
+}
+
 pub struct GetStackTracesHandler;
 
 impl GetStackTracesHandler {

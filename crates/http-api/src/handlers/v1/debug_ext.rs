@@ -9,7 +9,6 @@ use crate::api_tag::ApiTag;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
-use super::create_transaction::CreateTransactionHelper;
 
 pub struct DumpPeersHandler;
 
@@ -77,42 +76,6 @@ impl RequestHandler for TrimDerivedTablesHandler {
     }
 }
 
-pub struct LuceneReindexHandler;
-
-impl LuceneReindexHandler {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl RequestHandler for LuceneReindexHandler {
-    fn parameters(&self) -> Vec<&'static str> {
-        vec!["force"]
-    }
-    
-    fn api_tags(&self) -> Vec<ApiTag> {
-        vec![ApiTag::Debug]
-    }
-    
-    fn require_post(&self) -> bool {
-        true
-    }
-    
-    fn require_password(&self) -> bool {
-        true
-    }
-    
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _force = req.get_bool("force");
-        
-        let mut builder = RsRespBuilder::new();
-        builder.insert("done", true);
-        
-        Ok(builder.build())
-    }
-}
-
 pub struct RebroadcastUnconfirmedTransactionsHandler;
 
 impl RebroadcastUnconfirmedTransactionsHandler {
@@ -147,38 +110,6 @@ impl RequestHandler for RebroadcastUnconfirmedTransactionsHandler {
     }
 }
 
-pub struct RetrievePrunedDataHandler;
-
-impl RetrievePrunedDataHandler {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl RequestHandler for RetrievePrunedDataHandler {
-    fn parameters(&self) -> Vec<&'static str> {
-        vec!["transaction"]
-    }
-    
-    fn api_tags(&self) -> Vec<ApiTag> {
-        vec![ApiTag::Debug]
-    }
-    
-    fn require_password(&self) -> bool {
-        true
-    }
-    
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _transaction_id = req.get_u64("transaction");
-        
-        let mut builder = RsRespBuilder::new();
-        builder.insert("retrieved", true);
-        
-        Ok(builder.build())
-    }
-}
-
 pub struct GetExecutedTransactionsHandler;
 
 impl GetExecutedTransactionsHandler {
@@ -205,42 +136,6 @@ impl RequestHandler for GetExecutedTransactionsHandler {
         builder.insert("transactions", json!([]));
 
         Ok(builder.build())
-    }
-}
-
-pub struct FullResetHandler;
-
-impl FullResetHandler {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl RequestHandler for FullResetHandler {
-    fn parameters(&self) -> Vec<&'static str> {
-        vec!["adminPassword"]
-    }
-
-    fn api_tags(&self) -> Vec<ApiTag> {
-        vec![ApiTag::Debug]
-    }
-
-    fn require_post(&self) -> bool {
-        true
-    }
-
-    fn require_password(&self) -> bool {
-        true
-    }
-
-    async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let common_params = CreateTransactionHelper::parse_common_params(req)?;
-        
-
-        CreateTransactionHelper::create_and_broadcast_transaction(
-            &common_params, 0, 0, None, 0, None, state,
-        ).await
     }
 }
 
@@ -275,38 +170,6 @@ impl RequestHandler for RequeueUnconfirmedTransactionsHandler {
 
         let mut builder = RsRespBuilder::new();
         builder.insert("done", true);
-
-        Ok(builder.build())
-    }
-}
-
-pub struct RetrievePrunedTransactionHandler;
-
-impl RetrievePrunedTransactionHandler {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl RequestHandler for RetrievePrunedTransactionHandler {
-    fn parameters(&self) -> Vec<&'static str> {
-        vec!["transaction"]
-    }
-
-    fn api_tags(&self) -> Vec<ApiTag> {
-        vec![ApiTag::Debug]
-    }
-
-    fn require_password(&self) -> bool {
-        true
-    }
-
-    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _transaction_id = req.get_u64("transaction");
-
-        let mut builder = RsRespBuilder::new();
-        builder.insert("retrieved", true);
 
         Ok(builder.build())
     }

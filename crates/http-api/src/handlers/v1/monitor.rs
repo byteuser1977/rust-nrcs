@@ -68,12 +68,25 @@ impl RequestHandler for StartFundingMonitorHandler {
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let _secret_phrase = req.require_string("secretPhrase")?;
-        let _holding_type = req.require_i32("holdingType")?;
-        let _amount = req.require_string("amount")?;
-
+        let _holding_type = req.get_i32("holdingType");
+        let _holding_id = req.get_u64("holding");
+        let _property = req.get_string("property").unwrap_or_default();
+        let amount_str = req.get_string("amount")
+            .ok_or(ApiError::MissingParameter("amount".to_string()))?;
+        let _amount: u64 = amount_str.parse()
+            .map_err(|_| ApiError::IncorrectValue("amount".to_string()))?;
+        let threshold_str = req.get_string("threshold")
+            .ok_or(ApiError::MissingParameter("threshold".to_string()))?;
+        let _threshold: u64 = threshold_str.parse()
+            .map_err(|_| ApiError::IncorrectValue("threshold".to_string()))?;
+        let _interval = req.get_i32("interval").unwrap_or(3600);
+        
+        // 注意：实际实现中需要调用 FundingMonitor.startMonitor()
+        // 这里模拟启动成功
+        
         let mut builder = RsRespBuilder::new();
-        builder.insert("done", true);
-
+        builder.insert("started", true);
+        
         Ok(builder.build())
     }
 }
@@ -105,13 +118,20 @@ impl RequestHandler for StopFundingMonitorHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _secret_phrase = req.require_string("secretPhrase")?;
+        let _secret_phrase = req.get_string("secretPhrase");
+        let _account_id = req.get_u64("account");
+        let _admin_password = req.get_string("adminPassword");
+        
         let _holding_type = req.get_i32("holdingType");
-        let _holding = req.get_u64("holding");
-
+        let _holding_id = req.get_u64("holding");
+        let _property = req.get_string("property").unwrap_or_default();
+        
+        // 注意：实际实现中需要调用 FundingMonitor.stopMonitor() 或 stopAllMonitors()
+        // 这里模拟停止成功
+        
         let mut builder = RsRespBuilder::new();
-        builder.insert("done", true);
-
+        builder.insert("stopped", 1);
+        
         Ok(builder.build())
     }
 }

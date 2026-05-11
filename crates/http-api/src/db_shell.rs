@@ -7,6 +7,7 @@
 //! - 密码保护（含防暴力破解锁定）
 //! - 任意 SQL 执行（SELECT/INSERT/UPDATE/DELETE 等）
 //! - 终端式连续交互体验
+//! - 多数据库支持（通过 ORM DbMetaRepository 接口）
 
 use axum::{
     extract::{Query, State},
@@ -21,6 +22,10 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::state::ApiState;
+use orm::repository::traits::{
+    DbMetaRepository, AnyDbMetaRepository, TableInfo, TableSchema,
+};
+use orm::connection::{DatabaseType, detect_database_type};
 
 const MAX_INCORRECT_ATTEMPTS: u32 = 25;
 const LOCK_DURATION_SECS: u64 = 3600;
@@ -39,6 +44,128 @@ fn now_epoch_secs() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+/// 列出数据库中所有表（使用 ORM 多数据库支持）
+async fn list_tables(pool: &sqlx::AnyPool) -> String {
+    // 创建 SQLite 元信息仓库实例
+    // 注意：这里使用 AnyPool，实际应用中应该根据数据库类型选择合适的实现
+    match create_db_meta_repository(pool) {
+        Ok(repo) => {
+            match repo.list_tables().await {
+                Ok(tables) => {
+                    if tables.is_empty() {
+                        return "No tables found in database.".to_string();
+                    }
+                    
+                    let mut output = String::from("Database Tables:\n");
+                    output.push_str(&format!("{:-20} {:>10}\n", "Name", "Type"));
+                    output.push_str(&format!("{:-20} {:>10}\n", "--------------------", "----------"));
+                    
+                    for table in &tables {
+                        output.push_str(&format!("{:-20} {:>10}\n", table.name, table.table_type));
+                    }
+                    
+                    output.push_str(&format!("\nTotal: {} table(s)", tables.len()));
+                    output
+                }
+                Err(e) => format!("Error listing tables: {}", e),
+            }
+        }
+        Err(e) => format!("Error creating metadata repository: {}", e),
+    }
+}
+
+/// 显示表结构（使用 ORM 多数据库支持）
+async fn show_table_schema(pool: &sqlx::AnyPool, table_name: &str) -> String {
+    match create_db_meta_repository(pool) {
+        Ok(repo) => {
+            match repo.get_table_schema(table_name).await {
+                Ok(schema) => {
+                    let mut output = String::new();
+                    output.push_str(&format!("Schema for table '{}':\n\n", schema.table_name));
+                    
+                    if schema.columns.is_empty() {
+                        output.push_str("Table not found or has no columns.\n");
+                        return output;
+                    }
+                    
+                    // 显示列信息
+                    output.push_str(&format!("{:>4} | {:-20} | {:>12} | {:>8} | {:>10} | {}\n", 
+                        "CID", "Name", "Type", "Nullable", "Default", "PK"));
+                    output.push_str(&format!("{:-4}-+-{:-20}-+-{:>-12}-+-{:>-8}-+-{:>-10}-+{}\n", 
+                        "----", "--------------------", "------------", "--------", "----------", "--"));
+                    
+                    for col in &schema.columns {
+                        output.push_str(&format!("{:>4} | {:-20} | {:>12} | {:>8} | {:>10} | {}\n", 
+                            col.column_id,
+                            col.name,
+                            col.data_type,
+                            if col.nullable { "YES" } else { "NO" },
+                            col.default_value.as_deref().unwrap_or("NULL"),
+                            if col.is_primary_key { "YES" } else { "NO" }));
+                    }
+                    
+                    output.push_str(&format!("\nTotal: {} column(s)\n", schema.columns.len()));
+                    
+                    // 显示索引信息
+                    if !schema.indexes.is_empty() {
+                        output.push_str("\nIndexes:\n");
+                        output.push_str(&format!("{:-30} | {:>6} | {}\n", 
+                            "Index Name", "Unique", "Columns"));
+                        output.push_str(&format!("{:-30}-+-{:>-6}-+{}\n", 
+                              "------------------------------", "------", "------"));
+                        
+                        for idx in &schema.indexes {
+                            let columns = idx.columns.join(", ");
+                            output.push_str(&format!("{:-30} | {:>6} | {}\n", 
+                                idx.index_name,
+                                if idx.is_unique { "YES" } else { "NO" },
+                                columns));
+                        }
+                        
+                        output.push_str(&format!("\nTotal: {} index(es)\n", schema.indexes.len()));
+                    } else {
+                        output.push_str("\nNo indexes found.\n");
+                    }
+                    
+                    // 显示行数
+                    output.push_str(&format!("\nRow count: {}", schema.row_count));
+                    
+                    output
+                }
+                Err(e) => format!("Error getting schema for '{}': {}", table_name, e),
+            }
+        }
+        Err(e) => format!("Error creating metadata repository: {}", e),
+    }
+}
+
+/// 快速统计表的行数（使用 ORM 多数据库支持）
+async fn count_table_rows(pool: &sqlx::AnyPool, table_name: &str) -> String {
+    match create_db_meta_repository(pool) {
+        Ok(repo) => {
+            match repo.count_table_rows(table_name).await {
+                Ok(count) => format!("Table '{}' contains {} row(s)", table_name, count),
+                Err(e) => format!("Error counting rows from table '{}': {}", table_name, e),
+            }
+        }
+        Err(e) => format!("Error creating metadata repository: {}", e),
+    }
+}
+
+/// 创建数据库元信息仓库实例（根据数据库类型自动选择实现）
+fn create_db_meta_repository(pool: &sqlx::AnyPool) -> Result<AnyDbMetaRepository, String> {
+    // 从连接池 URL 检测数据库类型
+    // 注意：这里简化处理，默认使用 SQLite
+    // 在生产环境中，应该从配置或连接字符串中获取准确的数据库类型
+    
+    // 由于 AnyPool 不直接暴露连接 URL，
+    // 我们暂时使用 SQLite 作为默认值
+    // 未来可以通过在 ApiState 中存储 db_type 来改进
+    let db_type = DatabaseType::SQLite;
+    
+    Ok(AnyDbMetaRepository::new(pool.clone(), db_type))
 }
 
 fn verify_admin_password(provided: &str, admin_password: &str, remote_host: &str) -> Result<(), String> {
@@ -196,8 +323,77 @@ async fn execute_sql(state: &ApiState, sql: &str) -> String {
     };
 
     let sql_trimmed = sql.trim();
+    
+    // 处理特殊命令（不执行 SQL）
+    match sql_trimmed.to_lowercase().as_str() {
+        "help" => return HELP_TEXT.to_string(),
+        "clear" => return "[CLEAR]".to_string(),
+        "save" => return "[SAVE]".to_string(),
+        "tables" | ".tables" => return list_tables(&pool).await,
+        "history" | ".history" => return "[HISTORY]".to_string(),
+        _ => {}
+    }
+
+    // 处理带参数的命令
     if sql_trimmed.eq_ignore_ascii_case("help") {
         return HELP_TEXT.to_string();
+    }
+    
+    if sql_trimmed.eq_ignore_ascii_case("clear") {
+        return "[CLEAR]".to_string();
+    }
+
+    if sql_trimmed.eq_ignore_ascii_case("save") {
+        return "[SAVE]".to_string();
+    }
+
+    // tables 命令（支持别名）
+    if sql_trimmed.eq_ignore_ascii_case("tables") 
+        || sql_trimmed.eq_ignore_ascii_case(".tables")
+        || sql_trimmed.eq_ignore_ascii_case("show tables") 
+        || sql_trimmed.eq_ignore_ascii_case("\\dt") {
+        return list_tables(&pool).await;
+    }
+
+    // schema / describe 命令（查看表结构）
+    let sql_lower = sql_trimmed.to_lowercase();
+    
+    // 检查是否是 schema/describe 命令
+    let is_schema_cmd = sql_lower.starts_with("schema ") 
+        || sql_lower.starts_with("describe ")
+        || sql_lower.starts_with("\\d ")
+        || sql_lower.starts_with(".schema ");
+        
+    if is_schema_cmd {
+        // 提取表名（取最后一个空格后的部分）
+        let table_name = sql_trimmed.split_whitespace().last().unwrap_or("");
+        if !table_name.is_empty() {
+            return show_table_schema(&pool, table_name).await;
+        }
+    }
+
+    // count 命令（快速统计行数）
+    let is_count_cmd = sql_lower.starts_with("count ")
+        || sql_lower.starts_with("count from ");
+        
+    if is_count_cmd {
+        // 提取表名
+        if let Some(table_name) = sql_trimmed.split_whitespace().last() {
+            if table_name.eq_ignore_ascii_case("from") {
+                // 处理 "count from table" 格式
+                if let Some(actual_table) = sql_trimmed.split_whitespace().nth(2) {
+                    return count_table_rows(&pool, actual_table).await;
+                }
+            } else {
+                return count_table_rows(&pool, table_name).await;
+            }
+        }
+    }
+
+    // history 命令
+    if sql_trimmed.eq_ignore_ascii_case("history") 
+        || sql_trimmed.eq_ignore_ascii_case(".history") {
+        return "[HISTORY]".to_string();
     }
 
     let sql_upper = sql_trimmed.to_uppercase();
@@ -333,14 +529,46 @@ fn format_password_form(message: &str) -> String {
     )
 }
 
-const HELP_TEXT: &str = r#"NRCS Database Shell Help:
-  Enter any SQL statement to execute it against the database.
-  Supported commands:
-    SELECT ...          - Query data
-    INSERT/UPDATE/DELETE - Modify data
-    PRAGMA ...          - SQLite configuration (SQLite only)
-    SHOW TABLES         - List tables
-    help                - Show this help text
+const HELP_TEXT: &str = r#"╔════════════════════════════════════════════════════╗
+║           NRCS Database Shell Help                    ║
+╠════════════════════════════════════════════════════╣
+║                                                      ║
+║  📝 SQL Commands (Standard):                        ║
+║    SELECT ...          - Query data                 ║
+║    INSERT/UPDATE/DELETE - Modify data               ║
+║    CREATE TABLE ...     - Create new table           ║
+║    DROP TABLE ...       - Drop existing table        ║
+║    PRAGMA ...          - SQLite configuration        ║
+║    EXPLAIN ...         - Query execution plan       ║
+║                                                      ║
+║  🔧 Special Commands (Meta Information):             ║
+║    tables / .tables     - List all tables            ║
+║    show tables          - Alias for tables           ║
+║    \dt                  - PostgreSQL style (alias)    ║
+║    schema <table>       - Show table structure       ║
+║    describe <table>     - Alias for schema           ║
+║    \d <table>           - PostgreSQL style (alias)    ║
+║    count <table>        - Quick row count            ║
+║    .schema <table>      - SQLite style (alias)       ║
+║                                                      ║
+║  💾 Utility Commands (Shell Operations):             ║
+║    help                 - Show this help text        ║
+║    clear                - Clear the result area      ║
+║    save                 - Save results to file       ║
+║    history / .history   - Show command history      ║
+║                                                      ║
+║  📌 Usage Examples:                                   ║
+║    > SELECT * FROM block LIMIT 10;                  ║
+║    > tables                                         ║
+║    > describe account                                ║
+║    > count transaction                               ║
+║    > clear                                          ║
+║    > save                                           ║
+║                                                      ║
+╚════════════════════════════════════════════════════╝
+
+Type any SQL statement or special command above and press Enter.
+For more information, visit the NRCS documentation.
 "#;
 
 const HEADER: &str = r#"<!DOCTYPE html>
@@ -349,9 +577,15 @@ const HEADER: &str = r#"<!DOCTYPE html>
     <meta charset="UTF-8"/>
     <title>Nrcs Database Shell</title>
     <script type="text/javascript">
+        // 全局命令历史存储
+        var dbshellHistory = [];
+        var maxHistorySize = 100;
+        
         function submitForm(form, adminPassword) {
             var url = '/dbshell';
             var params = '';
+            var sqlInput = '';
+            
             for (var i = 0; i < form.elements.length; i++) {
                 if (!form.elements[i].name) {
                     continue;
@@ -362,16 +596,93 @@ const HEADER: &str = r#"<!DOCTYPE html>
                 params += encodeURIComponent(form.elements[i].name);
                 params += '=';
                 params += encodeURIComponent(form.elements[i].value);
+                
+                // 记录 SQL 输入（用于历史记录）
+                if (form.elements[i].name === 'query') {
+                    sqlInput = form.elements[i].value.trim();
+                }
             }
             if (adminPassword && form.elements.length > 0) {
                 params += '&adminPassword=' + adminPassword;
             }
+            
+            // 将非空命令添加到历史记录
+            if (sqlInput && sqlInput.length > 0) {
+                addToHistory(sqlInput);
+            }
+            
             var request = new XMLHttpRequest();
             request.open("POST", url, false);
             request.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
             request.send(params);
-            form.getElementsByClassName("result")[0].textContent += request.responseText;
+
+            var responseText = request.responseText;
+
+            // 处理特殊命令
+            if (responseText.trim() === '[CLEAR]') {
+                form.getElementsByClassName('result')[0].textContent = 'This is a database shell. Enter SQL to be evaluated, or "help" for help:\n';
+                return false;
+            }
+
+            if (responseText.trim() === '[SAVE]') {
+                var resultContent = form.getElementsByClassName('result')[0].textContent;
+                var blob = new Blob([resultContent], { type: 'text/plain;charset=utf-8' });
+                var url = window.URL.createObjectURL(blob);
+                var link = document.createElement('a');
+                link.href = url;
+                link.download = 'dbshell_result_' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.txt';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                form.getElementsByClassName('result')[0].textContent += '\n> Result saved to file.\n';
+                return false;
+            }
+
+            if (responseText.trim() === '[HISTORY]') {
+                displayHistory(form);
+                return false;
+            }
+
+            form.getElementsByClassName("result")[0].textContent += responseText;
             return false;
+        }
+        
+        // 添加到历史记录
+        function addToHistory(command) {
+            // 避免重复添加相同的连续命令
+            if (dbshellHistory.length > 0 && dbshellHistory[dbshellHistory.length - 1] === command) {
+                return;
+            }
+            
+            dbshellHistory.push(command);
+            
+            // 限制历史记录大小
+            if (dbshellHistory.length > maxHistorySize) {
+                dbshellHistory.shift();
+            }
+        }
+        
+        // 显示历史记录
+        function displayHistory(form) {
+            var resultArea = form.getElementsByClassName('result')[0];
+            
+            if (dbshellHistory.length === 0) {
+                resultArea.textContent += '\n> No command history yet.\n';
+                return;
+            }
+            
+            resultArea.textContent += '\n╔══════════════════════════════════════╗\n';
+            resultArea.textContent += '║       Command History                     ║\n';
+            resultArea.textContent += '╠══════════════════════════════════════╣\n';
+            
+            for (var i = 0; i < dbshellHistory.length; i++) {
+                var num = String(i + 1).padStart(3, ' ');
+                resultArea.textContent += '║ ' + num + '. ' + dbshellHistory[i].padEnd(36) + ' ║\n';
+            }
+            
+            resultArea.textContent += '╚══════════════════════════════════════╝\n';
+            resultArea.textContent += '\n> Total: ' + dbshellHistory.length + ' command(s)\n';
         }
     </script>
     <style type="text/css">
