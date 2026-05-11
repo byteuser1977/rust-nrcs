@@ -638,13 +638,32 @@ impl BlockVerifier for BlockchainVerifier {
                 for (i, tx) in block.transactions.iter().enumerate() {
                     let tx_gb = tx.get_bytes();
                     let tx_hash = sha2::Sha256::digest(&tx_gb);
+
+                    // 分别计算 header (base+signature+extras) 和 attachment 的 SHA256
+                    let non_attach_len = tx_gb.len().saturating_sub(tx.attachment_bytes.len());
+                    let header_hash = sha2::Sha256::digest(&tx_gb[..non_attach_len]);
+                    let att_hash = if !tx.attachment_bytes.is_empty() {
+                        hex::encode(sha2::Sha256::digest(&tx.attachment_bytes))
+                    } else {
+                        "empty".to_string()
+                    };
+
                     warn!(
                         "  tx[{}]: id={}, type={:?}, subtype={}, version={}, flags={:#010X}, get_bytes_len={}, sha256={}",
                         i, tx.id, tx.type_id, tx.subtype, tx.version, tx.get_flags(),
                         tx_gb.len(), hex::encode(tx_hash)
                     );
                     warn!(
-                        "  tx[{}]: attachment_bytes_len={}, pruned_att_bytes={}, has_msg={}, has_enc_msg={}, has_pk={}, has_enc2self={}, phased={}, has_prun_msg={}, has_prun_enc={}, has_prun_att={}",
+                        "  tx[{}]: header_sha256={}, attachment_sha256={}, attachment_bytes_hex={}",
+                        i, hex::encode(header_hash), att_hash,
+                        if tx.attachment_bytes.len() <= 128 {
+                            hex::encode(&tx.attachment_bytes)
+                        } else {
+                            format!("{} bytes (too large for hex)", tx.attachment_bytes.len())
+                        }
+                    );
+                    warn!(
+                        "  tx[{}]: att_bytes_len={}, pruned_att_bytes={}, has_msg={}, has_enc_msg={}, has_pk={}, has_enc2self={}, phased={}, has_prun_msg={}, has_prun_enc={}, has_prun_att={}",
                         i, tx.attachment_bytes.len(), tx.pruned_attachment_bytes,
                         tx.has_message, tx.has_encrypted_message, tx.has_public_key_announcement,
                         tx.has_encrypttoself_message, tx.phased, tx.has_prunable_message,

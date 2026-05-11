@@ -680,19 +680,19 @@ impl DatabaseTransactionProcessor {
     }
 
     pub fn set_current_height(&self, height: i32) {
-        *self.current_height.write().unwrap() = height;
+        *self.current_height.write().expect("current_height lock poisoned") = height;
     }
 
     fn get_current_block_id(&self) -> i64 {
-        *self.current_block_id.read().unwrap()
+        *self.current_block_id.read().expect("current_block_id lock poisoned")
     }
 
     fn get_current_height(&self) -> i32 {
-        *self.current_height.read().unwrap()
+        *self.current_height.read().expect("current_height lock poisoned")
     }
 
     fn get_current_timestamp(&self) -> i32 {
-        *self.current_timestamp.read().unwrap()
+        *self.current_timestamp.read().expect("current_timestamp lock poisoned")
     }
 
     /**
@@ -738,7 +738,7 @@ impl DatabaseTransactionProcessor {
 
     #[allow(dead_code)]
     async fn update_account_balance(&self, account_id: AccountId, balance: Amount, unconfirmed: Amount) -> ProcessorResult<()> {
-        let height = *self.current_height.read().unwrap();
+        let height = *self.current_height.read().expect("current_height lock poisoned");
         self.account_repo
             .update_balance(account_id as i64, balance as i64, unconfirmed as i64, height)
             .await?;
@@ -746,7 +746,7 @@ impl DatabaseTransactionProcessor {
     }
 
     fn current_height(&self) -> i32 {
-        *self.current_height.read().unwrap()
+        *self.current_height.read().expect("current_height lock poisoned")
     }
 
     async fn get_account_balance(&self, account_id: i64) -> Option<i64> {
@@ -1220,9 +1220,9 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
     }
 
     fn set_current_block(&self, block_id: i64, height: i32, timestamp: i32) {
-        *self.current_block_id.write().unwrap() = block_id;
-        *self.current_height.write().unwrap() = height;
-        *self.current_timestamp.write().unwrap() = timestamp;
+        *self.current_block_id.write().expect("current_block_id lock poisoned") = block_id;
+        *self.current_height.write().expect("current_height lock poisoned") = height;
+        *self.current_timestamp.write().expect("current_timestamp lock poisoned") = timestamp;
     }
 
     async fn broadcast(&self, tx: &Transaction) -> ProcessorResult<()> {

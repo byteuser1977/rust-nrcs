@@ -730,6 +730,13 @@ impl Block {
         Ok(Hash256(arr))
     }
 
+    fn compute_generation_signature(prev_generation_signature: &[u8], generator_public_key: &[u8; 32]) -> Vec<u8> {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(prev_generation_signature);
+        hasher.update(generator_public_key);
+        hasher.finalize().to_vec()
+    }
     /// 验证区块基本字段
     pub fn validate_basic(&self) -> Result<()> {
         if self.version != BLOCK_VERSION {

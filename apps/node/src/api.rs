@@ -1,4 +1,8 @@
 //! API Service (simple placeholder)
+//!
+//! **NOTE**: This module is not compiled by default (not declared in main.rs).
+//! The actual API server is configured in main.rs::start_node() using http_api crate.
+//! This file is retained for reference only.
 
 use std::net::SocketAddr;
 use std::sync::Arc;

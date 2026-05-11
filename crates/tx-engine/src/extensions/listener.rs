@@ -130,7 +130,7 @@ impl EventDispatcher {
     where
         F: Fn(&TransactionEventData) + Send + Sync + 'static,
     {
-        self.listeners.write().unwrap().push((event, Box::new(callback)));
+        self.listeners.write().expect("listeners lock poisoned").push((event, Box::new(callback)));
     }
 
     /// 注册 TransactionProcessEvent 类型的监听器
@@ -140,11 +140,11 @@ impl EventDispatcher {
     where
         F: Fn(&TransactionEventData) + Send + Sync + 'static,
     {
-        self.process_listeners.write().unwrap().push((event, Box::new(callback)));
+        self.process_listeners.write().expect("process_listeners lock poisoned").push((event, Box::new(callback)));
     }
 
     pub fn notify(&self, event_data: &TransactionEventData) {
-        let listeners = self.listeners.read().unwrap();
+        let listeners = self.listeners.read().expect("listeners lock poisoned");
         for (event_type, callback) in listeners.iter() {
             if *event_type == event_data.event {
                 callback(event_data);
@@ -153,7 +153,7 @@ impl EventDispatcher {
         drop(listeners);
 
         if let Some(process_event) = event_data.process_event {
-            let process_listeners = self.process_listeners.read().unwrap();
+            let process_listeners = self.process_listeners.read().expect("process_listeners lock poisoned");
             for (event_type, callback) in process_listeners.iter() {
                 if *event_type == process_event {
                     callback(event_data);
@@ -171,12 +171,12 @@ impl EventDispatcher {
     }
 
     pub fn remove_all_listeners(&self) {
-        self.listeners.write().unwrap().clear();
-        self.process_listeners.write().unwrap().clear();
+        self.listeners.write().expect("listeners lock poisoned").clear();
+        self.process_listeners.write().expect("process_listeners lock poisoned").clear();
     }
 
     pub fn listener_count(&self) -> usize {
-        self.listeners.read().unwrap().len() + self.process_listeners.read().unwrap().len()
+        self.listeners.read().expect("listeners lock poisoned").len() + self.process_listeners.read().expect("process_listeners lock poisoned").len()
     }
 }
 

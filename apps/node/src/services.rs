@@ -1,4 +1,9 @@
 //! Node services coordination (simplified placeholder)
+//!
+//! **DEPRECATED**: This module is not used by main.rs. The actual node initialization
+//! is in main.rs::start_node(). This file is retained for reference only.
+
+#![allow(deprecated)]
 
 use std::sync::Arc;
 
@@ -57,11 +62,11 @@ impl NodeService {
 struct DummyAccountManager;
 impl account::AccountManager for DummyAccountManager {
     fn create_account(&self) -> Result<(crypto::Keypair, account::AccountId, account::Address), account::AccountError> {
-        unimplemented!()
+        Err(account::AccountError::InvalidOperation("DummyAccountManager: not available".to_string()))
     }
 
     fn get_account(&self, _account_id: account::AccountId) -> Result<Option<account::Account>, account::AccountError> {
-        unimplemented!()
+        Err(account::AccountError::InvalidOperation("DummyAccountManager: not available".to_string()))
     }
 }
 

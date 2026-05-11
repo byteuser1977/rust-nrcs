@@ -206,9 +206,118 @@ fn get_epoch_time() -> i32 {
 
 fn get_transaction_types() -> serde_json::Value {
     serde_json::json!({
-        "0": { "name": "Payment", "subtypes": { "0": "Ordinary Payment" } },
-        "1": { "name": "Messaging", "subtypes": { "0": "Arbitrary Message", "1": "Alias Assignment" } },
-        "2": { "name": "Asset Issuance", "subtypes": { "0": "Asset Issuance", "1": "Asset Transfer" } }
+        "0": {
+            "name": "Payment",
+            "subtypes": {
+                "0": { "name": "Ordinary Payment" }
+            }
+        },
+        "1": {
+            "name": "Messaging",
+            "subtypes": {
+                "0": { "name": "Arbitrary Message" },
+                "1": { "name": "Alias Assignment" },
+                "2": { "name": "Poll Creation" },
+                "3": { "name": "Vote Casting" },
+                "4": { "name": "Hub Announcement" },
+                "5": { "name": "Account Info" },
+                "6": { "name": "Alias Sell" },
+                "7": { "name": "Alias Buy" },
+                "8": { "name": "Alias Delete" },
+                "9": { "name": "Phasing Vote Casting" },
+                "10": { "name": "Account Property" },
+                "11": { "name": "Account Property Delete" },
+                "12": { "name": "Account Long Value Property" }
+            }
+        },
+        "2": {
+            "name": "Asset Issuance",
+            "subtypes": {
+                "0": { "name": "Asset Issuance" },
+                "1": { "name": "Asset Transfer" },
+                "2": { "name": "Ask Order Placement" },
+                "3": { "name": "Bid Order Placement" },
+                "4": { "name": "Ask Order Cancellation" },
+                "5": { "name": "Bid Order Cancellation" },
+                "6": { "name": "Dividend Payment" },
+                "7": { "name": "Asset Delete" },
+                "8": { "name": "Asset Increase" },
+                "10": { "name": "Property Set" },
+                "12": { "name": "Long Value Property Set" },
+                "11": { "name": "Property Delete" }
+            }
+        },
+        "3": {
+            "name": "Digital Goods",
+            "subtypes": {
+                "0": { "name": "Listing" },
+                "1": { "name": "Delisting" },
+                "2": { "name": "Price Change" },
+                "3": { "name": "Quantity Change" },
+                "4": { "name": "Purchase" },
+                "5": { "name": "Delivery" },
+                "6": { "name": "Feedback" },
+                "7": { "name": "Refund" }
+            }
+        },
+        "4": {
+            "name": "Account Control",
+            "subtypes": {
+                "0": { "name": "Effective Balance Leasing" },
+                "1": { "name": "Phasing Only" }
+            }
+        },
+        "5": {
+            "name": "Monetary System",
+            "subtypes": {
+                "0": { "name": "Currency Issuance" },
+                "1": { "name": "Reserve Increase" },
+                "2": { "name": "Reserve Claim" },
+                "3": { "name": "Currency Transfer" },
+                "4": { "name": "Publish Exchange Offer" },
+                "5": { "name": "Exchange Buy" },
+                "6": { "name": "Exchange Sell" },
+                "7": { "name": "Currency Minting" },
+                "8": { "name": "Currency Deletion" }
+            }
+        },
+        "6": {
+            "name": "Data",
+            "subtypes": {
+                "0": { "name": "Tagged Data Upload" },
+                "1": { "name": "Tagged Data Extend" }
+            }
+        },
+        "7": {
+            "name": "Shuffling",
+            "subtypes": {
+                "0": { "name": "Shuffling Creation" },
+                "1": { "name": "Shuffling Processing" },
+                "2": { "name": "Shuffling Verification" },
+                "3": { "name": "Shuffling Cancel" },
+                "4": { "name": "Shuffling Registration" }
+            }
+        },
+        "8": {
+            "name": "Aliases",
+            "subtypes": {}
+        },
+        "9": {
+            "name": "Voting",
+            "subtypes": {}
+        },
+        "10": {
+            "name": "Account Property",
+            "subtypes": {}
+        },
+        "11": {
+            "name": "Coin Exchange",
+            "subtypes": {}
+        },
+        "12": {
+            "name": "Light Contract",
+            "subtypes": {}
+        }
     })
 }
 

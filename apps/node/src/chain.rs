@@ -1,4 +1,8 @@
-//! Chain Service (simplified placeholder implementation)
+//! Chain Service
+//!
+//! **NOTE**: This module is not compiled by default (not declared in main.rs).
+//! The actual block processing is handled by p2p::BlockchainVerifier.
+//! This file is retained for reference and may be re-integrated in the future.
 
 use std::sync::Arc;
 
@@ -22,6 +26,14 @@ fn compute_payload_hash_from_bytes(txs: &[Transaction]) -> anyhow::Result<Hash25
     let hash = hasher.finalize();
     let arr: [u8; 32] = hash.try_into().map_err(|_| anyhow::anyhow!("hash length mismatch"))?;
     Ok(Hash256(arr))
+}
+
+fn compute_generation_signature(prev_generation_signature: &[u8], generator_public_key: &[u8; 32]) -> Vec<u8> {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(prev_generation_signature);
+    hasher.update(generator_public_key);
+    hasher.finalize().to_vec()
 }
 
 pub struct ChainService {
@@ -201,20 +213,18 @@ impl ChainService {
     ) -> anyhow::Result<Block> {
         let current_height = self.current_height().await;
         let latest_block_opt = self.get_latest_block().await?;
-        let (prev_hash, prev_base_target, prev_cumulative, _prev_gen_sig) = match latest_block_opt {
+        let (prev_hash, prev_base_target, prev_cumulative, prev_gen_sig) = match latest_block_opt {
             Some(latest) => {
                 let prev_hash = latest.compute_hash()?;
                 (prev_hash, latest.base_target, latest.cumulative_difficulty, latest.generation_signature)
             }
             None => {
-                ([0; 32], 1_000_000, vec![], [0; 64])
+                ([0; 32], 1_000_000, vec![], vec![0u8; 32])
             }
         };
 
-        // Compute payload hash（对应 Java: digest.update(transaction.getBytes())）
         let payload_hash = compute_payload_hash_from_bytes(&transactions)?;
 
-        // Calculate next difficulty
         let recent_blocks: Vec<Block> = self.block_repo
             .find_range(
                 std::cmp::max(0, current_height as i32 - 10) as i32,
@@ -226,24 +236,30 @@ impl ChainService {
             .collect();
         let next_base_target = self.consensus.calculate_next_difficulty(&recent_blocks);
 
-        // Compute cumulative difficulty
         let mut cum_big = BigUint::from_bytes_be(&prev_cumulative);
         cum_big += BigUint::from(prev_base_target);
         let new_cumulative = cum_big.to_bytes_be();
 
-        // Timestamp
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock error")
             .as_secs() as Timestamp;
 
-        // Build block
+        let generator_public_key = self.get_public_key(generator_id).await?
+            .map(|pk| match pk {
+                blockchain_types::prelude::PublicKey::Ed25519(bytes) => bytes,
+            })
+            .unwrap_or([0u8; 32]);
+
+        let generation_signature = compute_generation_signature(&prev_gen_sig, &generator_public_key);
+
         let mut block = Block::new(current_height + 1, prev_hash, generator_id);
         block.timestamp = now;
         block.payload_hash = payload_hash;
         block.base_target = next_base_target;
         block.cumulative_difficulty = new_cumulative;
-        block.generation_signature = [0; 64]; // TODO: generate via consensus
+        block.generation_signature = generation_signature;
+        block.generator_public_key = Some(generator_public_key);
         block.total_amount = transactions.iter().map(|tx| tx.amount).sum();
         block.total_fee = transactions.iter().map(|tx| tx.fee).sum();
         block.payload_length = transactions.iter().map(|tx| tx.size()).sum::<usize>() as u32;
@@ -254,14 +270,7 @@ impl ChainService {
     }
 
     pub async fn start_sync(&self) -> anyhow::Result<()> {
-        debug!("Chain sync started");
-        // TODO: implement sync
-        Ok(())
-    }
-
-
-    pub async fn start_sync(&self) -> anyhow::Result<()> {
-        debug!("Chain sync started");
+        debug!("Chain sync: delegated to p2p::BlockchainSyncDaemon (see main.rs)");
         Ok(())
     }
 }

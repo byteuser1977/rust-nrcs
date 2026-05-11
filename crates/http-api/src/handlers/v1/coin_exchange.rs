@@ -322,3 +322,33 @@ impl RequestHandler for GetExpectedCoinExchangeOrderCancellationsHandler {
         Ok(builder.build())
     }
 }
+
+pub struct GetExpectedExchangeRequestsHandler;
+
+impl GetExpectedExchangeRequestsHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedExchangeRequestsHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["account", "currency", "includeCurrencyInfo", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Accounts, ApiTag::Ms]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _account_id = req.get_u64("account").unwrap_or(0);
+        let _currency_id = req.get_u64("currency").unwrap_or(0);
+        let _include_currency_info = req.get_bool("includeCurrencyInfo");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("exchangeRequests", json!([]));
+
+        Ok(builder.build())
+    }
+}

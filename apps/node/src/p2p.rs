@@ -1,6 +1,8 @@
 //! P2P Network Service (placeholder implementation)
 //!
-//! 目前是简化实现，仅提供类型占位符，实际实现需要完整的 libp2p 集成
+//! **NOTE**: This module is not compiled by default (not declared in main.rs).
+//! The actual P2P networking is handled by the p2p crate.
+//! This file is retained for reference only.
 
 use std::sync::Arc;
 

@@ -54,16 +54,35 @@ impl RequestHandler for GetTransactionHandler {
         };
         
         let tx_domain = tx.to_domain().map_err(|e| ApiError::Internal(e.to_string()))?;
-        
+
+        let confirmations = if tx.height > 0 {
+            state.block_repo.get_height().await.unwrap_or(0) - tx.height + 1
+        } else {
+            0
+        };
+
+        let sender_pk = state.account_manager.get_public_key(tx.sender_id as u64).await;
+        let sender_public_key = match sender_pk {
+            Ok(Some(blockchain_types::prelude::PublicKey::Ed25519(bytes))) => hex::encode(bytes),
+            _ => String::new(),
+        };
+
+        let signature_hash = if !tx.signature.is_empty() {
+            let hash = crypto::crypto::sha256(&tx.signature);
+            hex::encode(hash.as_ref())
+        } else {
+            String::new()
+        };
+
         let mut builder = RsRespBuilder::new();
-        
+
         builder
             .insert("transaction", tx.id.to_string())
             .insert("timestamp", tx.timestamp)
             .insert("height", tx.height)
             .insert("sender", tx.sender_id.to_string())
             .insert("senderRS", format_account_rs(tx.sender_id as u64))
-            .insert("senderPublicKey", "")
+            .insert("senderPublicKey", sender_public_key)
             .insert("amountNQT", tx.amount.to_string())
             .insert("feeNQT", tx.fee.to_string())
             .insert("type", u8::from(tx_domain.type_id))
@@ -71,9 +90,9 @@ impl RequestHandler for GetTransactionHandler {
             .insert("block", tx.block_id.to_string())
             .insert("blockTimestamp", tx.timestamp)
             .insert("fullHash", hex::encode(&tx.full_hash))
-            .insert("signatureHash", "")
+            .insert("signatureHash", signature_hash)
             .insert("signature", hex::encode(&tx.signature))
-            .insert("confirmations", 0i32);
+            .insert("confirmations", confirmations);
         
         if let Some(recipient) = tx.recipient_id {
             builder

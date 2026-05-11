@@ -5,7 +5,8 @@
 #![allow(clippy::new_without_default)]
 
 use async_trait::async_trait;
-use blockchain_types::constants::ONE_NRCS;
+
+
 use serde_json::json;
 
 use crate::api_tag::ApiTag;
@@ -56,20 +57,48 @@ impl RequestHandler for GetAccountHandler {
             .insert("account", account_id.to_string())
             .insert("accountRS", format_account_rs(account_id));
         
+        let name = account.properties.get("name").cloned().unwrap_or_default();
+        let description = account.properties.get("description").cloned().unwrap_or_default();
+        builder.insert("name", name);
+        builder.insert("description", description);
+
+        if let Ok(Some(pk)) = state.account_manager.get_public_key(account_id).await {
+            match pk {
+                blockchain_types::prelude::PublicKey::Ed25519(bytes) => {
+                    builder.insert("publicKey", hex::encode(bytes));
+                }
+            }
+        }
+
         builder
             .insert("balanceNQT", account.balance.to_string())
             .insert("unconfirmedBalanceNQT", account.unconfirmed_balance.to_string())
-            .insert("forgedBalanceNQT", "0")
+            .insert("forgedBalanceNQT", account.forged_balance.to_string())
             .insert("guaranteedBalanceNQT", account.guaranteed_balance.to_string());
         
         if include_effective_balance {
             let effective = account.effective_balance();
             builder.insert("effectiveBalanceNRCS", effective as i64);
         }
+
+        if let Some(ref lease) = account.lease {
+            if lease.lessee_id != 0 {
+                builder
+                    .insert("currentLessee", lease.lessee_id.to_string())
+                    .insert("currentLesseeRS", format_account_rs(lease.lessee_id))
+                    .insert("currentLeasingHeightFrom", lease.start_height)
+                    .insert("currentLeasingHeightTo", lease.end_height);
+            }
+        }
+
+        if account.has_control_phasing {
+            builder.insert("accountControls", json!(["PHASING_ONLY"]));
+        }
         
         if include_lessors {
             builder.insert("lessors", json!([]));
             builder.insert("lessorsRS", json!([]));
+            builder.insert("lessorsInfo", json!([]));
         }
         
         if include_assets {
@@ -79,8 +108,14 @@ impl RequestHandler for GetAccountHandler {
                     "balanceQNT": qty.to_string()
                 }))
                 .collect();
+            let unconfirmed_asset_balances: Vec<serde_json::Value> = account.assets.iter()
+                .map(|(id, qty)| json!({
+                    "asset": id.to_string(),
+                    "unconfirmedBalanceQNT": qty.to_string()
+                }))
+                .collect();
             builder.insert("assetBalances", json!(asset_balances));
-            builder.insert("unconfirmedAssetBalances", json!(asset_balances));
+            builder.insert("unconfirmedAssetBalances", json!(unconfirmed_asset_balances));
         }
         
         if include_currencies {
@@ -117,22 +152,22 @@ impl RequestHandler for GetBalanceHandler {
     
     async fn process_request(&self, req: &ApiRequest, state: &ApiState) -> Result<RsRespWithData, ApiError> {
         let account_id = req.require_u64("account")?;
-        
-        let balance = state.account_manager
-            .get_balance(account_id)
+
+        let account = state.account_manager
+            .get_account_info(account_id)
             .await
             .map_err(ApiError::Account)?;
-        
+
         let mut builder = RsRespBuilder::new();
-        
+
         builder
             .insert("account", account_id.to_string())
             .insert("accountRS", format_account_rs(account_id))
-            .insert("balanceNQT", balance.to_string())
-            .insert("unconfirmedBalanceNQT", balance.to_string())
-            .insert("effectiveBalanceNRCS", (balance as u64 / ONE_NRCS) as i64)
-            .insert("guaranteedBalanceNQT", balance.to_string());
-        
+            .insert("balanceNQT", account.balance.to_string())
+            .insert("unconfirmedBalanceNQT", account.unconfirmed_balance.to_string())
+            .insert("effectiveBalanceNRCS", account.effective_balance() as i64)
+            .insert("guaranteedBalanceNQT", account.guaranteed_balance.to_string());
+
         Ok(builder.build())
     }
 }

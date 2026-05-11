@@ -264,6 +264,7 @@ pub fn init_api_handlers() {
     register_api("getExchangesByOffer", Arc::new(GetExchangesByOfferHandler::new()));
     register_api("getExpectedCoinExchangeOrderCancellations", Arc::new(GetExpectedCoinExchangeOrderCancellationsHandler::new()));
     register_api("getExpectedCoinExchangeOrders", Arc::new(GetExpectedCoinExchangeOrdersHandler::new()));
+    register_api("getExpectedExchangeRequests", Arc::new(GetExpectedExchangeRequestsHandler::new()));
     register_api("getLastExchanges", Arc::new(GetLastExchangesHandler::new()));
     register_api("getLastTrades", Arc::new(GetLastTradesHandler::new()));
     register_api("getMintingTarget", Arc::new(GetMintingTargetHandler::new()));
@@ -334,6 +335,8 @@ pub fn init_api_handlers() {
     register_api("getExpectedAssetTransfers", Arc::new(GetExpectedAssetTransfersHandler::new()));
     register_api("getExpectedBuyOffers", Arc::new(GetExpectedBuyOffersHandler::new()));
     register_api("getExpectedSellOffers", Arc::new(GetExpectedSellOffersHandler::new()));
+    register_api("getExpectedAskOrders", Arc::new(GetExpectedAskOrdersHandler::new()));
+    register_api("getExpectedBidOrders", Arc::new(GetExpectedBidOrdersHandler::new()));
     register_api("getOffer", Arc::new(GetOfferHandler::new()));
     register_api("getSellOffers", Arc::new(GetSellOffersHandler::new()));
     register_api("setAssetLongValueProperty", Arc::new(SetAssetLongValuePropertyHandler::new()));

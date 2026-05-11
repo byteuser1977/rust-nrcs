@@ -1010,6 +1010,64 @@ impl RequestHandler for GetExpectedSellOffersHandler {
     }
 }
 
+pub struct GetExpectedAskOrdersHandler;
+
+impl GetExpectedAskOrdersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedAskOrdersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset", "sortByPrice", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _asset_id = req.get_u64("asset").unwrap_or(0);
+        let _sort_by_price = req.get_bool("sortByPrice");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("askOrders", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
+pub struct GetExpectedBidOrdersHandler;
+
+impl GetExpectedBidOrdersHandler {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl RequestHandler for GetExpectedBidOrdersHandler {
+    fn parameters(&self) -> Vec<&'static str> {
+        vec!["asset", "sortByPrice", "requireBlock", "requireLastBlock"]
+    }
+
+    fn api_tags(&self) -> Vec<ApiTag> {
+        vec![ApiTag::Ae]
+    }
+
+    async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
+        let _asset_id = req.get_u64("asset").unwrap_or(0);
+        let _sort_by_price = req.get_bool("sortByPrice");
+
+        let mut builder = RsRespBuilder::new();
+        builder.insert("bidOrders", json!([]));
+
+        Ok(builder.build())
+    }
+}
+
 fn format_account_rs(account_id: u64) -> String {
     format!("NRCS-{}-{}-{}",
         account_id % 10000,
