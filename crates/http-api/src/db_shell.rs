@@ -22,10 +22,9 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::state::ApiState;
-use orm::repository::traits::{
-    DbMetaRepository, AnyDbMetaRepository, TableInfo, TableSchema,
-};
-use orm::connection::{DatabaseType, detect_database_type};
+use orm::repository::traits::DbMetaRepository;
+use orm::repository::sqlite::AnyDbMetaRepository;
+use orm::connection::DatabaseType;
 
 const MAX_INCORRECT_ATTEMPTS: u32 = 25;
 const LOCK_DURATION_SECS: u64 = 3600;

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sqlx::SqlitePool;
+use sqlx::{SqlitePool, Row};
 use tracing::{debug, info, warn};
 
 use crate::models::*;
@@ -7294,5 +7294,516 @@ impl PollResultRepository for SqlitePollResultRepository {
         } else {
             self.insert(model).await
         }
+    }
+}
+
+/// SQLite implementation of DbMetaRepository for database metadata queries
+///
+/// Provides SQLite-specific implementations for metadata operations
+/// like listing tables, getting schema information, etc.
+pub struct SqliteDbMetaRepository {
+    pool: SqlitePool,
+}
+
+impl SqliteDbMetaRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    /// Safely extract cell value from SQLite row
+    fn get_cell_value(row: &sqlx::sqlite::SqliteRow, col_name: &str) -> Option<String> {
+        if let Ok(Some(v)) = row.try_get::<Option<String>, _>(col_name) {
+            return Some(v);
+        }
+        if let Ok(v) = row.try_get::<String, _>(col_name) {
+            return Some(v);
+        }
+        if let Ok(Some(v)) = row.try_get::<Option<i64>, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(v) = row.try_get::<i64, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(Some(v)) = row.try_get::<Option<f64>, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(v) = row.try_get::<f64, _>(col_name) {
+            return Some(v.to_string());
+        }
+        None
+    }
+}
+
+#[async_trait]
+impl DbMetaRepository for SqliteDbMetaRepository {
+    async fn list_tables(&self) -> RepositoryResult<Vec<TableInfo>> {
+        let query = r#"
+            SELECT name, type 
+            FROM sqlite_master 
+            WHERE type IN ('table', 'view') 
+            AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let tables = rows.iter().map(|row| {
+            TableInfo {
+                name: Self::get_cell_value(row, "name").unwrap_or_default(),
+                table_type: Self::get_cell_value(row, "type").unwrap_or_default(),
+            }
+        }).collect();
+
+        Ok(tables)
+    }
+
+    async fn get_table_schema(&self, table_name: &str) -> RepositoryResult<TableSchema> {
+        let columns = self.get_table_columns(table_name).await?;
+        let indexes = self.get_table_indexes(table_name).await?;
+        let row_count = self.count_table_rows(table_name).await?;
+
+        Ok(TableSchema {
+            table_name: table_name.to_string(),
+            columns,
+            indexes,
+            row_count,
+        })
+    }
+
+    async fn get_table_columns(&self, table_name: &str) -> RepositoryResult<Vec<ColumnInfo>> {
+        let query = format!("PRAGMA table_info({})", table_name);
+
+        let rows = sqlx::query(&query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let columns = rows.iter().map(|row| {
+            ColumnInfo {
+                column_id: Self::get_cell_value(row, "cid")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0),
+                name: Self::get_cell_value(row, "name").unwrap_or_default(),
+                data_type: Self::get_cell_value(row, "type").unwrap_or_default(),
+                nullable: Self::get_cell_value(row, "notnull")
+                    .and_then(|v| v.parse::<i64>().ok())
+                    .map(|n| n == 0)
+                    .unwrap_or(true),
+                default_value: Self::get_cell_value(row, "dflt_value"),
+                is_primary_key: Self::get_cell_value(row, "pk")
+                    .and_then(|v| v.parse::<i64>().ok())
+                    .map(|p| p > 0)
+                    .unwrap_or(false),
+            }
+        }).collect();
+
+        Ok(columns)
+    }
+
+    async fn get_table_indexes(&self, table_name: &str) -> RepositoryResult<Vec<IndexInfo>> {
+        let index_list_query = format!("PRAGMA index_list({})", table_name);
+
+        let index_rows = sqlx::query(&index_list_query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let mut indexes = Vec::new();
+
+        for idx_row in &index_rows {
+            let index_name = Self::get_cell_value(idx_row, "name").unwrap_or_default();
+            let is_unique = Self::get_cell_value(idx_row, "unique")
+                .and_then(|v| v.parse::<i64>().ok())
+                .map(|u| u > 0)
+                .unwrap_or(false);
+
+            // Get columns for this index
+            let index_info_query = format!("PRAGMA index_info({})", index_name);
+            let col_rows = sqlx::query(&index_info_query)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(RepositoryError::DbError)?;
+
+            let columns: Vec<String> = col_rows.iter()
+                .map(|col_row| Self::get_cell_value(col_row, "name").unwrap_or_default())
+                .collect();
+
+            indexes.push(IndexInfo {
+                index_name,
+                is_unique,
+                columns,
+            });
+        }
+
+        Ok(indexes)
+    }
+
+    async fn count_table_rows(&self, table_name: &str) -> RepositoryResult<i64> {
+        // Sanitize table name to prevent SQL injection
+        let safe_table = table_name.replace(' ', "").replace(';', "").replace('"', "'");
+        let query = format!("SELECT COUNT(*) as cnt FROM {}", safe_table);
+
+        let row = sqlx::query(&query)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let count = Self::get_cell_value(&row, "cnt")
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+
+        Ok(count)
+    }
+
+    async fn table_exists(&self, table_name: &str) -> RepositoryResult<bool> {
+        let query = "SELECT COUNT(*) as cnt FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?";
+        
+        let row = sqlx::query(query)
+            .bind(table_name)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let count = Self::get_cell_value(&row, "cnt")
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+
+        Ok(count > 0)
+    }
+
+    async fn get_database_version(&self) -> RepositoryResult<String> {
+        let row = sqlx::query("SELECT sqlite_version() as ver")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let version = Self::get_cell_value(&row, "ver").unwrap_or_else(|| "unknown".to_string());
+        Ok(format!("SQLite {}", version))
+    }
+}
+
+/// Universal database metadata repository using AnyPool
+///
+/// Provides cross-database support for metadata operations
+/// by automatically detecting database type and using appropriate queries.
+/// This is the recommended implementation for dbshell and other tools
+/// that need to work with multiple database backends.
+pub struct AnyDbMetaRepository {
+    pool: sqlx::AnyPool,
+    db_type: crate::connection::DatabaseType,
+}
+
+impl AnyDbMetaRepository {
+    /// Create new instance from AnyPool with auto-detected database type
+    pub fn new(pool: sqlx::AnyPool, db_type: crate::connection::DatabaseType) -> Self {
+        Self { pool, db_type }
+    }
+
+    /// Safely extract cell value from AnyRow (supports multiple data types)
+    fn get_any_cell_value(row: &sqlx::any::AnyRow, col_name: &str) -> Option<String> {
+        if let Ok(Some(v)) = row.try_get::<Option<String>, _>(col_name) {
+            return Some(v);
+        }
+        if let Ok(v) = row.try_get::<String, _>(col_name) {
+            return Some(v);
+        }
+        if let Ok(Some(v)) = row.try_get::<Option<i64>, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(v) = row.try_get::<i64, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(Some(v)) = row.try_get::<Option<f64>, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(v) = row.try_get::<f64, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(Some(v)) = row.try_get::<Option<bool>, _>(col_name) {
+            return Some(if v { "1" } else { "0" }.to_string());
+        }
+        if let Ok(v) = row.try_get::<bool, _>(col_name) {
+            return Some(if v { "1" } else { "0" }.to_string());
+        }
+        None
+    }
+
+    /// Get current database type
+    pub fn database_type(&self) -> &crate::connection::DatabaseType {
+        &self.db_type
+    }
+}
+
+#[async_trait]
+impl DbMetaRepository for AnyDbMetaRepository {
+    async fn list_tables(&self) -> RepositoryResult<Vec<TableInfo>> {
+        let query = match self.db_type {
+            crate::connection::DatabaseType::SQLite => r#"
+                SELECT name, type 
+                FROM sqlite_master 
+                WHERE type IN ('table', 'view') 
+                AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+            "#,
+            crate::connection::DatabaseType::PostgreSQL => r#"
+                SELECT tablename as name, 'table' as type 
+                FROM pg_tables 
+                WHERE schemaname = 'public'
+                UNION ALL
+                SELECT viewname as name, 'view' as type 
+                FROM pg_views 
+                WHERE schemaname = 'public'
+                ORDER BY name
+            "#,
+        };
+
+        let rows = sqlx::query(query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let tables = rows.iter().map(|row| {
+            TableInfo {
+                name: Self::get_any_cell_value(row, "name").unwrap_or_default(),
+                table_type: Self::get_any_cell_value(row, "type").unwrap_or_default(),
+            }
+        }).collect();
+
+        Ok(tables)
+    }
+
+    async fn get_table_schema(&self, table_name: &str) -> RepositoryResult<TableSchema> {
+        let columns = self.get_table_columns(table_name).await?;
+        let indexes = self.get_table_indexes(table_name).await?;
+        let row_count = self.count_table_rows(table_name).await?;
+
+        Ok(TableSchema {
+            table_name: table_name.to_string(),
+            columns,
+            indexes,
+            row_count,
+        })
+    }
+
+    async fn get_table_columns(&self, table_name: &str) -> RepositoryResult<Vec<ColumnInfo>> {
+        let query = match self.db_type {
+            crate::connection::DatabaseType::SQLite => {
+                format!("PRAGMA table_info({})", table_name)
+            }
+            crate::connection::DatabaseType::PostgreSQL => {
+                format!(r#"
+                    SELECT 
+                        ordinal_position as column_id,
+                        column_name as name,
+                        data_type as type,
+                        is_nullable = 'YES' as nullable,
+                        column_default as default_value,
+                        CASE WHEN pk IS NOT NULL THEN true ELSE false END as pk
+                    FROM information_schema.columns 
+                    WHERE table_name = '{}'
+                    ORDER BY ordinal_position
+                "#, table_name)
+            }
+        };
+
+        let rows = sqlx::query(&query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let columns = rows.iter().map(|row| {
+            ColumnInfo {
+                column_id: Self::get_any_cell_value(row, "column_id")
+                    .or_else(|| Self::get_any_cell_value(row, "cid"))
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0),
+                name: Self::get_any_cell_value(row, "name").unwrap_or_default(),
+                data_type: Self::get_any_cell_value(row, "type")
+                    .or_else(|| Self::get_any_cell_value(row, "data_type"))
+                    .unwrap_or_default(),
+                nullable: Self::get_any_cell_value(row, "nullable")
+                    .or_else(|| Self::get_any_cell_value(row, "notnull"))
+                    .and_then(|v| {
+                        match v.to_lowercase().as_str() {
+                            "yes" | "true" | "1" => Some(true),
+                            "no" | "false" | "0" => Some(false),
+                            _ => v.parse::<i64>().ok().map(|n| n == 0),
+                        }
+                    })
+                    .unwrap_or(true),
+                default_value: Self::get_any_cell_value(row, "default_value")
+                    .or_else(|| Self::get_any_cell_value(row, "dflt_value")),
+                is_primary_key: Self::get_any_cell_value(row, "pk")
+                    .or_else(|| Self::get_any_cell_value(row, "is_primary_key"))
+                    .and_then(|v| {
+                        match v.to_lowercase().as_str() {
+                            "yes" | "true" | "1" => Some(true),
+                            "no" | "false" | "0" => Some(false),
+                            _ => v.parse::<i64>().ok().map(|p| p > 0),
+                        }
+                    })
+                    .unwrap_or(false),
+            }
+        }).collect();
+
+        Ok(columns)
+    }
+
+    async fn get_table_indexes(&self, table_name: &str) -> RepositoryResult<Vec<IndexInfo>> {
+        let index_list_query = match self.db_type {
+            crate::connection::DatabaseType::SQLite => {
+                format!("PRAGMA index_list({})", table_name)
+            }
+            crate::connection::DatabaseType::PostgreSQL => {
+                format!(r#"
+                    SELECT 
+                        i.relname as index_name,
+                        ix.indisunique as unique,
+                        array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) as columns
+                    FROM pg_index ix
+                    JOIN pg_class t ON t.oid = ix.indrelid
+                    JOIN pg_class i ON i.oid = ix.indexrelid
+                    JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+                    WHERE t.relname = '{}'
+                    GROUP BY i.relname, ix.indisunique
+                    ORDER BY i.relname
+                "#, table_name)
+            }
+        };
+
+        let index_rows = sqlx::query(&index_list_query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let mut indexes = Vec::new();
+
+        match self.db_type {
+            crate::connection::DatabaseType::SQLite => {
+                // SQLite: 需要额外查询每个索引的列信息
+                for idx_row in &index_rows {
+                    let index_name = Self::get_any_cell_value(idx_row, "name").unwrap_or_default();
+                    let is_unique = Self::get_any_cell_value(idx_row, "unique")
+                        .and_then(|v| v.parse::<i64>().ok())
+                        .map(|u| u > 0)
+                        .unwrap_or(false);
+
+                    let index_info_query = format!("PRAGMA index_info({})", index_name);
+                    let col_rows = sqlx::query(&index_info_query)
+                        .fetch_all(&self.pool)
+                        .await
+                        .map_err(RepositoryError::DbError)?;
+
+                    let columns: Vec<String> = col_rows.iter()
+                        .map(|col_row| Self::get_any_cell_value(col_row, "name").unwrap_or_default())
+                        .collect();
+
+                    indexes.push(IndexInfo {
+                        index_name,
+                        is_unique,
+                        columns,
+                    });
+                }
+            }
+            crate::connection::DatabaseType::PostgreSQL => {
+                // PostgreSQL: 列信息已经在查询中返回
+                for idx_row in &index_rows {
+                    let index_name = Self::get_any_cell_value(idx_row, "index_name").unwrap_or_default();
+                    let is_unique = Self::get_any_cell_value(idx_row, "unique")
+                        .and_then(|v| {
+                            match v.to_lowercase().as_str() {
+                                "t" | "true" | "1" => Some(true),
+                                _ => Some(false),
+                            }
+                        })
+                        .unwrap_or(false);
+                    
+                    // PostgreSQL 返回的列可能是数组格式，需要解析
+                    let columns_raw = Self::get_any_cell_value(idx_row, "columns")
+                        .unwrap_or_default();
+                    
+                    // 简单解析 PostgreSQL 数组格式 {col1,col2}
+                    let columns: Vec<String> = columns_raw
+                        .trim_matches('{')
+                        .trim_matches('}')
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+
+                    indexes.push(IndexInfo {
+                        index_name,
+                        is_unique,
+                        columns,
+                    });
+                }
+            }
+        }
+
+        Ok(indexes)
+    }
+
+    async fn count_table_rows(&self, table_name: &str) -> RepositoryResult<i64> {
+        // Sanitize table name to prevent SQL injection
+        let safe_table = table_name.replace(' ', "").replace(';', "").replace('"', "'");
+        let query = format!("SELECT COUNT(*) as cnt FROM {}", safe_table);
+
+        let row = sqlx::query(&query)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let count = Self::get_any_cell_value(&row, "cnt")
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+
+        Ok(count)
+    }
+
+    async fn table_exists(&self, table_name: &str) -> RepositoryResult<bool> {
+        let query = match self.db_type {
+            crate::connection::DatabaseType::SQLite => {
+                "SELECT COUNT(*) as cnt FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?"
+            }
+            crate::connection::DatabaseType::PostgreSQL => {
+                "SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_name = $1"
+            }
+        };
+        
+        let row = sqlx::query(query)
+            .bind(table_name)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let count = Self::get_any_cell_value(&row, "cnt")
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+
+        Ok(count > 0)
+    }
+
+    async fn get_database_version(&self) -> RepositoryResult<String> {
+        let (query, version_prefix) = match self.db_type {
+            crate::connection::DatabaseType::SQLite => (
+                "SELECT sqlite_version() as ver",
+                "SQLite"
+            ),
+            crate::connection::DatabaseType::PostgreSQL => (
+                "SELECT version() as ver",
+                "PostgreSQL"
+            ),
+        };
+
+        let row = sqlx::query(query)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let version = Self::get_any_cell_value(&row, "ver").unwrap_or_else(|| "unknown".to_string());
+        Ok(format!("{} {}", version_prefix, version))
     }
 }

@@ -4,6 +4,7 @@
 //! Uses async/await with SQLx and connection pooling.
 
 use async_trait::async_trait;
+use serde::{Serialize, Deserialize};
 use thiserror::Error;
 
 use crate::models::*;
@@ -485,5 +486,78 @@ pub trait PurchaseFeedbackRepository: Repository<PurchaseFeedbackModel> {
 #[async_trait]
 pub trait ReferencedTransactionRepository: Repository<ReferencedTransactionModel> {
     async fn find_by_transaction(&self, transaction_id: i64) -> RepositoryResult<Vec<ReferencedTransactionModel>>;
+}
+
+/// Database metadata information structures
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableInfo {
+    pub name: String,
+    pub table_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColumnInfo {
+    pub column_id: i32,
+    pub name: String,
+    pub data_type: String,
+    pub nullable: bool,
+    pub default_value: Option<String>,
+    pub is_primary_key: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexInfo {
+    pub index_name: String,
+    pub is_unique: bool,
+    pub columns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TableSchema {
+    pub table_name: String,
+    pub columns: Vec<ColumnInfo>,
+    pub indexes: Vec<IndexInfo>,
+    pub row_count: i64,
+}
+
+/// Database metadata repository trait for cross-database support
+///
+/// Provides unified interface for querying database metadata
+/// across different database types (SQLite, PostgreSQL).
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use orm::repository::traits::{DbMetaRepository, TableSchema};
+///
+/// # async fn example(repo: &dyn DbMetaRepository) -> anyhow::Result<()> {
+/// let tables = repo.list_tables().await?;
+/// let schema = repo.get_table_schema("block").await?;
+/// let count = repo.count_table_rows("account").await?;
+/// # Ok(())
+/// # }
+/// ```
+#[async_trait]
+pub trait DbMetaRepository: Send + Sync {
+    /// List all tables in the database
+    async fn list_tables(&self) -> RepositoryResult<Vec<TableInfo>>;
+
+    /// Get detailed schema information for a specific table
+    async fn get_table_schema(&self, table_name: &str) -> RepositoryResult<TableSchema>;
+
+    /// Get column information for a specific table
+    async fn get_table_columns(&self, table_name: &str) -> RepositoryResult<Vec<ColumnInfo>>;
+
+    /// Get index information for a specific table
+    async fn get_table_indexes(&self, table_name: &str) -> RepositoryResult<Vec<IndexInfo>>;
+
+    /// Count rows in a specific table
+    async fn count_table_rows(&self, table_name: &str) -> RepositoryResult<i64>;
+
+    /// Check if a table exists
+    async fn table_exists(&self, table_name: &str) -> RepositoryResult<bool>;
+
+    /// Get database version information
+    async fn get_database_version(&self) -> RepositoryResult<String>;
 }
 

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 
 use crate::models::*;
 use crate::connection::DbTransaction;
@@ -7044,5 +7044,252 @@ impl PeerRepository for PgPeerRepository {
         let result = sqlx::query(r#"DELETE FROM "peer" WHERE "last_updated" < $1 OR "last_updated" IS NULL"#)
             .bind(threshold).execute(&self.pool).await.map_err(RepositoryError::DbError)?;
         Ok(result.rows_affected())
+    }
+}
+
+/// PostgreSQL implementation of DbMetaRepository for database metadata queries
+///
+/// Provides PostgreSQL-specific implementations for metadata operations
+/// like listing tables, getting schema information, etc.
+pub struct PgDbMetaRepository {
+    pool: PgPool,
+}
+
+impl PgDbMetaRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    /// Safely extract cell value from PostgreSQL row
+    fn get_cell_value(row: &sqlx::postgres::PgRow, col_name: &str) -> Option<String> {
+        if let Ok(Some(v)) = row.try_get::<Option<String>, _>(col_name) {
+            return Some(v);
+        }
+        if let Ok(v) = row.try_get::<String, _>(col_name) {
+            return Some(v);
+        }
+        if let Ok(Some(v)) = row.try_get::<Option<i64>, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(v) = row.try_get::<i64, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(Some(v)) = row.try_get::<Option<f64>, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(v) = row.try_get::<f64, _>(col_name) {
+            return Some(v.to_string());
+        }
+        if let Ok(Some(v)) = row.try_get::<Option<bool>, _>(col_name) {
+            return Some(if v { "true" } else { "false" }.to_string());
+        }
+        if let Ok(v) = row.try_get::<bool, _>(col_name) {
+            return Some(if v { "true" } else { "false" }.to_string());
+        }
+        None
+    }
+}
+
+#[async_trait]
+impl DbMetaRepository for PgDbMetaRepository {
+    async fn list_tables(&self) -> RepositoryResult<Vec<TableInfo>> {
+        let query = r#"
+            SELECT tablename as name, 'table' as type 
+            FROM pg_tables 
+            WHERE schemaname = 'public'
+            UNION ALL
+            SELECT viewname as name, 'view' as type 
+            FROM pg_views 
+            WHERE schemaname = 'public'
+            ORDER BY name
+        "#;
+
+        let rows = sqlx::query(query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let tables = rows.iter().map(|row| {
+            TableInfo {
+                name: Self::get_cell_value(row, "name").unwrap_or_default(),
+                table_type: Self::get_cell_value(row, "type").unwrap_or_default(),
+            }
+        }).collect();
+
+        Ok(tables)
+    }
+
+    async fn get_table_schema(&self, table_name: &str) -> RepositoryResult<TableSchema> {
+        let columns = self.get_table_columns(table_name).await?;
+        let indexes = self.get_table_indexes(table_name).await?;
+        let row_count = self.count_table_rows(table_name).await?;
+
+        Ok(TableSchema {
+            table_name: table_name.to_string(),
+            columns,
+            indexes,
+            row_count,
+        })
+    }
+
+    async fn get_table_columns(&self, table_name: &str) -> RepositoryResult<Vec<ColumnInfo>> {
+        let query = format!(r#"
+            SELECT 
+                ordinal_position as column_id,
+                column_name as name,
+                data_type as type,
+                is_nullable = 'YES' as nullable,
+                column_default as default_value,
+                CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END as pk
+            FROM information_schema.columns 
+            LEFT JOIN (
+                SELECT kcu.column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu 
+                    ON tc.constraint_name = kcu.constraint_name 
+                    AND tc.table_schema = kcu.table_schema
+                WHERE tc.constraint_type = 'PRIMARY KEY' 
+                    AND tc.table_name = '{}'
+                    AND tc.table_schema = 'public'
+            ) pk ON information_schema.columns.column_name = pk.column_name
+            WHERE table_name = '{}'
+            AND table_schema = 'public'
+            ORDER BY ordinal_position
+        "#, table_name, table_name);
+
+        let rows = sqlx::query(&query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let columns = rows.iter().map(|row| {
+            ColumnInfo {
+                column_id: Self::get_cell_value(row, "column_id")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0),
+                name: Self::get_cell_value(row, "name").unwrap_or_default(),
+                data_type: Self::get_cell_value(row, "type").unwrap_or_default(),
+                nullable: Self::get_cell_value(row, "nullable")
+                    .and_then(|v| match v.to_lowercase().as_str() {
+                        "yes" | "true" | "t" => Some(true),
+                        _ => Some(false),
+                    })
+                    .unwrap_or(true),
+                default_value: Self::get_cell_value(row, "default_value"),
+                is_primary_key: Self::get_cell_value(row, "pk")
+                    .and_then(|v| match v.to_lowercase().as_str() {
+                        "yes" | "true" | "t" => Some(true),
+                        _ => Some(false),
+                    })
+                    .unwrap_or(false),
+            }
+        }).collect();
+
+        Ok(columns)
+    }
+
+    async fn get_table_indexes(&self, table_name: &str) -> RepositoryResult<Vec<IndexInfo>> {
+        let query = format!(r#"
+            SELECT 
+                i.relname as index_name,
+                ix.indisunique as unique,
+                array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) as columns
+            FROM pg_index ix
+            JOIN pg_class t ON t.oid = ix.indrelid
+            JOIN pg_class i ON i.oid = ix.indexrelid
+            JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+            WHERE t.relname = '{}'
+            AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')
+            GROUP BY i.relname, ix.indisunique
+            ORDER BY i.relname
+        "#, table_name);
+
+        let index_rows = sqlx::query(&query)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let mut indexes = Vec::new();
+
+        for idx_row in &index_rows {
+            let index_name = Self::get_cell_value(idx_row, "index_name").unwrap_or_default();
+            let is_unique = Self::get_cell_value(idx_row, "unique")
+                .and_then(|v| match v.to_lowercase().as_str() {
+                    "t" | "true" | "1" => Some(true),
+                    _ => Some(false),
+                })
+                .unwrap_or(false);
+            
+            // PostgreSQL 返回的列是数组格式，需要解析
+            let columns_raw = Self::get_cell_value(idx_row, "columns").unwrap_or_default();
+            
+            // 解析 PostgreSQL 数组格式 {col1,col2}
+            let columns: Vec<String> = columns_raw
+                .trim_matches('{')
+                .trim_matches('}')
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            indexes.push(IndexInfo {
+                index_name,
+                is_unique,
+                columns,
+            });
+        }
+
+        Ok(indexes)
+    }
+
+    async fn count_table_rows(&self, table_name: &str) -> RepositoryResult<i64> {
+        // Sanitize table name to prevent SQL injection
+        let safe_table = table_name.replace(' ', "").replace(';', "").replace('"', "'");
+        let query = format!("SELECT COUNT(*) as cnt FROM {}", safe_table);
+
+        let row = sqlx::query(&query)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let count = Self::get_cell_value(&row, "cnt")
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+
+        Ok(count)
+    }
+
+    async fn table_exists(&self, table_name: &str) -> RepositoryResult<bool> {
+        let query = r#"SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_name = $1 AND table_schema = 'public'"#;
+        
+        let row = sqlx::query(query)
+            .bind(table_name)
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let count = Self::get_cell_value(&row, "cnt")
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(0);
+
+        Ok(count > 0)
+    }
+
+    async fn get_database_version(&self) -> RepositoryResult<String> {
+        let row = sqlx::query("SELECT version() as ver")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(RepositoryError::DbError)?;
+
+        let version = Self::get_cell_value(&row, "ver").unwrap_or_else(|| "unknown".to_string());
+        
+        // 提取版本号（PostgreSQL version() 返回格式如 "PostgreSQL 14.2 on ..."）
+        let version_short = version
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or(&version)
+            .to_string();
+        
+        Ok(format!("PostgreSQL {}", version_short))
     }
 }

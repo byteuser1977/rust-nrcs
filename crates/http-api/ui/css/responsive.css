@@ -1,0 +1,589 @@
+/**
+ * NRCS Wallet - Responsive Styles
+ * 
+ * 响应式适配样式
+ * 包含: 平板、手机、大屏幕等断点适配
+ */
+
+/* ========== 1. 超大屏幕 (≥1400px) ========== */
+@media (min-width: 1400px) {
+  .page-content {
+    max-width: 1400px;
+    padding: var(--space-8);
+  }
+  
+  .grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ========== 2. 大桌面 (1200px - 1399px) ========== */
+@media (max-width: 1399px) and (min-width: 1200px) {
+  .page-content {
+    max-width: 1200px;
+  }
+  
+  /* 统计卡片字体调小 */
+  .stat-card-value {
+    font-size: var(--text-2xl);
+  }
+}
+
+/* ========== 3. 平板横屏 (1024px - 1199px) ========== */
+@media (max-width: 1199px) {
+  :root {
+    --sidebar-width: 240px;
+  }
+
+  /* 侧边栏收起状态 */
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .main-wrapper {
+    margin-left: 0;
+  }
+
+  /* 显示菜单按钮 */
+  .menu-toggle-btn {
+    display: flex !important;
+  }
+
+  /* 统计卡片网格调整 */
+  .grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 页面标题缩小 */
+  .page-title {
+    font-size: var(--text-2xl);
+  }
+
+  /* 表格水平滚动优化 */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 模态框宽度调整 */
+  .modal {
+    max-width: 90%;
+  }
+
+  /* 卡片内边距减少 */
+  .card-body {
+    padding: var(--space-5);
+  }
+
+  .card-header {
+    padding: var(--space-4) var(--space-5);
+  }
+}
+
+/* ========== 4. 平板竖屏 (768px - 1023px) ========== */
+@media (max-width: 1023px) {
+  /* 主内容区域全宽 */
+  .main-wrapper {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  /* 导航栏简化 */
+  .navbar {
+    height: 56px;
+    padding: 0 var(--space-4);
+  }
+
+  .breadcrumb {
+    display: none; /* 小屏隐藏面包屑 */
+  }
+
+  /* 页面内容区 */
+  .page-content {
+    padding: var(--space-4);
+  }
+
+  /* 网格系统调整 */
+  .grid-cols-3,
+  .grid-cols-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  /* 统计卡片堆叠 */
+  .stat-card {
+    margin-bottom: var(--space-4);
+  }
+
+  .stat-card-value {
+    font-size: var(--text-2xl);
+  }
+
+  /* 登录容器 */
+  .login-container {
+    margin: var(--space-6);
+    padding: var(--space-8);
+    max-width: 100%;
+  }
+
+  /* 侧边栏用户信息卡片 */
+  .sidebar-user-card {
+    padding: var(--space-3);
+  }
+
+  /* 模态框全宽 */
+  .modal {
+    max-width: 95%;
+    max-height: 85vh;
+  }
+
+  /* 表格隐藏部分列 */
+  .data-table th:nth-child(n+4),
+  .data-table td:nth-child(n+4) {
+    display: none;
+  }
+
+  /* 工具栏垂直布局 */
+  .flex-wrap.gap-4 > * {
+    flex-basis: 100%;
+  }
+}
+
+/* ========== 5. 手机横屏 (576px - 767px) ========== */
+@media (max-width: 767px) {
+  /* 全局字体缩小 */
+  html {
+    font-size: 14px;
+  }
+
+  /* 导航栏紧凑 */
+  .navbar {
+    height: 48px;
+  }
+
+  .navbar-action {
+    width: 36px;
+    height: 36px;
+  }
+
+  .navbar-action-badge {
+    top: 4px;
+    right: 4px;
+    width: 16px;
+    height: 16px;
+    font-size: 9px;
+  }
+
+  /* 页面内容更紧凑 */
+  .page-content {
+    padding: var(--space-3);
+  }
+
+  .page-header {
+    margin-bottom: var(--space-4);
+  }
+
+  .page-title {
+    font-size: var(--text-xl);
+  }
+
+  .page-title-icon {
+    width: 28px;
+    height: 28px;
+    font-size: var(--text-base);
+  }
+
+  /* 统计卡片极简 */
+  .stat-card {
+    padding: var(--space-4);
+  }
+
+  .stat-card-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-card-value {
+    font-size: var(--text-xl);
+  }
+
+  .stat-card-label {
+    font-size: var(--text-xs);
+  }
+
+  /* 表格完全横向滚动 */
+  .data-table {
+    min-width: 500px;
+  }
+
+  .table-container {
+    border-radius: var(--radius-md);
+  }
+
+  /* 隐藏更多列 */
+  .data-table th:nth-child(n+3),
+  .data-table td:nth-child(n+3) {
+    display: none;
+  }
+
+  /* 按钮尺寸调整 */
+  .btn-lg {
+    padding: var(--space-3) var(--space-6);
+    font-size: var(--text-sm);
+  }
+
+  .btn-block {
+    width: 100%;
+  }
+
+  /* 表单元素 */
+  .form-input,
+  .form-select,
+  .form-textarea {
+    padding: var(--space-3) var(--space-3);
+    font-size: var(--text-sm);
+  }
+
+  /* 模态框 */
+  .modal {
+    border-radius: var(--radius-lg);
+    max-height: 90vh;
+  }
+
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: var(--space-4);
+  }
+
+  /* Toast 通知 */
+  .toast-container {
+    left: var(--space-3);
+    right: var(--space-3);
+    max-width: none;
+  }
+
+  .toast {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  /* 登录页 */
+  .lockscreen-overlay {
+    padding: var(--space-3);
+  }
+
+  .login-container {
+    margin: 0;
+    padding: var(--space-6);
+    border-radius: var(--radius-lg);
+  }
+
+  .login-logo-icon {
+    width: 60px;
+    height: 60px;
+    font-size: var(--text-2xl);
+  }
+
+  .login-title {
+    font-size: var(--text-xl);
+  }
+
+  /* 设置页面两列变单列 */
+  .settings-page .grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 分页控件简化 */
+  .card-footer {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .card-footer .btn {
+    width: 100%;
+  }
+}
+
+/* ========== 6. 手机竖屏 (<576px) ========== */
+@media (max-width: 575px) {
+  /* 超小字体 */
+  html {
+    font-size: 13px;
+  }
+
+  /* 极简导航 */
+  .navbar-left .menu-toggle-btn {
+    margin-right: var(--space-2);
+  }
+
+  .navbar-right {
+    gap: var(--space-2);
+  }
+
+  /* 隐藏非必要操作按钮 */
+  #btn-send-money {
+    display: none;
+  }
+
+  /* 页面内容最小化边距 */
+  .page-content {
+    padding: var(--space-2);
+  }
+
+  /* 标题极简 */
+  .page-subtitle {
+    display: none;
+  }
+
+  /* 统计卡片单列堆叠 */
+  .grid-cols-4,
+  .grid-cols-3,
+  .grid-cols-2 {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .stat-card {
+    padding: var(--space-3);
+  }
+
+  .stat-card-value {
+    font-size: var(--text-lg);
+  }
+
+  /* 表格移动端优化 */
+  .data-table thead {
+    display: none; /* 隐藏表头 */
+  }
+
+  .data-table tbody tr {
+    display: block;
+    margin-bottom: var(--space-3);
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .data-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--divider-color);
+  }
+
+  .data-table tbody td::before {
+    content: attr(data-label);
+    font-weight: var(--font-semibold);
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    margin-right: var(--space-3);
+  }
+
+  .data-table tbody td:last-child {
+    border-bottom: none;
+  }
+
+  /* 按钮组纵向排列 */
+  .btn-group {
+    flex-direction: column;
+  }
+
+  .btn-group .btn {
+    border-radius: var(--radius-md);
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .btn-group .btn:last-child {
+    border-bottom: none;
+  }
+
+  /* 搜索框全宽 */
+  .search-box {
+    width: 100% !important;
+  }
+
+  /* 筛选标签滚动 */
+  #filter-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  #filter-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  #filter-tabs .btn {
+    flex-shrink: 0;
+  }
+
+  /* 登录表单 */
+  .login-container {
+    padding: var(--space-5);
+  }
+
+  .form-group {
+    margin-bottom: var(--space-4);
+  }
+
+  /* 空状态调整 */
+  .empty-state {
+    padding: var(--space-8) var(--space-4);
+  }
+
+  .empty-state-icon {
+    font-size: 40px;
+  }
+
+  .empty-state-title {
+    font-size: var(--text-lg);
+  }
+
+  /* 底部导航 (可选) */
+  .bottom-nav {
+    display: flex !important;
+  }
+}
+
+/* ========== 7. 打印样式 ========== */
+@media print {
+  /* 隐藏不必要的元素 */
+  .sidebar,
+  .navbar,
+  .menu-toggle-btn,
+  .toast-container,
+  .modal-overlay,
+  .btn:not(.btn-print),
+  .search-box {
+    display: none !important;
+  }
+
+  /* 重置主内容区域 */
+  .main-wrapper {
+    margin-left: 0 !important;
+  }
+
+  .page-content {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* 优化打印效果 */
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .card {
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  .data-table {
+    page-break-inside: auto;
+  }
+
+  .data-table tr {
+    page-break-inside: avoid;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 10px;
+    color: #666;
+  }
+
+  /* 强制显示所有列 */
+  .data-table th,
+  .data-table td {
+    display: table-cell !important;
+  }
+}
+
+/* ========== 8. 高分辨率屏幕优化 ========== */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  /* 使用更高精度的边框 */
+  .card,
+  .form-input,
+  .btn {
+    border-width: 0.5px;
+  }
+
+  /* 图标渲染优化 */
+  svg {
+    shape-rendering: geometricPrecision;
+  }
+}
+
+/* ========== 9. 触摸设备优化 ========== */
+@media (hover: none) and (pointer: coarse) {
+  /* 增加点击目标大小 */
+  .nav-item {
+    min-height: 44px;
+    padding: var(--space-4);
+  }
+
+  .btn {
+    min-height: 44px;
+  }
+
+  .navbar-action {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* 移除悬停效果依赖 */
+  .hover-lift:hover {
+    transform: none;
+  }
+
+  .card:hover {
+    transform: none;
+    box-shadow: var(--shadow-md);
+  }
+
+  /* 触摸反馈 */
+  .btn:active {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+}
+
+/* ========== 10. 横屏模式特殊处理 ========== */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* 锁屏登录页适配 */
+  .lockscreen-overlay {
+    padding: var(--space-4);
+  }
+
+  .login-container {
+    max-width: 450px;
+    padding: var(--space-5);
+  }
+
+  .login-logo {
+    margin-bottom: var(--space-4);
+  }
+
+  .login-logo-icon {
+    width: 50px;
+    height: 50px;
+  }
+}

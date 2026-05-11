@@ -1319,6 +1319,30 @@ fn serialize_aliases_attachment(subtype: u8, att_map: &Map<String, serde_json::V
                 put_byte(&mut buf, 0);
             }
         }
+        SUBTYPE_COLORED_COINS_LONG_VALUE_PROPERTY_SET => {
+            // 对应 Java: AssetLongValuePropertyAttachment.putMyBytes()
+            // Java 源码 (AssetLongValuePropertyAttachment.java:50-54):
+            //   buffer.putLong(assetId);
+            //   PROPERTY_NAME_RW.writeToBuffer(property, buffer);  // BYTE prefix (1 byte)
+            //   PROPERTY_VALUE_RW.writeToBuffer(value, buffer);    // UBYTE_8192 prefix (2 bytes)
+            if let Some(asset) = att_map.get("asset") {
+                put_i64(&mut buf, parse_u64_as_i64(asset));
+            } else {
+                put_i64(&mut buf, 0);
+            }
+            if let Some(prop) = att_map.get("property").and_then(|v| v.as_str()) {
+                put_byte(&mut buf, prop.as_bytes().len() as u8);
+                put_string(&mut buf, prop);
+            } else {
+                put_byte(&mut buf, 0);
+            }
+            if let Some(val) = att_map.get("value").and_then(|v| v.as_str()) {
+                put_u16(&mut buf, val.as_bytes().len() as u16);
+                put_string(&mut buf, val);
+            } else {
+                put_u16(&mut buf, 0);
+            }
+        }
         _ => {}
     }
 

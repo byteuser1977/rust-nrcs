@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="NRCS Wallet - Next Generation Blockchain Interface">
+  <title>NRCS Wallet</title>
+  
+  <!-- 字体 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- 样式表 -->
+  <link rel="stylesheet" href="/ui/css/variables.css">
+  <link rel="stylesheet" href="/ui/css/base.css">
+  <link rel="stylesheet" href="/ui/css/layout.css">
+  <link rel="stylesheet" href="/ui/css/components.css">
+  <link rel="stylesheet" href="/ui/css/pages.css">
+  <link rel="stylesheet" href="/ui/css/animations.css">
+  <link rel="stylesheet" href="/ui/css/responsive.css">
+  <link rel="stylesheet" href="/ui/css/login.css">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/ui/assets/images/favicon.png">
+</head>
+<body>
+
+  <!-- ========== 锁屏登录覆盖层 ========== -->
+  <div id="lockscreen-overlay" class="lockscreen-overlay">
+    <div class="login-container">
+      <!-- Logo 区域 -->
+      <div class="login-logo">
+        <div class="login-logo-icon">N</div>
+        <h1 class="login-title">NRCS Wallet</h1>
+        <p class="login-subtitle">Next Generation Blockchain Interface</p>
+      </div>
+      
+      <!-- 登录表单 -->
+      <form id="login-form" class="space-y-6">
+        <div class="form-group">
+          <label for="passphrase-input" class="form-label">Passphrase / Secret Key</label>
+          <input 
+            type="password" 
+            id="passphrase-input" 
+            class="form-input" 
+            placeholder="Enter your passphrase..."
+            autocomplete="off"
+            required
+          >
+        </div>
+        
+        <div class="flex items-center justify-between mb-6">
+          <label class="form-checkbox">
+            <input type="checkbox" id="remember-me">
+            <span class="text-sm text-secondary">Remember me</span>
+          </label>
+        </div>
+        
+        <button type="submit" class="btn btn-primary btn-block btn-lg" id="login-btn">
+          <span>Unlock Wallet</span>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17v-3m0 0V8m0 7H7M15 13l-3-3m0 0l-3 3"/>
+          </svg>
+        </button>
+        
+        <div id="login-error" class="alert alert-danger hidden mt-4"></div>
+      </form>
+      
+      <!-- 底部信息 -->
+      <div class="text-center mt-8 pt-6 border-t border-color-light">
+        <p class="text-xs text-muted">Secure • Decentralized • Open Source</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 主应用容器 ========== -->
+  <div id="app-container" class="app-container" style="display: none;">
+    
+    <!-- 侧边栏遮罩 (移动端) -->
+    <div id="sidebar-overlay" class="sidebar-overlay"></div>
+    
+    <!-- ========== 侧边栏 ========== -->
+    <aside id="sidebar" class="sidebar">
+      
+      <!-- Logo 头部 -->
+      <header class="sidebar-header">
+        <a href="#/dashboard" class="sidebar-logo">
+          <div class="sidebar-logo-icon">N</div>
+          <span>NRCS Wallet</span>
+        </a>
+      </header>
+      
+      <!-- 用户信息卡片 -->
+      <div class="sidebar-user-card">
+        <div class="sidebar-user-info">
+          <h3>Your Account</h3>
+          <div class="sidebar-user-address" id="sidebar-account-id">-</div>
+        </div>
+        <div class="sidebar-user-balance">
+          <span class="sidebar-user-balance-value" id="sidebar-balance">0.00</span>
+          <span class="sidebar-user-balance-currency">NRC</span>
+        </div>
+        
+        <!-- 状态指示器 -->
+        <div class="sidebar-status">
+          <div class="status-item">
+            <span class="status-dot disconnected" id="connection-dot"></span>
+            <span class="status-label" id="connection-label">Disconnected</span>
+          </div>
+          <div class="status-item">
+            <span class="status-dot" id="forging-dot" style="background: var(--text-muted);"></span>
+            <span class="status-label" id="height-label">Height: -</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 搜索框 -->
+      <div class="sidebar-search">
+        <div class="search-box">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+          <input 
+            type="text" 
+            class="search-input" 
+            placeholder="Search by ID or address..."
+            id="global-search"
+          >
+        </div>
+      </div>
+      
+      <!-- 导航菜单 -->
+      <nav class="sidebar-nav">
+        <ul class="nav-list" id="nav-menu">
+          <!-- 主要功能 -->
+          <li>
+            <a href="#/dashboard" class="nav-item active" data-page="dashboard">
+              <span class="nav-item-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="7" height="9" rx="1"/>
+                  <rect x="14" y="3" width="7" height="5" rx="1"/>
+                  <rect x="14" y="12" width="7" height="9" rx="1"/>
+                  <rect x="3" y="16" width="7" height="5" rx="1"/>
+                </svg>
+              </span>
+              <span class="nav-item-text">Dashboard</span>
+            </a>
+          </li>
+          
+          <li>
+            <a href="#/transactions" class="nav-item" data-page="transactions">
+              <span class="nav-item-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+              </span>
+              <span class="nav-item-text">Transactions</span>
+            </a>
+          </li>
+          
+          <li>
+            <a href="#/blocks" class="nav-item" data-page="blocks">
+              <span class="nav-item-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <path d="M3 9h18M9 21V9"/>
+                </svg>
+              </span>
+              <span class="nav-item-text">Blocks</span>
+            </a>
+          </li>
+          
+          <li>
+            <a href="#/peers" class="nav-item" data-page="peers">
+              <span class="nav-item-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <circle cx="19" cy="12" r="3"/>
+                  <circle cx="5" cy="12" r="3"/>
+                  <circle cx="12" cy="5" r="3"/>
+                  <circle cx="12" cy="19" r="3"/>
+                </svg>
+              </span>
+              <span class="nav-item-text">Peers</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="#/unconfirmed" class="nav-item" data-page="unconfirmed">
+              <span class="nav-item-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </span>
+              <span class="nav-item-text">Unconfirmed</span>
+            </a>
+          </li>
+
+          <li>
+            <a href="#/forging" class="nav-item" data-page="forging">
+              <span class="nav-item-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
+              </span>
+              <span class="nav-item-text">Forging</span>
+            </a>
+          </li>
+          
+          <!-- 分隔线 -->
+          <li style="margin: var(--space-3) var(--space-3); border-top: 1px solid var(--border-color-light);"></li>
+          
+          <li>
+            <a href="#/settings" class="nav-item" data-page="settings">
+              <span class="nav-item-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1"/>
+                </svg>
+              </span>
+              <span class="nav-item-text">Settings</span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+      
+    </aside>
+
+    <!-- ========== 主内容区域 ========== -->
+    <main class="main-wrapper">
+      
+      <!-- 顶部导航栏 -->
+      <header class="navbar">
+        <div class="navbar-left">
+          <!-- 移动端菜单按钮 -->
+          <button class="menu-toggle-btn" id="menu-toggle-btn" aria-label="Toggle menu">
+            <span class="hamburger-icon">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+          
+          <!-- 面包屑导航 -->
+          <nav class="breadcrumb" id="breadcrumb">
+            <a href="#/dashboard" class="breadcrumb-item">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item current" id="current-page-title">Dashboard</span>
+          </nav>
+        </div>
+        
+        <div class="navbar-right">
+          <!-- 操作按钮组 -->
+          <button class="navbar-action" id="btn-send-money" title="Send NRC">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </button>
+          
+          <button class="navbar-action" id="btn-notifications" title="Notifications">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span class="navbar-action-badge" id="notification-badge">3</span>
+          </button>
+          
+          <!-- 用户菜单 -->
+          <button class="navbar-action" id="user-menu-btn" title="User menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="8" r="4"/>
+              <path d="M20 21a8 8 0 0 0-16 0"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+      
+      <!-- 页面内容容器 -->
+      <div class="page-content" id="page-content">
+        <!-- 动态页面内容将在这里渲染 -->
+      </div>
+      
+    </main>
+  </div>
+
+  <!-- ========== 模态框模板 ========== -->
+  
+  <!-- 发送交易模态框 -->
+  <div class="modal-overlay" id="send-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Send NRC</h3>
+        <button class="modal-close" data-close-modal>&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="send-form">
+          <div class="form-group">
+            <label for="send-recipient" class="form-label">Recipient Address</label>
+            <input type="text" id="send-recipient" class="form-input" placeholder="NRC-XXXX-XXXX-XXXX-XXXXX" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="send-amount" class="form-label">Amount (NRC)</label>
+            <input type="number" id="send-amount" class="form-input" placeholder="0.00" step="0.01" min="0" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="send-fee" class="form-label">Fee (NRC)</label>
+            <input type="number" id="send-fee" class="form-input" value="0.1" step="0.01" min="0">
+          </div>
+          
+          <div class="form-group">
+            <label for="send-message" class="form-label">Message (Optional)</label>
+            <textarea id="send-message" class="form-textarea" rows="3" placeholder="Add a message..."></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" data-close-modal>Cancel</button>
+        <button class="btn btn-primary" id="send-submit-btn">
+          <span>Send Transaction</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20 7z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 通知容器 -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- JavaScript 模块 -->
+  <script src="/ui/js/utils/formatters.js"></script>
+  <script src="/ui/js/utils/mnemonic.js"></script>
+  <script src="/ui/js/api.js"></script>
+  <script src="/ui/js/store.js"></script>
+  <script src="/ui/js/router.js"></script>
+  <script src="/ui/js/components/sidebar.js"></script>
+  <script src="/ui/js/components/navbar.js"></script>
+  <script src="/ui/js/pages/login.js"></script>
+  <script src="/ui/js/pages/dashboard.js"></script>
+  <script src="/ui/js/pages/transactions.js"></script>
+  <script src="/ui/js/pages/blocks.js"></script>
+  <script src="/ui/js/pages/peers.js"></script>
+  <script src="/ui/js/pages/account.js"></script>
+  <script src="/ui/js/pages/unconfirmed.js"></script>
+  <script src="/ui/js/pages/forging.js"></script>
+  <script src="/ui/js/pages/settings.js"></script>
+  <script src="/ui/js/app.js"></script>
+</body>
+</html>
