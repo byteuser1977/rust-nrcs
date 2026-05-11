@@ -93,13 +93,37 @@ impl RequestHandler for GetTransactionHandler {
             .insert("signatureHash", signature_hash)
             .insert("signature", hex::encode(&tx.signature))
             .insert("confirmations", confirmations);
-        
+
         if let Some(recipient) = tx.recipient_id {
             builder
                 .insert("recipient", recipient.to_string())
                 .insert("recipientRS", format_account_rs(recipient as u64));
         }
-        
+
+        builder.insert("deadline", tx_domain.deadline as i16);
+
+        if let Some(ec_block_id) = tx_domain.ec_block_id {
+            builder.insert("ecBlockId", ec_block_id.to_string());
+        }
+
+        if let Some(ec_block_height) = tx_domain.ec_block_height {
+            builder.insert("ecBlockHeight", ec_block_height);
+        }
+
+        if !tx.attachment_bytes.as_ref().is_some_and(|b| b.is_empty()) || tx_domain.attachment_json.is_some() {
+            if let Some(ref att_json) = tx_domain.attachment_json {
+                builder.insert("attachment", json!(att_json));
+            } else if let Some(ref att_bytes) = tx.attachment_bytes {
+                if !att_bytes.is_empty() {
+                    builder.insert("attachment", json!({
+                        "attachmentBytes": hex::encode(att_bytes)
+                    }));
+                }
+            }
+        }
+
+        builder.insert("transactionBytes", hex::encode(tx_domain.get_bytes()));
+
         Ok(builder.build())
     }
 }
