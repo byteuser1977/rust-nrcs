@@ -240,7 +240,7 @@ impl HallmarkParser {
         let kp = crypto::keypair_from_seed(secret_key);
         let signature = kp.sign(&data);
         let hallmark_data = format!("{}:{}:{}", hex::encode(secret_key), weight, date);
-        let signature_hex = hex::encode(&signature);
+        let signature_hex = hex::encode(signature);
         format!("{}:{}", hallmark_data, signature_hex)
     }
 }

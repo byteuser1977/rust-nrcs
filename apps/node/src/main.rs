@@ -656,6 +656,8 @@ async fn start_node(
     ));
 
     // 创建区块验证器（包含完整的两阶段提交逻辑）
+    let event_dispatcher = Arc::new(orm::events::EventDispatcher::new());
+
     let block_verifier: Arc<dyn p2p::handlers::BlockVerifier> = Arc::new(
         BlockchainVerifier::new(
             Arc::clone(&block_repo),
@@ -663,6 +665,7 @@ async fn start_node(
             Arc::clone(&tx_processor),
             Arc::clone(&block_reward_applicator),
             pool.clone(),
+            Arc::clone(&event_dispatcher),
         )
     );
 

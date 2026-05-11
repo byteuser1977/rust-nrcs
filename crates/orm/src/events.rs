@@ -1043,7 +1043,6 @@ impl BlockEventHandler {
  * 监控账户属性设置事件，用于动态调整 FundingMonitor 配置。
  */
 pub struct SetPropertyEventHandler {
-    #[allow(dead_code)]
     funding_monitor: std::sync::Arc<FundingMonitor>,
 }
 
@@ -1052,23 +1051,90 @@ impl SetPropertyEventHandler {
         Self { funding_monitor }
     }
 
-    /**
-     * 处理属性设置事件
-     */
     pub async fn handle(&self, account_id: i64, property: &str, value: Option<&str>) {
-        info!(
-            account = account_id,
-            property = property,
-            value = ?value,
-            "[SetPropertyEventHandler] Property set detected"
-        );
+        if *self.funding_monitor.stopped.read().await {
+            return;
+        }
 
-        if property.starts_with("fundingMonitor") {
-            info!(
-                account = account_id,
-                property = property,
-                "[SetPropertyEventHandler] FundingMonitor-related property changed, schedule config refresh"
-            );
+        if !property.starts_with("fundingMonitor") {
+            return;
+        }
+
+        let mut accounts = self.funding_monitor.monitored_accounts.write().await;
+        let mut add_monitored_account = true;
+
+        for config in accounts.iter_mut() {
+            if config.account_id == account_id {
+                if let Some(ref config_property) = config.property {
+                    if config_property == property {
+                        add_monitored_account = false;
+                        if let Some(val) = value {
+                            match config.parse_property_value(val) {
+                                Ok(()) => {
+                                    info!(
+                                        account = account_id,
+                                        property = property,
+                                        amount = config.funding_amount,
+                                        threshold = config.threshold,
+                                        interval = config.interval,
+                                        "[SetPropertyEventHandler] Updated monitored account config"
+                                    );
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        account = account_id,
+                                        property = property,
+                                        error = %e,
+                                        "[SetPropertyEventHandler] Invalid property value, keeping existing config"
+                                    );
+                                }
+                            }
+                        }
+                        let mut pending = self.funding_monitor.pending_events.write().await;
+                        if !pending.iter().any(|c| c.account_id == config.account_id && c.holding_type == config.holding_type) {
+                            pending.push(config.clone());
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        if add_monitored_account {
+            if let Some(val) = value {
+                let mut new_config = MonitoredAccountConfig::new(
+                    account_id,
+                    HoldingType::Nrcs,
+                    None,
+                    MIN_FUND_THRESHOLD,
+                    MIN_FUND_AMOUNT,
+                    0,
+                ).with_property(property.to_string());
+
+                match new_config.parse_property_value(val) {
+                    Ok(()) => {
+                        info!(
+                            account = account_id,
+                            property = property,
+                            amount = new_config.funding_amount,
+                            threshold = new_config.threshold,
+                            interval = new_config.interval,
+                            "[SetPropertyEventHandler] Added new monitored account"
+                        );
+                        let mut pending = self.funding_monitor.pending_events.write().await;
+                        pending.push(new_config.clone());
+                        accounts.push(new_config);
+                    }
+                    Err(e) => {
+                        warn!(
+                            account = account_id,
+                            property = property,
+                            error = %e,
+                            "[SetPropertyEventHandler] Invalid property value, skipping"
+                        );
+                    }
+                }
+            }
         }
     }
 }
@@ -1079,7 +1145,6 @@ impl SetPropertyEventHandler {
  * 属性删除事件处理器
  */
 pub struct DeletePropertyEventHandler {
-    #[allow(dead_code)]
     funding_monitor: std::sync::Arc<FundingMonitor>,
 }
 
@@ -1088,21 +1153,28 @@ impl DeletePropertyEventHandler {
         Self { funding_monitor }
     }
 
-    /**
-     * 处理属性删除事件
-     */
     pub async fn handle(&self, account_id: i64, property: &str) {
-        info!(
-            account = account_id,
-            property = property,
-            "[DeletePropertyEventHandler] Property deleted detected"
-        );
+        if *self.funding_monitor.stopped.read().await {
+            return;
+        }
 
-        if property.starts_with("fundingMonitor") {
+        if !property.starts_with("fundingMonitor") {
+            return;
+        }
+
+        let mut accounts = self.funding_monitor.monitored_accounts.write().await;
+        let before_len = accounts.len();
+        accounts.retain(|config| {
+            !(config.account_id == account_id
+                && config.property.as_deref() == Some(property))
+        });
+
+        if accounts.len() < before_len {
             info!(
                 account = account_id,
                 property = property,
-                "[DeletePropertyEventHandler] FundingMonitor-related property removed, schedule config cleanup"
+                removed = before_len - accounts.len(),
+                "[DeletePropertyEventHandler] Removed monitored account(s)"
             );
         }
     }
@@ -1892,31 +1964,24 @@ impl std::fmt::Display for HoldingType {
 /**
  * 监控账户配置（对应 Java NRCS: MonitoredAccount）
  */
+pub const MIN_FUND_AMOUNT: i64 = 1;
+pub const MIN_FUND_THRESHOLD: i64 = 1;
+pub const MIN_FUND_INTERVAL: i32 = 10;
+
 #[derive(Debug, Clone)]
 pub struct MonitoredAccountConfig {
-    /// 被监控的账户 ID
     pub account_id: i64,
-
-    /// 持有类型
     pub holding_type: HoldingType,
-
-    /// 持有 ID（资产/货币 ID）
     pub holding_id: Option<i64>,
-
-    /// 触发阈值
     pub threshold: i64,
-
-    /// 充值金额
     pub funding_amount: i64,
-
-    /// 充值源账户 ID
     pub funding_account_id: i64,
+    pub interval: i32,
+    pub height: i32,
+    pub property: Option<String>,
 }
 
 impl MonitoredAccountConfig {
-    /**
-     * 创建新的监控配置
-     */
     pub fn new(
         account_id: i64,
         holding_type: HoldingType,
@@ -1932,7 +1997,46 @@ impl MonitoredAccountConfig {
             threshold,
             funding_amount,
             funding_account_id,
+            interval: MIN_FUND_INTERVAL,
+            height: 0,
+            property: None,
         }
+    }
+
+    pub fn with_interval(mut self, interval: i32) -> Self {
+        self.interval = interval.max(MIN_FUND_INTERVAL);
+        self
+    }
+
+    pub fn with_property(mut self, property: String) -> Self {
+        self.property = Some(property);
+        self
+    }
+
+    pub fn parse_property_value(&mut self, value: &str) -> Result<(), String> {
+        if value.is_empty() {
+            return Ok(());
+        }
+        let parsed: serde_json::Value = serde_json::from_str(value)
+            .map_err(|e| format!("invalid JSON property value: {}", e))?;
+        let obj = parsed.as_object()
+            .ok_or_else(|| "property value is not a JSON object".to_string())?;
+        if let Some(v) = obj.get("amount") {
+            self.funding_amount = v.as_i64()
+                .ok_or_else(|| "amount is not a valid number".to_string())?
+                .max(MIN_FUND_AMOUNT);
+        }
+        if let Some(v) = obj.get("threshold") {
+            self.threshold = v.as_i64()
+                .ok_or_else(|| "threshold is not a valid number".to_string())?
+                .max(MIN_FUND_THRESHOLD);
+        }
+        if let Some(v) = obj.get("interval") {
+            self.interval = (v.as_i64()
+                .ok_or_else(|| "interval is not a valid number".to_string())? as i32)
+                .max(MIN_FUND_INTERVAL);
+        }
+        Ok(())
     }
 }
 
@@ -2582,7 +2686,53 @@ impl FundingMonitor {
      */
     pub async fn remove_monitored_account(&self, account_id: i64, holding_type: HoldingType) {
         let mut accounts = self.monitored_accounts.write().await;
+        let before_len = accounts.len();
         accounts.retain(|a| !(a.account_id == account_id && a.holding_type == holding_type));
+        if accounts.len() < before_len {
+            info!(
+                account = account_id,
+                holding_type = %holding_type,
+                removed = before_len - accounts.len(),
+                "[FundingMonitor] Removed monitored account(s)"
+            );
+        }
+    }
+
+    pub async fn remove_monitored_account_by_property(&self, account_id: i64, property: &str) {
+        let mut accounts = self.monitored_accounts.write().await;
+        let before_len = accounts.len();
+        accounts.retain(|a| !(a.account_id == account_id && a.property.as_deref() == Some(property)));
+        if accounts.len() < before_len {
+            info!(
+                account = account_id,
+                property = property,
+                removed = before_len - accounts.len(),
+                "[FundingMonitor] Removed monitored account(s) by property"
+            );
+        }
+    }
+
+    pub async fn update_monitored_account(&self, account_id: i64, property: &str, value: &str) -> Result<(), String> {
+        let mut accounts = self.monitored_accounts.write().await;
+        for config in accounts.iter_mut() {
+            if config.account_id == account_id && config.property.as_deref() == Some(property) {
+                config.parse_property_value(value)?;
+                let mut pending = self.pending_events.write().await;
+                if !pending.iter().any(|c| c.account_id == config.account_id && c.holding_type == config.holding_type) {
+                    pending.push(config.clone());
+                }
+                info!(
+                    account = account_id,
+                    property = property,
+                    amount = config.funding_amount,
+                    threshold = config.threshold,
+                    interval = config.interval,
+                    "[FundingMonitor] Updated monitored account config"
+                );
+                return Ok(());
+            }
+        }
+        Err(format!("no monitored account found for account {} property {}", account_id, property))
     }
 
     /**
@@ -2731,6 +2881,18 @@ impl FundingMonitor {
             return Ok(());
         }
 
+        // 检查充值间隔（对应 Java: account.getHeight() + account.getInterval() > Nrcs.getBlockchain().getHeight()）
+        if monitored_account.height + monitored_account.interval > current_height {
+            debug!(
+                target = monitored_account.account_id,
+                last_height = monitored_account.height,
+                interval = monitored_account.interval,
+                current_height = current_height,
+                "[FundingMonitor] Interval not elapsed, skipping"
+            );
+            return Ok(());
+        }
+
         // 安全计算总需求（充值金额 + 手续费）
         let transaction_fee: i64 = self.calculate_min_fee().await;
         let total_needed = safe_add(monitored_account.funding_amount, transaction_fee)?;
@@ -2851,6 +3013,18 @@ impl FundingMonitor {
             return Ok(());
         }
 
+        // 检查充值间隔
+        if monitored_account.height + monitored_account.interval > current_height {
+            debug!(
+                target = monitored_account.account_id,
+                last_height = monitored_account.height,
+                interval = monitored_account.interval,
+                current_height = current_height,
+                "[FundingMonitor] Interval not elapsed, skipping asset funding"
+            );
+            return Ok(());
+        }
+
         // 验证充值源账户资产数量充足
         if monitored_account.funding_amount > funding_quantity {
             warn!(
@@ -2950,6 +3124,18 @@ impl FundingMonitor {
                 currency = currency_id,
                 units = target_units,
                 "[FundingMonitor] Currency units above threshold, no funding needed"
+            );
+            return Ok(());
+        }
+
+        // 检查充值间隔
+        if monitored_account.height + monitored_account.interval > current_height {
+            debug!(
+                target = monitored_account.account_id,
+                last_height = monitored_account.height,
+                interval = monitored_account.interval,
+                current_height = current_height,
+                "[FundingMonitor] Interval not elapsed, skipping currency funding"
             );
             return Ok(());
         }

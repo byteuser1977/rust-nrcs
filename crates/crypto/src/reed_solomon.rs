@@ -111,7 +111,7 @@ pub fn decode(cypher_string: &str) -> Result<u64, DecodeError> {
         }
     }
 
-    if codeword_length == 17 && !is_codeword_valid(&codeword) || codeword_length != 17 {
+    if codeword_length != 17 || !is_codeword_valid(&codeword) {
         return Err(DecodeError::CodewordInvalid);
     }
 
@@ -144,7 +144,7 @@ pub fn decode(cypher_string: &str) -> Result<u64, DecodeError> {
     }
 
     let reversed: String = plain_string.chars().rev().collect();
-    u64::from_str_radix(&reversed, 10).map_err(|_| DecodeError::CodewordInvalid)
+    reversed.parse::<u64>().map_err(|_| DecodeError::CodewordInvalid)
 }
 
 fn gmult(a: i32, b: i32) -> i32 {

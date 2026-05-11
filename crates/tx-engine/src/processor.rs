@@ -2299,7 +2299,9 @@ impl DatabaseTransactionProcessor {
             }
 
             _ => {
-                debug!("MonetarySystem subtype {} processed (stub)", tx.subtype);
+                return Err(ProcessorError::Validation(
+                    format!("Unknown MonetarySystem subtype: {}", tx.subtype)
+                ));
             }
         }
 

@@ -39,6 +39,7 @@ pub struct BlockchainVerifier {
     block_reward_applicator: Arc<BlockRewardApplicator>,
     tx_manager: Arc<dyn TransactionManager>,
     state: Arc<Mutex<()>>,
+    event_dispatcher: Arc<orm::events::EventDispatcher>,
 }
 
 impl BlockchainVerifier {
@@ -48,6 +49,7 @@ impl BlockchainVerifier {
         tx_processor: Arc<dyn TransactionProcessor>,
         block_reward_applicator: Arc<BlockRewardApplicator>,
         pool: DbPool,
+        event_dispatcher: Arc<orm::events::EventDispatcher>,
     ) -> Self {
         Self {
             block_repo,
@@ -56,6 +58,7 @@ impl BlockchainVerifier {
             block_reward_applicator,
             tx_manager: Arc::new(PoolTransactionManager::new(pool)),
             state: Arc::new(Mutex::new(())),
+            event_dispatcher,
         }
     }
 
@@ -774,6 +777,14 @@ impl BlockVerifier for BlockchainVerifier {
 
                     debug!("Block accepted: height={}, id={}, txs={}", block_height, block_id, block.transactions.len());
                 }
+
+                let event_data = orm::events::BlockchainProcessorEventData::new(
+                    orm::events::BlockchainProcessorEvent::BlockPushed,
+                    block_height as i32,
+                    block.timestamp as i32,
+                ).with_block_id(block_id as i64);
+                self.event_dispatcher.dispatch_blockchain_processor_event(&event_data).await;
+
                 Ok(())
             }
             Err(e) => {
@@ -950,7 +961,15 @@ impl BlockVerifier for BlockchainVerifier {
 
         info!("Popped off {} blocks successfully", blocks_to_remove.len());
 
-        // Convert BlockModel to Block for return
+        for block_model in &blocks_to_remove {
+            let event_data = orm::events::BlockchainProcessorEventData::new(
+                orm::events::BlockchainProcessorEvent::BlockPopped,
+                block_model.height,
+                block_model.timestamp,
+            ).with_block_id(block_model.id);
+            self.event_dispatcher.dispatch_blockchain_processor_event(&event_data).await;
+        }
+
         let blocks: Vec<Block> = blocks_to_remove.iter()
             .filter_map(|m| m.to_domain().ok())
             .collect();

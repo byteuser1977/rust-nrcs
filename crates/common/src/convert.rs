@@ -11,7 +11,7 @@ pub const TWO_64: u128 = 0x1_0000_0000_0000_0000;
 
 const MULTIPLIERS: [u64; 9] = [1, 10, 100, 1000, 10_000, 100_000, 1_000_000, 10_000_000, 100_000_000];
 
-const EPOCH_BEGINNING_MS: i64 = 1578356400_000;
+const EPOCH_BEGINNING_MS: i64 = 1_578_356_400_000;
 
 pub fn parse_hex_string(hex: &str) -> Option<Vec<u8>> {
     if hex.is_empty() {
@@ -31,7 +31,7 @@ pub fn parse_unsigned_long(number: &str) -> u64 {
     if number.is_empty() {
         return 0;
     }
-    u64::from_str_radix(number, 10).unwrap_or(0)
+    number.parse::<u64>().unwrap_or(0)
 }
 
 pub fn full_hash_to_id(hash: &[u8]) -> u64 {
@@ -48,8 +48,7 @@ pub fn parse_account_id(account: &str) -> u64 {
         return 0;
     }
     let account_upper = account.to_uppercase();
-    if account_upper.starts_with("NRCS-") {
-        let rs_part = &account_upper[5..];
+    if let Some(rs_part) = account_upper.strip_prefix("NRCS-") {
         rs_decode(rs_part)
     } else {
         let prefix_end = account_upper.find('-');
@@ -59,7 +58,7 @@ pub fn parse_account_id(account: &str) -> u64 {
                 rs_decode(rs_part)
             }
             Some(_) => account.parse::<u64>().unwrap_or(0),
-            None => u64::from_str_radix(account, 10).unwrap_or(0),
+            None => account.parse::<u64>().unwrap_or(0),
         }
     }
 }
