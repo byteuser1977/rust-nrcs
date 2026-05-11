@@ -13,6 +13,9 @@ const SettingsPage = {
     console.log('Settings page initialized');
     this.render();
     await this.loadAccountData();
+    
+    // 初始化终端控制台
+    this.initTerminal();
   },
 
   /**
@@ -275,6 +278,20 @@ const SettingsPage = {
           </div>
 
         </div>
+      </div>
+
+      <!-- 终端控制台 -->
+      <div class="mt-8 stagger-item delay-3">
+        <div class="page-header mb-4">
+          <h2 class="text-lg font-semibold flex items-center gap-2">
+            <span>⌨️</span>
+            Console Terminal
+          </h2>
+          <p class="text-sm text-muted mt-1">
+            Execute commands: clear, save, history, help
+          </p>
+        </div>
+        <div id="terminal-container"></div>
       </div>
     `;
 
@@ -567,6 +584,70 @@ const SettingsPage = {
         message: 'All cache data has been cleared',
       });
     }
+  },
+
+  /**
+   * 初始化终端控制台
+   */
+  initTerminal() {
+    // 等待 DOM 更新后初始化终端
+    setTimeout(() => {
+      if (typeof TerminalConsole !== 'undefined') {
+        TerminalConsole.init('terminal-container');
+        
+        // 注册自定义命令示例
+        TerminalConsole.registerCommand('status', () => {
+          TerminalConsole.printLine('\n📊 NRCS Wallet Status:', 'header');
+          TerminalConsole.printLine(`  Connection: ${store.state.connectionStatus}`, 'info');
+          TerminalConsole.printLine(`  Account: ${store.state.accountRS || 'Not logged in'}`, 'output');
+          TerminalConsole.printLine(`  Block Height: ${store.state.blockchain?.height || 0}`, 'output');
+          TerminalConsole.printLine(`  Sync Status: ${store.state.blockchain?.syncStatus || 'unknown'}`, 'output');
+          TerminalConsole.printLine('', 'empty');
+        });
+
+        TerminalConsole.registerCommand('balance', async () => {
+          try {
+            TerminalConsole.printLine('Fetching balance...', 'info');
+            const result = await api.getAccountBalance(store.state.account.id);
+            
+            if (result && !result.errorCode) {
+              const balanceNQT = result.balanceNQT || 0;
+              const unconfirmedBalanceNQT = result.unconfirmedBalanceNQT || 0;
+              
+              TerminalConsole.printLine('\n💰 Account Balance:', 'header');
+              TerminalConsole.printLine(`  Confirmed:     ${(balanceNQT / 1e8).toFixed(8)} NRC`, 'success');
+              TerminalConsole.printLine(`  Unconfirmed:   ${(unconfirmedBalanceNQT / 1e8).toFixed(8)} NRC`, 'success');
+              TerminalConsole.printLine(`  Difference:    ${((unconfirmedBalanceNQT - balanceNQT) / 1e8).toFixed(8)} NRC`, 'output');
+            } else {
+              TerminalConsole.printLine('Failed to fetch balance', 'error');
+            }
+          } catch (error) {
+            TerminalConsole.printLine(`Error: ${error.message}`, 'error');
+          }
+        });
+
+        TerminalConsole.registerCommand('blockchain', async () => {
+          try {
+            const status = await api.getBlockchainStatus();
+            
+            if (status && !status.errorCode) {
+              TerminalConsole.printLine('\n⛓️ Blockchain Status:', 'header');
+              TerminalConsole.printLine(`  Height:       ${status.numberOfBlocks || 0}`, 'output');
+              TerminalConsole.printLine(`  Last Block:    ${status.lastBlockHeight || status.numberOfBlocks || 0}`, 'output');
+              TerminalConsole.printLine(`  Scanning:      ${status.isScanning ? 'Yes' : 'No'}`, 'info');
+              TerminalConsole.printLine(`  Application:   ${status.version || 'Unknown'}`, 'output');
+              TerminalConsole.printLine(`  Time:         ${new Date((status.time || 0) * 1000).toLocaleString()}`, 'output');
+            } else {
+              TerminalConsole.printLine('Failed to fetch blockchain status', 'error');
+            }
+          } catch (error) {
+            TerminalConsole.printLine(`Error: ${error.message}`, 'error');
+          }
+        });
+
+        console.log('Terminal initialized with custom commands');
+      }
+    }, 100);
   },
 };
 

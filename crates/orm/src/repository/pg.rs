@@ -2425,6 +2425,7 @@ impl AccountAssetRepository for PgAccountAssetRepository {
         .map_err(RepositoryError::DbError)?;
 
         if result.rows_affected() == 0 && delta != 0 {
+            // 对齐 Java：没有记录时插入新记录
             let current_height: i32 = sqlx::query_scalar(r#"SELECT coalesce(max("height"), 0) "block""#)
                 .fetch_one(&self.pool)
                 .await
@@ -2438,13 +2439,18 @@ impl AccountAssetRepository for PgAccountAssetRepository {
                 "Inserting new account_asset record for unconfirmed quantity update"
             );
             
+            // Java：新记录 quantity = 0，unconfirmed_quantity = delta（初始值）
+            let quantity = 0i64;
+            let unconfirmed_quantity = delta;
+            
+            // 对齐 Java：上层 applyAttachmentUnconfirmed 已经提前验证余额充足，所以不会出现负值
             sqlx::query(
                 r#"INSERT INTO "account_asset" ("account_id", "asset_id", "quantity", "unconfirmed_quantity", "height", "latest") VALUES ($1, $2, $3, $4, $5, TRUE)"#
             )
             .bind(account_id)
             .bind(asset_id)
-            .bind(if delta > 0 { 0 } else { delta })  // ✅ quantity 初始值：增加时为0，减少时使用 delta（避免负数）
-            .bind(delta)                               // ✅ unconfirmed_quantity 使用实际变化量
+            .bind(quantity)
+            .bind(unconfirmed_quantity)
             .bind(current_height)
             .execute(&self.pool)
             .await

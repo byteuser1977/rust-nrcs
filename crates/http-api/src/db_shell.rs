@@ -267,7 +267,14 @@ pub async fn db_shell_post(
     }
 
     let result = execute_sql(&state, line).await;
-    build_text_response(format!("\n> {}\n{}", line, result))
+    
+    // 对于特殊命令，直接返回结果，不添加前缀
+    let sql_trimmed = line.trim().to_lowercase();
+    if sql_trimmed == "clear" || sql_trimmed == "save" || sql_trimmed == "history" || sql_trimmed == ".history" {
+        build_text_response(result)
+    } else {
+        build_text_response(format!("\n> {}\n{}", line, result))
+    }
 }
 
 fn is_admin_password_disabled(state: &ApiState) -> bool {
@@ -597,7 +604,7 @@ const HEADER: &str = r#"<!DOCTYPE html>
                 params += encodeURIComponent(form.elements[i].value);
                 
                 // 记录 SQL 输入（用于历史记录）
-                if (form.elements[i].name === 'query') {
+                if (form.elements[i].name === 'line') {
                     sqlInput = form.elements[i].value.trim();
                 }
             }
@@ -671,16 +678,46 @@ const HEADER: &str = r#"<!DOCTYPE html>
                 return;
             }
             
-            resultArea.textContent += '\n╔══════════════════════════════════════╗\n';
-            resultArea.textContent += '║       Command History                     ║\n';
-            resultArea.textContent += '╠══════════════════════════════════════╣\n';
-            
+            // 计算最长的命令长度
+            var maxCmdLen = 0;
             for (var i = 0; i < dbshellHistory.length; i++) {
-                var num = String(i + 1).padStart(3, ' ');
-                resultArea.textContent += '║ ' + num + '. ' + dbshellHistory[i].padEnd(36) + ' ║\n';
+                if (dbshellHistory[i].length > maxCmdLen) {
+                    maxCmdLen = dbshellHistory[i].length;
+                }
             }
             
-            resultArea.textContent += '╚══════════════════════════════════════╝\n';
+            // 计算合适的宽度（至少 50，命令长度 + 15 左右的边距）
+            var contentWidth = Math.max(50, maxCmdLen + 15);
+            
+            // 绘制顶部边框
+            resultArea.textContent += '\n╔';
+            for (var i = 0; i < contentWidth; i++) { resultArea.textContent += '═'; }
+            resultArea.textContent += '╗\n';
+            
+            // 标题行
+            var title = '       Command History       ';
+            var titlePadLeft = Math.floor((contentWidth - title.length) / 2);
+            var titlePadRight = contentWidth - title.length - titlePadLeft;
+            resultArea.textContent += '║' + ' '.repeat(titlePadLeft) + title + ' '.repeat(titlePadRight) + '║\n';
+            
+            // 分隔线
+            resultArea.textContent += '╠';
+            for (var i = 0; i < contentWidth; i++) { resultArea.textContent += '═'; }
+            resultArea.textContent += '╣\n';
+            
+            // 内容行
+            for (var i = 0; i < dbshellHistory.length; i++) {
+                var num = String(i + 1).padStart(3, ' ');
+                var lineContent = num + '. ' + dbshellHistory[i];
+                var padLen = contentWidth - lineContent.length;
+                resultArea.textContent += '║ ' + lineContent + ' '.repeat(Math.max(0, padLen - 1)) + ' ║\n';
+            }
+            
+            // 底部边框
+            resultArea.textContent += '╚';
+            for (var i = 0; i < contentWidth; i++) { resultArea.textContent += '═'; }
+            resultArea.textContent += '╝\n';
+            
             resultArea.textContent += '\n> Total: ' + dbshellHistory.length + ' command(s)\n';
         }
     </script>

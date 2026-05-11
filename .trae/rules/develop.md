@@ -21,6 +21,7 @@
 项目功能约束：
 - 项目基于 NRCS（Java）项目的重构项目，要求完全兼容 NRCS 项目的全部功能，包括：PEER 的区块通讯、API 接口、公式算法、加密算法、数据库结构、智能合约（这部分的开发放在第二步实现）
 - NRCS 源码地址：NRCS 的参考源码在/Volumes/DATA/data/develop/git/nrcs/,在开发及测试过程中遇到的代码问题，需要参考 NRCS 项目的代码，不要自己实现
+- 前端的开发交互逻辑要参考 /Volumes/DATA/data/develop/git/nrcs/nrcs-main/html/www/ui/中js的实现逻辑，样式、界面布局可以根据需要进行调整
 - orm 的实现要完全基于 NRCS 项目的数据库 schema 实现（migrations 目录中的 schema 是 nrcs 全量脚本），不能有任何差异
 - 全量覆盖实现 orm 的数据库访问的方法，对于其他模块对于数据库的访问都通过orm封装后的方法实现，不能直接访问数据库，同时，要通过orm的封装做到对数据库变化的配置切换
 - 不要随便删除已经通过NRCS(java)移植到rust-nrcs的模块和函数，最多只能把对应模块和函数做备注屏蔽

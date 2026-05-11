@@ -1,0 +1,268 @@
+/**
+ * NRCS Wallet - Terminal Console Styles
+ * 
+ * 终端控制台专用样式
+ */
+
+/* ========== 终端容器 ========== */
+.terminal-wrapper {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ========== 终端头部 ========== */
+.terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.terminal-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.terminal-icon {
+  font-size: 16px;
+}
+
+.terminal-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.terminal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.terminal-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.terminal-btn:active {
+  transform: scale(0.95);
+}
+
+/* ========== 输出区域 ========== */
+.terminal-output {
+  height: 400px;
+  overflow-y: auto;
+  padding: 16px;
+  scroll-behavior: smooth;
+  
+  /* 自定义滚动条 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.3) transparent;
+}
+
+.terminal-output::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terminal-output::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-output::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: 3px;
+}
+
+.terminal-output::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+/* ========== 输出行 ========== */
+.terminal-line {
+  margin-bottom: 2px;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.output-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* 不同类型的输出样式 */
+.terminal-line.input .output-text {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.terminal-line.output .output-text {
+  color: #e2e8f0;
+}
+
+.terminal-line.error .output-text {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+.terminal-line.success .output-text {
+  color: #10b981;
+  font-weight: 500;
+}
+
+.terminal-line.info .output-text {
+  color: #3b82f6;
+}
+
+.terminal-line.warning .output-text {
+  color: #f59e0b;
+}
+
+.terminal-line.header .output-text {
+  color: #a78bfa;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.terminal-line.help .output-text {
+  color: #06b6d4;
+  white-space: pre;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.terminal-line.history-item .output-text {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.terminal-line.system .output-text {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 11px;
+}
+
+.terminal-line.welcome .output-text {
+  color: #10b981;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.terminal-line.help-text .output-text {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.terminal-line.empty {
+  margin-bottom: 8px;
+}
+
+/* ========== 输入区域 ========== */
+.terminal-input-line {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 8px;
+}
+
+.terminal-prompt {
+  color: var(--primary-color);
+  font-weight: 700;
+  font-size: 14px;
+  user-select: none;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  caret-color: var(--primary-color);
+}
+
+.terminal-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+/* 聚焦状态 */
+.terminal-input:focus {
+  outline: none;
+}
+
+.terminal-wrapper:focus-within .terminal-prompt {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* ========== 响应式设计 ========== */
+@media (max-width: 768px) {
+  .terminal-wrapper {
+    font-size: 12px;
+    border-radius: 8px;
+  }
+  
+  .terminal-header {
+    padding: 8px 12px;
+  }
+  
+  .terminal-title {
+    font-size: 12px;
+  }
+  
+  .terminal-btn {
+    width: 26px;
+    height: 26px;
+  }
+  
+  .terminal-output {
+    height: 300px;
+    padding: 12px;
+  }
+  
+  .terminal-input-line {
+    padding: 10px 12px;
+  }
+  
+  .terminal-line.help .output-text {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .terminal-output {
+    height: 250px;
+  }
+  
+  .terminal-actions {
+    display: none;  /* 移动端隐藏按钮，使用快捷键 */
+  }
+}

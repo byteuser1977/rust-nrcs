@@ -611,7 +611,7 @@ const LoginPage = {
       this.setLoadingState(true);
 
       // 调用 API 登录 (参考 NRCS nrs.login.js)
-      const result = await Api.request('getAccountId', {
+      const result = await api.request('getAccountId', {
         secretPhrase: passphrase
       });
 
@@ -656,9 +656,10 @@ const LoginPage = {
       return;
     }
 
-    // 验证账号格式
-    if (!/^NRCS-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{5}$/.test(accountId)) {
-      this.showError('Invalid account address format');
+    // 验证账号格式 (NRCS-XXXX-XXXX-XXXX-XXXXX 或 NRCS-XXXX-XXXX-XXXX-XXXX)
+    // Reed-Solomon 编码地址，支持 4-4-4-5 或 4-4-4-4 格式
+    if (!/^NRCS-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4,5}$/.test(accountId)) {
+      this.showError('Invalid account address format. Expected: NRCS-XXXX-XXXX-XXXX-XXXXX');
       return;
     }
 
@@ -667,39 +668,60 @@ const LoginPage = {
 
   /**
    * 使用账号ID登录
+   * 
+   * 参考 NRCS nrs.login.js 第 334-376 行的实现:
+   * - 使用 getAccount API 获取账户信息
+   * - 错误码 5 表示账户不存在但格式正确，仍允许继续
+   * - 错误码 4 表示账号格式不正确，需要报错
    */
   async loginWithAccount(accountId) {
     try {
       this.setLoadingState(true);
 
-      // 调用 API 获取账户信息 (参考 NRCS)
-      const result = await Api.request('getAccount', {
+      // 调用 API 获取账户信息 (参考 NRCS: accountRequest = "getAccount")
+      const result = await api.request('getAccount', {
         account: accountId
       });
 
+      // 参考 NRCS 错误处理逻辑 (nrs.login.js 第 350-376 行)
+      
+      // 错误码 4: Incorrect account (账号格式不正确)
+      if (result.errorCode === 4) {
+        this.showError('Invalid account address format or checksum error');
+        this.setLoadingState(false);
+        return;
+      }
+      
+      // 错误码 5: Unknown account (账户不存在但格式正确)
+      // NRCS 允许这种情况继续登录查看账户信息
+      if (result.errorCode === 5) {
+        console.log('Account does not exist yet, but format is valid');
+      }
+      
+      // 其他错误码
       if (result.errorCode && result.errorCode !== 5) {
-        // 错误码5表示账户不存在但格式正确
-        this.showError(result.errorDescription || 'Account not found');
+        this.showError(result.errorDescription || 'Failed to get account information');
         this.setLoadingState(false);
         return;
       }
 
-      // 记住我选项
+      // 记住我选项 (参考 NRJS rememberAccount 函数)
       if (document.getElementById('remember-me-account')?.checked) {
         this.saveAccount(accountId);
       }
 
       // 执行登录成功逻辑
+      // 参考 NRCS: NRS.account = response.account; NRS.accountRS = response.accountRS;
       this.onLoginSuccess({
         accountId: result.account || accountId,
         accountRS: result.accountRS || accountId,
-        publicKey: result.publicKey,
+        publicKey: result.publicKey || null,
         isPassphraseLogin: false,
       });
 
     } catch (error) {
       console.error('Account login error:', error);
-      this.showError('Network error. Please try again.');
+      this.showError('Network error. Please check your connection and try again.');
       this.setLoadingState(false);
     }
   },
@@ -996,14 +1018,32 @@ const LoginPage = {
    */
   async checkBlockchainStatus() {
     try {
-      const status = await Api.request('getBlockchainStatus', {});
+      const status = await api.request('getBlockchainStatus', {});
       
-      if (status.numberOfBlocks > 0) {
+      if (status && status.numberOfBlocks > 0) {
         Store.setState({ blockchainHeight: status.numberOfBlocks });
         this.updateSyncStatus(status);
       }
     } catch (error) {
-      console.error('Failed to check blockchain status:', error);
+      // API 调用失败时静默处理，不显示错误
+      // 可能是后端未启动或网络问题
+      console.debug('Blockchain status check skipped:', error.message);
+      
+      // 显示离线状态（可选）
+      const statusContainer = document.getElementById('login-sync-status');
+      if (statusContainer) {
+        statusContainer.style.display = 'block';
+        
+        const dot = document.getElementById('login-sync-dot');
+        const text = document.getElementById('login-sync-text');
+        
+        if (dot && text) {
+          dot.className = 'sync-dot disconnected';
+          dot.style.background = '#6b7280';  // 灰色
+          text.textContent = 'Waiting for connection...';
+          text.style.color = '#9ca3af';
+        }
+      }
     }
   },
 

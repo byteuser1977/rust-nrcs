@@ -10,6 +10,26 @@ use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RequestHandler, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
 use crate::handlers::v1::create_transaction::CreateTransactionHelper;
+/// 使用 NRCS 标准 Reed-Solomon 编码进行 RS 地址格式化
+fn format_account_rs(account_id: u64) -> String {
+    format!("NRCS-{}", crypto::reed_solomon::encode(account_id))
+}
+
+/// 使用 NRCS 标准 Reed-Solomon 解码解析 RS 地址
+/// 支持标准格式: NRCS-XXXX-XXXX-XXXX-XXXXX (4段)
+fn parse_account_rs(rs: &str) -> u64 {
+    // 去掉前缀 "NRCS-"
+    let clean = rs.trim_start_matches("NRCS-");
+    
+    // 去掉所有连字符，只保留 Base32 字符
+    let codeword: String = clean.chars().filter(|c| *c != '-').collect();
+    
+    // 使用 Reed-Solomon 解码
+    match crypto::reed_solomon::decode(&codeword) {
+        Ok(id) => id,
+        Err(_) => 0,
+    }
+}
 
 pub struct HashHandler;
 
@@ -610,25 +630,5 @@ impl RequestHandler for SplitSecretHandler {
         builder.insert("pieces", json!([]));
 
         Ok(builder.build())
-    }
-}
-
-fn format_account_rs(account_id: u64) -> String {
-    format!("NRCS-{}-{}-{}",
-        account_id % 10000,
-        (account_id / 10000) % 10000,
-        (account_id / 100000000) % 10000
-    )
-}
-
-fn parse_account_rs(rs: &str) -> u64 {
-    let parts: Vec<&str> = rs.trim_start_matches("NRCS-").split('-').collect();
-    if parts.len() == 3 {
-        let p1: u64 = parts[0].parse().unwrap_or(0);
-        let p2: u64 = parts[1].parse().unwrap_or(0);
-        let p3: u64 = parts[2].parse().unwrap_or(0);
-        p1 + p2 * 10000 + p3 * 100000000
-    } else {
-        0
     }
 }

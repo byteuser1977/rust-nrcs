@@ -71,10 +71,18 @@ const App = {
     router
       .use(async (params) => {
         // 中间件: 检查认证状态
-        if (!store.state.isAuthenticated) {
-          router.replace('/lock');
-          return;
+        // 注意: 不再重定向到 /lock，而是直接控制 UI 显示
+        // 避免路由循环问题
+        if (!store.state.isLoggedIn && !store.state.isAuthenticated) {
+          // 显示锁屏界面，但不改变 URL
+          this.showLockscreen();
+          
+          // 停止后续路由处理
+          throw new Error('Navigation cancelled');
         }
+        
+        // 确保主应用界面可见
+        this.showMainApp();
         
         // 销毁当前页面
         if (this.currentPageModule && typeof this.currentPageModule.destroy === 'function') {
@@ -406,19 +414,19 @@ const App = {
       store.setState('connectionStatus', 'connecting');
       Sidebar.updateConnectionStatus('connecting');
 
-      // 并行加载核心数据
+      // 并行加载核心数据，使用更健壮的错误处理
       const [statusResult, balanceResult] = await Promise.allSettled([
-        api.getBlockchainStatus(),
-        store.state.account.id 
-          ? api.getAccountBalance(store.state.account.id)
+        this.safeApiCall(() => api.getBlockchainStatus()),
+        store.state.account?.id 
+          ? this.safeApiCall(() => api.getAccountBalance(store.state.account.id))
           : Promise.resolve(null),
       ]);
 
       // 处理区块链状态
-      if (statusResult.status === 'fulfilled') {
+      if (statusResult.status === 'fulfilled' && statusResult.value) {
         const status = statusResult.value;
         const numberOfBlocks = status.numberOfBlocks || 0;
-        const lastBlockHeight = status.lastBlockHeight || 0;
+        const lastBlockHeight = status.lastBlockHeight || (status.numberOfBlocks ? status.numberOfBlocks - 1 : 0);
         
         // 计算同步进度
         let syncStatus = 'unknown';
@@ -426,10 +434,10 @@ const App = {
         
         if (status.isScanning) {
           syncStatus = 'scanning';
-        } else if (lastBlockHeight < numberOfBlocks - 1) {
+        } else if (lastBlockHeight < numberOfBlocks - 1 && numberOfBlocks > 0) {
           syncStatus = 'downloading';
-          syncProgress = numberOfBlocks > 0 ? ((lastBlockHeight + 1) / numberOfBlocks) * 100 : 0;
-        } else {
+          syncProgress = ((lastBlockHeight + 1) / numberOfBlocks) * 100;
+        } else if (numberOfBlocks > 0) {
           syncStatus = 'synced';
         }
 
@@ -462,6 +470,24 @@ const App = {
         if (syncStatus === 'downloading' || syncStatus === 'scanning') {
           this.startSyncPolling();
         }
+      } else if (statusResult.status === 'rejected') {
+        // API 调用失败时的优雅降级
+        console.warn('Blockchain status check failed:', statusResult.reason?.message);
+        
+        // 设置离线/错误状态
+        Sidebar.updateSyncStatus({
+          status: 'error',
+          progress: 0,
+          currentHeight: 0,
+          targetHeight: 0,
+        });
+        
+        store.setState('blockchain', {
+          ...store.state.blockchain,
+          syncStatus: 'error',
+          isScanning: false,
+          isDownloading: false,
+        });
       }
 
       // 处理账户余额
@@ -472,9 +498,14 @@ const App = {
         Sidebar.updateUserInfo(store.state.account);
       }
 
-      // 标记为已连接
-      store.setState('connectionStatus', 'connected');
-      Sidebar.updateConnectionStatus('connected');
+      // 根据结果标记连接状态
+      if (statusResult.status === 'fulfilled') {
+        store.setState('connectionStatus', 'connected');
+        Sidebar.updateConnectionStatus('connected');
+      } else {
+        store.setState('connectionStatus', 'error');
+        Sidebar.updateConnectionStatus('disconnected');
+      }
 
     } catch (error) {
       console.error('Load initial data error:', error);
@@ -486,6 +517,19 @@ const App = {
         status: 'error',
         progress: 0,
       });
+    }
+  },
+
+  /**
+   * 安全的 API 调用包装器
+   * 捕获所有异常并返回 null，避免未处理的 Promise 拒绝
+   */
+  async safeApiCall(apiFunction) {
+    try {
+      return await apiFunction();
+    } catch (error) {
+      console.warn('API call failed:', error.message);
+      return null;
     }
   },
 

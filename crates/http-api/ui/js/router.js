@@ -117,12 +117,23 @@ class Router {
     const [pathname, queryString] = hash.split('?');
     const params = this.parseQuery(queryString);
     
+    // 特殊处理: 如果是 /lock 路径，不进行路由匹配，直接返回
+    // 避免未登录时的无限循环重定向
+    if (pathname === '/lock' || pathname === 'lock') {
+      console.debug('Lock screen requested, skipping route matching');
+      return;
+    }
+    
     // 查找匹配的路由
     const matchedRoute = this.findRoute(pathname);
     
     if (!matchedRoute) {
       console.warn(`No route found for: ${pathname}`);
-      this.navigate('/dashboard');
+      
+      // 只在不是默认首页的情况下才重定向，避免循环
+      if (pathname !== '/' && pathname !== '/dashboard') {
+        this.navigate('/dashboard');
+      }
       return;
     }
     
@@ -145,7 +156,17 @@ class Router {
     
     // 执行中间件
     for (const middleware of this.middlewares) {
-      await middleware(this.routeParams);
+      try {
+        await middleware(this.routeParams);
+      } catch (error) {
+        // 特殊处理: 导航取消错误 (未登录时显示锁屏)
+        if (error.message === 'Navigation cancelled') {
+          console.debug('Navigation cancelled by middleware');
+          return;
+        }
+        // 其他错误继续抛出
+        throw error;
+      }
     }
     
     // 执行路由处理器
