@@ -67,6 +67,10 @@ use orm::{
     PublicKeyRepository,
 };
 use thiserror::Error;
+// 交易事件分发系统（对齐 Java NRCS: TransactionProcessor + Listeners<Transaction, TransactionProcessEvent>）
+use crate::extensions::listener::{
+    TransactionProcessEvent, notify_process_event,
+};
 
 use crate::types::{TxReceiptInfo, TxStatus};
 
@@ -923,6 +927,12 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
 
         self.dispatcher.dispatch_account_event(&unconfirmed_event).await;
 
+        // ✅ 分发交易事件（对齐 Java NRCS: TransactionProcessor.notifyListeners(transactions, ADDED_UNCONFIRMED_TRANSACTIONS)）
+        notify_process_event(
+            TransactionProcessEvent::AddedUnconfirmedTransactions,
+            vec![tx.clone()],
+        );
+
         // Java: Also apply attachment unconfirmed (pre-deduct assets/currencies)
         if !tx.phased {
             let attachment_ok = self.apply_attachment_unconfirmed(tx).await?;
@@ -1170,6 +1180,12 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         // === Step 5: Log ledger entries ===
         self.log_ledger_entry(tx).await?;
 
+        // ✅ 分发交易确认事件（对齐 Java NRCS: TransactionProcessor.notifyListeners(transactions, ADDED_CONFIRMED_TRANSACTIONS)）
+        notify_process_event(
+            TransactionProcessEvent::AddedConfirmedTransactions,
+            vec![tx.clone()],
+        );
+
         Ok(())
     }
 
@@ -1229,6 +1245,13 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         self.apply_unconfirmed(tx).await?;
         self.mempool.add_broadcasted(tx);
         self.mempool.add(tx.clone()).map_err(|e| ProcessorError::Validation(e.to_string()))?;
+
+        // ✅ 分发广播事件（对齐 Java NRCS: TransactionProcessor.broadcast() 后通知）
+        notify_process_event(
+            TransactionProcessEvent::AddedUnconfirmedTransactions,
+            vec![tx.clone()],
+        );
+
         Ok(())
     }
 

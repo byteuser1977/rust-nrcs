@@ -51,7 +51,7 @@ pub async fn run_server(state: ApiState, addr: SocketAddr) -> anyhow::Result<()>
 }
 
 pub async fn run_from_config(_config: ApiConfig) -> anyhow::Result<()> {
-    panic!("run_from_config not implemented yet; use apps/node");
+    Err(anyhow::anyhow!("run_from_config not implemented yet; use apps/node"))
 }
 
 /// 注册所有已实现的 V1 API handler

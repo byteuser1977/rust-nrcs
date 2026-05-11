@@ -2587,13 +2587,16 @@ impl FundingMonitor {
      * - AccountEventHandler → 监控 NRCS 余额变更
      * - AssetEventHandler → 监控资产余额变更
      * - CurrencyEventHandler → 监控货币余额变更
+     *
+     * # Errors
+     * 如果监控服务已经停止（shutdown），返回错误
      */
-    pub async fn init(self: &Arc<Self>) {
+    pub async fn init(self: &Arc<Self>) -> anyhow::Result<()> {
         if *self.stopped.read().await {
-            panic!("Funding monitor processing has been stopped");
+            return Err(anyhow::anyhow!("Funding monitor processing has been stopped"));
         }
         if *self.started.read().await {
-            return;
+            return Ok(());
         }
 
         // 注册账户余额监控（对应 Java: Account.addListener(new AccountEventHandler(), AccountEvent.BALANCE)）
@@ -2661,6 +2664,8 @@ impl FundingMonitor {
         info!(
             "[FundingMonitor] Initialization completed with all 6 listeners (Java NRCS compatible)"
         );
+
+        Ok(())
     }
 
     /**
@@ -4222,7 +4227,7 @@ mod tests {
     async fn test_block_event_handler_dispatch() {
         let dispatcher = Arc::new(EventDispatcher::new());
         let monitor = FundingMonitor::new(Arc::clone(&dispatcher));
-        monitor.init().await;
+        monitor.init().await.expect("FundingMonitor init should succeed");
 
         // 添加监控账户
         let config = MonitoredAccountConfig::new(
