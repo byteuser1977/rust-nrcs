@@ -269,69 +269,113 @@ impl HandlerContext {
 
 pub mod responses {
     use super::*;
-    
+
     pub fn incorrect_request() -> RsRespWithData {
         RsResp::error(1, "Incorrect request").into()
     }
-    
+
     pub fn not_allowed() -> RsRespWithData {
         RsResp::error(2, "Not allowed").into()
     }
-    
+
     pub fn post_required() -> RsRespWithData {
         RsResp::error(3, "POST required").into()
     }
-    
+
+    pub fn missing_parameter(param: &str) -> RsRespWithData {
+        RsResp::error(3, format!("\"{}\" not specified", param)).into()
+    }
+
+    pub fn missing_parameters(params: &[&str]) -> RsRespWithData {
+        RsResp::error(3, format!("At least one of [{}] must be specified", params.join(", "))).into()
+    }
+
+    pub fn incorrect_parameter(param: &str) -> RsRespWithData {
+        RsResp::error(4, format!("Incorrect \"{}\"", param)).into()
+    }
+
+    pub fn incorrect_parameter_with_details(param: &str, details: &str) -> RsRespWithData {
+        RsResp::error(4, format!("Incorrect \"{}\" {}", param, details)).into()
+    }
+
+    pub fn unknown_object(object_name: &str) -> RsRespWithData {
+        RsResp::error(5, format!("Unknown {}", object_name)).into()
+    }
+
     pub fn unknown_account() -> RsRespWithData {
         RsResp::error(5, "Unknown account").into()
     }
-    
+
     pub fn unknown_block() -> RsRespWithData {
-        RsResp::error(6, "Unknown block").into()
+        RsResp::error(5, "Unknown block").into()
     }
-    
+
     pub fn unknown_transaction() -> RsRespWithData {
-        RsResp::error(7, "Unknown transaction").into()
+        RsResp::error(5, "Unknown transaction").into()
     }
-    
-    pub fn incorrect_account() -> RsRespWithData {
-        RsResp::error(8, "Incorrect account").into()
+
+    pub fn either_parameter(params: &[&str]) -> RsRespWithData {
+        RsResp::error(6, format!("Not more than one of [{}] can be specified", params.join(", "))).into()
     }
-    
-    pub fn incorrect_block() -> RsRespWithData {
-        RsResp::error(9, "Incorrect block").into()
+
+    pub fn not_yet_available(details: &str) -> RsRespWithData {
+        RsResp::error(7, format!("Not yet available: {}", details)).into()
     }
-    
-    pub fn incorrect_height() -> RsRespWithData {
-        RsResp::error(10, "Incorrect height").into()
+
+    pub fn feature_not_available(details: &str) -> RsRespWithData {
+        RsResp::error(8, format!("Feature not available: {}", details)).into()
     }
-    
-    pub fn incorrect_timestamp() -> RsRespWithData {
-        RsResp::error(11, "Incorrect timestamp").into()
+
+    pub fn not_enabled(details: &str) -> RsRespWithData {
+        RsResp::error(9, format!("Not enabled: {}", details)).into()
     }
-    
-    pub fn missing_parameter(param: &str) -> RsRespWithData {
-        RsResp::error(12, format!("Missing parameter: {}", param)).into()
+
+    pub fn data_error(details: &str) -> RsRespWithData {
+        RsResp::error(10, details).into()
     }
-    
-    pub fn incorrect_value(param: &str) -> RsRespWithData {
-        RsResp::error(13, format!("Incorrect value: {}", param)).into()
+
+    pub fn general_error(message: &str) -> RsRespWithData {
+        RsResp::error(11, message).into()
     }
-    
+
     pub fn disabled_api() -> RsRespWithData {
-        RsResp::error(14, "Disabled API").into()
+        RsResp::error(16, "This API is disabled").into()
     }
-    
+
     pub fn required_block_not_found() -> RsRespWithData {
-        RsResp::error(15, "Required block not found").into()
+        RsResp::error(13, "Required block not found").into()
     }
-    
+
     pub fn required_last_block_not_found() -> RsRespWithData {
-        RsResp::error(16, "Required last block not found").into()
+        RsResp::error(14, "Required last block not match").into()
     }
-    
+
+    pub fn pruned_transaction_data_not_available() -> RsRespWithData {
+        RsResp::error(15, "Pruned transaction data not available").into()
+    }
+
     pub fn light_client_disabled_api() -> RsRespWithData {
-        RsResp::error(17, "Light client disabled API").into()
+        RsResp::error(17, "This API is not available to light clients").into()
+    }
+
+    pub fn incorrect_account() -> RsRespWithData {
+        RsResp::error(4, "Incorrect account").into()
+    }
+
+    pub fn incorrect_block() -> RsRespWithData {
+        RsResp::error(4, "Incorrect block").into()
+    }
+
+    pub fn incorrect_height() -> RsRespWithData {
+        RsResp::error(4, "Incorrect height").into()
+    }
+
+    pub fn incorrect_timestamp() -> RsRespWithData {
+        RsResp::error(4, "Incorrect timestamp").into()
+    }
+
+    pub fn incorrect_value(param: &str) -> RsRespWithData {
+        RsResp::error(4, format!("Incorrect \"{}\"", param)).into()
     }
 }
 

@@ -119,15 +119,15 @@ impl TxBroadcaster {
             }
         }
         
-        // TODO: 实际的网络广播逻辑
-        // let peers = self.get_connected_peers()?;
-        // if peers.len() < self.config.min_peers_for_broadcast {
-        //     return Err(BroadcastError::NoPeersAvailable);
-        // }
-        // 
-        // for peer in peers {
-        //     peer.send_transaction(tx)?;
-        // }
+        // 网络广播逻辑（对照 Java NRCS Peers.sendToSomePeers）:
+        // 1. 获取已连接的 Peer 列表
+        // 2. 分批发送交易（每批 sendTransactionsBatchSize 条）
+        // 3. 发送给所有已连接的非黑名单 Peer
+        // 4. 达到 sendToPeersLimit 个成功响应后停止
+        //
+        // 注意: 完整的网络广播需要集成 P2P 模块，
+        // 当前架构中 tx-engine 不直接依赖 p2p，
+        // 广播通过上层（node）注入的回调函数实现。
         
         {
             let mut broadcasted = self.broadcasted.write();

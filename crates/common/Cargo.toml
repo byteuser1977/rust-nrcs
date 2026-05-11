@@ -8,5 +8,8 @@ authors = ["ByteChain <dev@bytechain.cn>"]
 
 [dependencies]
 regex = "1"
+hex = "0.4"
+flate2 = "1.0"
+crypto = { path = "../crypto" }
 
 [dev-dependencies]

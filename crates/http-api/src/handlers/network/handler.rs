@@ -132,7 +132,7 @@ pub async fn get_network_status(
         Ok(Json(serde_json::json!({
             "numberOfActivePeers": connected_count,
             "numberOfKnownPeers": known_count,
-            "numberOfUnconfirmedPeers": 0,  // TODO: 实现
+            "numberOfUnconfirmedPeers": known_count.saturating_sub(connected_count),
             "isScanning": false,
             "application": blockchain_types::constants::APPLICATION,
             "version": blockchain_types::constants::VERSION,

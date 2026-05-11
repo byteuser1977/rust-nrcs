@@ -85,8 +85,12 @@ impl GetInfoHandler {
             }
 
             // disabledAPIs — base64 encoded disabled API list
-            if let Some(_disabled) = request.get::<String>("disabledAPIs") {
-                // TODO: 解码并存储 disabled APIs
+            if let Some(disabled) = request.get::<String>("disabledAPIs") {
+                if let Ok(decoded) = base64::decode(&disabled) {
+                    if let Ok(list) = String::from_utf8(decoded) {
+                        peer.disabled_apis = Some(list.split(',').map(|s| s.trim().to_string()).collect());
+                    }
+                }
             }
 
             // apiServerIdleTimeout
@@ -95,9 +99,9 @@ impl GetInfoHandler {
             }
 
             // blockchainState
-            if let Some(_state_val) = request.get::<serde_json::Value>("blockchainState") {
+            if let Some(state_val) = request.get::<serde_json::Value>("blockchainState") {
                 // UP_TO_DATE=0, DOWNLOADING=1, FORK=2, LIGHT_CLIENT=3
-                // TODO: 存储为 peer.blockchain_state 字段
+                peer.blockchain_state = state_val.as_u64().map(|v| v as u8);
             }
 
             peer.last_updated = crate::peer::current_timestamp();

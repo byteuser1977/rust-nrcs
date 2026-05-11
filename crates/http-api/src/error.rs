@@ -26,8 +26,20 @@ pub enum ApiError {
     #[error("missing parameter: {0}")]
     MissingParameter(String),
 
+    #[error("at least one of [{params}] must be specified")]
+    MissingParameters { params: String },
+
+    #[error("incorrect \"{0}\"")]
+    IncorrectParameter(String),
+
+    #[error("incorrect \"{param}\" {details}")]
+    IncorrectParameterWithDetails { param: String, details: String },
+
     #[error("incorrect value: {0}")]
     IncorrectValue(String),
+
+    #[error("unknown {0}")]
+    UnknownObject(String),
 
     #[error("unknown account")]
     UnknownAccount,
@@ -53,6 +65,21 @@ pub enum ApiError {
     #[error("incorrect peer address")]
     IncorrectPeerAddress,
 
+    #[error("not more than one of [{params}] can be specified")]
+    EitherParameter { params: String },
+
+    #[error("not yet available: {0}")]
+    NotYetAvailable(String),
+
+    #[error("feature not available: {0}")]
+    FeatureNotAvailable(String),
+
+    #[error("not enabled: {0}")]
+    NotEnabled(String),
+
+    #[error("pruned transaction data not available")]
+    PrunedTransactionDataNotAvailable,
+
     #[error("blockchain error: {0}")]
     Blockchain(#[from] blockchain_types::BlockchainError),
 
@@ -73,24 +100,66 @@ impl ApiError {
     pub fn error_code(&self) -> i32 {
         match self {
             ApiError::Validation(_) => 4,
-            ApiError::NotFound(_) => 6,
+            ApiError::NotFound(_) => 5,
             ApiError::Unauthorized(_) => 2,
             ApiError::Internal(_) => 4,
-            ApiError::MissingParameter(_) => 12,
-            ApiError::IncorrectValue(_) => 13,
+            ApiError::MissingParameter(_) => 3,
+            ApiError::MissingParameters { .. } => 3,
+            ApiError::IncorrectParameter(_) => 4,
+            ApiError::IncorrectParameterWithDetails { .. } => 4,
+            ApiError::IncorrectValue(_) => 4,
+            ApiError::UnknownObject(_) => 5,
             ApiError::UnknownAccount => 5,
-            ApiError::UnknownBlock => 6,
-            ApiError::UnknownTransaction => 7,
-            ApiError::IncorrectAccount => 8,
-            ApiError::IncorrectBlock => 9,
-            ApiError::IncorrectHeight => 10,
-            ApiError::IncorrectTimestamp => 11,
-            ApiError::IncorrectPeerAddress => 13,
+            ApiError::UnknownBlock => 5,
+            ApiError::UnknownTransaction => 5,
+            ApiError::IncorrectAccount => 4,
+            ApiError::IncorrectBlock => 4,
+            ApiError::IncorrectHeight => 4,
+            ApiError::IncorrectTimestamp => 4,
+            ApiError::IncorrectPeerAddress => 4,
+            ApiError::EitherParameter { .. } => 6,
+            ApiError::NotYetAvailable(_) => 7,
+            ApiError::FeatureNotAvailable(_) => 8,
+            ApiError::NotEnabled(_) => 9,
+            ApiError::PrunedTransactionDataNotAvailable => 15,
             ApiError::Blockchain(_) => 4,
             ApiError::Repository(_) => 4,
             ApiError::Account(_) => 4,
             ApiError::TxEngine(_) => 4,
             ApiError::Io(_) => 4,
+        }
+    }
+
+    pub fn error_description(&self) -> String {
+        match self {
+            ApiError::MissingParameter(p) => format!("\"{}\" not specified", p),
+            ApiError::MissingParameters { params } => format!("At least one of [{}] must be specified", params),
+            ApiError::IncorrectParameter(p) => format!("Incorrect \"{}\"", p),
+            ApiError::IncorrectParameterWithDetails { param, details } => format!("Incorrect \"{}\" {}", param, details),
+            ApiError::IncorrectValue(p) => format!("Incorrect \"{}\"", p),
+            ApiError::UnknownObject(o) => format!("Unknown {}", o),
+            ApiError::EitherParameter { params } => format!("Not more than one of [{}] can be specified", params),
+            ApiError::NotYetAvailable(msg) => format!("Not yet available: {}", msg),
+            ApiError::FeatureNotAvailable(msg) => format!("Feature not available: {}", msg),
+            ApiError::NotEnabled(msg) => format!("Not enabled: {}", msg),
+            ApiError::PrunedTransactionDataNotAvailable => "Pruned transaction data not available".to_string(),
+            ApiError::UnknownAccount => "Unknown account".to_string(),
+            ApiError::UnknownBlock => "Unknown block".to_string(),
+            ApiError::UnknownTransaction => "Unknown transaction".to_string(),
+            ApiError::IncorrectAccount => "Incorrect account".to_string(),
+            ApiError::IncorrectBlock => "Incorrect block".to_string(),
+            ApiError::IncorrectHeight => "Incorrect height".to_string(),
+            ApiError::IncorrectTimestamp => "Incorrect timestamp".to_string(),
+            ApiError::IncorrectPeerAddress => "Incorrect peer address".to_string(),
+            ApiError::Validation(msg) => msg.clone(),
+            ApiError::NotFound(msg) => format!("Unknown {}", msg),
+            ApiError::Unauthorized(msg) => msg.clone(),
+            ApiError::Internal(msg) => msg.clone(),
+            ApiError::Blockchain(e) => e.to_string(),
+            ApiError::Repository(e) => e.to_string(),
+            ApiError::Account(e) => e.to_string(),
+            ApiError::TxEngine(e) => e.to_string(),
+            ApiError::Io(e) => e.to_string(),
         }
     }
 }
@@ -135,28 +204,17 @@ impl<T> ApiResponse<T> {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let (status, code, message) = match self {
-            ApiError::Validation(msg) => (StatusCode::BAD_REQUEST, 400, msg),
-            ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, 404, msg),
-            ApiError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, 401, msg),
-            ApiError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, 500, msg),
-            ApiError::MissingParameter(msg) => (StatusCode::BAD_REQUEST, 12, msg),
-            ApiError::IncorrectValue(msg) => (StatusCode::BAD_REQUEST, 13, msg),
-            ApiError::UnknownAccount => (StatusCode::NOT_FOUND, 5, "Unknown account".to_string()),
-            ApiError::UnknownBlock => (StatusCode::NOT_FOUND, 6, "Unknown block".to_string()),
-            ApiError::UnknownTransaction => (StatusCode::NOT_FOUND, 7, "Unknown transaction".to_string()),
-            ApiError::IncorrectAccount => (StatusCode::BAD_REQUEST, 8, "Incorrect account".to_string()),
-            ApiError::IncorrectBlock => (StatusCode::BAD_REQUEST, 9, "Incorrect block".to_string()),
-            ApiError::IncorrectHeight => (StatusCode::BAD_REQUEST, 10, "Incorrect height".to_string()),
-            ApiError::IncorrectTimestamp => (StatusCode::BAD_REQUEST, 11, "Incorrect timestamp".to_string()),
-            ApiError::IncorrectPeerAddress => (StatusCode::BAD_REQUEST, 13, "Incorrect peer address".to_string()),
-            ApiError::Blockchain(e) => (StatusCode::BAD_REQUEST, 400, e.to_string()),
-            ApiError::Repository(e) => (StatusCode::INTERNAL_SERVER_ERROR, 500, e.to_string()),
-            ApiError::Account(e) => (StatusCode::BAD_REQUEST, 400, e.to_string()),
-            ApiError::TxEngine(e) => (StatusCode::BAD_REQUEST, 400, e.to_string()),
-            ApiError::Io(e) => (StatusCode::INTERNAL_SERVER_ERROR, 500, e.to_string()),
+        let status = match &self {
+            ApiError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            ApiError::NotFound(_) | ApiError::UnknownObject(_) | ApiError::UnknownAccount
+            | ApiError::UnknownBlock | ApiError::UnknownTransaction => StatusCode::NOT_FOUND,
+            ApiError::Repository(_) | ApiError::Io(_) | ApiError::Internal(_) => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
+            _ => StatusCode::BAD_REQUEST,
         };
-
+        let code = self.error_code();
+        let message = self.error_description();
         let body = Json(ApiResponse::<()>::error(code, message));
         (status, body).into_response()
     }

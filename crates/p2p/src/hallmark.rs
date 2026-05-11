@@ -229,13 +229,19 @@ impl HallmarkParser {
     /// * `String` - Base64 编码的 hallmark 字符串
     #[allow(dead_code)]
     pub fn create_hallmark(
-        _secret_key: &[u8; 32],
-        _weight: u32,
-        _date: u32,
+        secret_key: &[u8; 32],
+        weight: u32,
+        date: u32,
     ) -> String {
-        // TODO: 完整实现需要 Ed25519 签名逻辑
-        // 当前返回空字符串作为占位符
-        String::new()
+        let mut data = Vec::new();
+        data.extend_from_slice(&weight.to_le_bytes());
+        data.extend_from_slice(&date.to_le_bytes());
+
+        let kp = crypto::keypair_from_seed(secret_key);
+        let signature = kp.sign(&data);
+        let hallmark_data = format!("{}:{}:{}", hex::encode(secret_key), weight, date);
+        let signature_hex = hex::encode(&signature);
+        format!("{}:{}", hallmark_data, signature_hex)
     }
 }
 

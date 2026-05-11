@@ -318,10 +318,12 @@ impl RequestHandler for ParsePhasingParamsHandler {
     }
 
     async fn process_request(&self, req: &ApiRequest, _state: &ApiState) -> Result<RsRespWithData, ApiError> {
-        let _phasing_params = req.require_string("phasingParams")?;
+        let phasing_params_str = req.require_string("phasingParams")?;
 
         let mut builder = RsRespBuilder::new();
-        builder.insert("note", "TODO: parse phasingParams JSON");
+        let phasing_params: serde_json::Value = serde_json::from_str(&phasing_params_str)
+            .unwrap_or(serde_json::Value::Null);
+        builder.insert("phasingParams", phasing_params);
 
         Ok(builder.build())
     }

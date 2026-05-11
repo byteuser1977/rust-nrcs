@@ -71,9 +71,14 @@ pub async fn handle_nrcs_api(
 }
 
 fn error_to_response(e: &ApiError) -> RsRespWithData {
+    use crate::request_handler::RsResp;
     match e {
         ApiError::MissingParameter(p) => responses::missing_parameter(p),
+        ApiError::MissingParameters { params } => responses::missing_parameters(&params.split(", ").collect::<Vec<_>>()),
+        ApiError::IncorrectParameter(p) => responses::incorrect_parameter(p),
+        ApiError::IncorrectParameterWithDetails { param, details } => responses::incorrect_parameter_with_details(param, details),
         ApiError::IncorrectValue(p) => responses::incorrect_value(p),
+        ApiError::UnknownObject(o) => responses::unknown_object(o),
         ApiError::UnknownAccount => responses::unknown_account(),
         ApiError::UnknownBlock => responses::unknown_block(),
         ApiError::UnknownTransaction => responses::unknown_transaction(),
@@ -81,16 +86,21 @@ fn error_to_response(e: &ApiError) -> RsRespWithData {
         ApiError::IncorrectBlock => responses::incorrect_block(),
         ApiError::IncorrectHeight => responses::incorrect_height(),
         ApiError::IncorrectTimestamp => responses::incorrect_timestamp(),
-        ApiError::IncorrectPeerAddress => RsRespWithData::from(crate::request_handler::RsResp::error(13, "Incorrect peer address")),
-        ApiError::NotFound(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(6, msg.clone())),
-        ApiError::Validation(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(4, msg.clone())),
-        ApiError::Unauthorized(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(2, msg.clone())),
-        ApiError::Internal(msg) => RsRespWithData::from(crate::request_handler::RsResp::error(4, msg.clone())),
-        ApiError::Blockchain(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
-        ApiError::Repository(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
-        ApiError::Account(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
-        ApiError::TxEngine(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
-        ApiError::Io(err) => RsRespWithData::from(crate::request_handler::RsResp::error(4, err.to_string())),
+        ApiError::IncorrectPeerAddress => responses::incorrect_value("peer"),
+        ApiError::EitherParameter { params } => responses::either_parameter(&params.split(", ").collect::<Vec<_>>()),
+        ApiError::NotYetAvailable(details) => responses::not_yet_available(details),
+        ApiError::FeatureNotAvailable(details) => responses::feature_not_available(details),
+        ApiError::NotEnabled(details) => responses::not_enabled(details),
+        ApiError::PrunedTransactionDataNotAvailable => responses::pruned_transaction_data_not_available(),
+        ApiError::NotFound(msg) => responses::unknown_object(msg),
+        ApiError::Validation(msg) => RsRespWithData::from(RsResp::error(4, msg.clone())),
+        ApiError::Unauthorized(msg) => RsRespWithData::from(RsResp::error(2, msg.clone())),
+        ApiError::Internal(msg) => RsRespWithData::from(RsResp::error(4, msg.clone())),
+        ApiError::Blockchain(err) => RsRespWithData::from(RsResp::error(4, err.to_string())),
+        ApiError::Repository(err) => RsRespWithData::from(RsResp::error(4, err.to_string())),
+        ApiError::Account(err) => RsRespWithData::from(RsResp::error(4, err.to_string())),
+        ApiError::TxEngine(err) => RsRespWithData::from(RsResp::error(4, err.to_string())),
+        ApiError::Io(err) => RsRespWithData::from(RsResp::error(4, err.to_string())),
     }
 }
 

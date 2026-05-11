@@ -329,8 +329,19 @@ impl DiscoveryDaemon {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::peer::Peer;
+    use std::net::SocketAddr;
+
+    fn test_peer() -> Peer {
+        let addr: SocketAddr = "127.0.0.1:8080".parse().unwrap();
+        Peer::new(addr, false)
+    }
+
     #[test]
     fn test_discovery_daemon_creation() {
-        // TODO: 添加测试
+        let config = P2PConfig::default();
+        let peers = Arc::new(Peers::new(test_peer()));
+        let _daemon = DiscoveryDaemon::new(peers, config);
     }
 }

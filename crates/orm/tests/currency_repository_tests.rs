@@ -39,7 +39,7 @@ fn make_currency(id: i64, account_id: i64, name: &str, code: &str, initial_suppl
         name_lower: name.to_lowercase(),
         code: code.to_string(),
         description: None,
-        type_: 1,
+        type: 1,
         initial_supply,
         reserve_supply: 0,
         max_supply,

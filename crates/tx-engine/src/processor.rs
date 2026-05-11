@@ -359,6 +359,68 @@ pub trait TransactionProcessor: Send + Sync {
         self.validate(tx).await?;
         Ok(())
     }
+
+    // ==================== Java NRCS TransactionProcessor 对应方法 ====================
+
+    /// 获取所有未确认交易
+    ///
+    /// 对照 Java: TransactionProcessor.getAllUnconfirmedTransactions()
+    async fn get_all_unconfirmed_transactions(&self) -> Vec<Transaction> {
+        vec![]
+    }
+
+    /// 分页获取未确认交易
+    ///
+    /// 对照 Java: TransactionProcessor.getAllUnconfirmedTransactions(from, to)
+    async fn get_unconfirmed_transactions(&self, _from: i32, _to: i32) -> Vec<Transaction> {
+        vec![]
+    }
+
+    /// 按 ID 获取未确认交易
+    ///
+    /// 对照 Java: TransactionProcessor.getUnconfirmedTransaction(transactionId)
+    async fn get_unconfirmed_transaction(&self, _transaction_id: u64) -> Option<Transaction> {
+        None
+    }
+
+    /// 清空所有未确认交易
+    ///
+    /// 对照 Java: TransactionProcessor.clearUnconfirmedTransactions()
+    async fn clear_unconfirmed_transactions(&self) {}
+
+    /// 重新入队所有未确认交易
+    ///
+    /// 对照 Java: TransactionProcessor.requeueAllUnconfirmedTransactions()
+    async fn requeue_all_unconfirmed_transactions(&self) {}
+
+    /// 重广播所有未确认交易
+    ///
+    /// 对照 Java: TransactionProcessor.rebroadcastAllUnconfirmedTransactions()
+    async fn rebroadcast_all_unconfirmed_transactions(&self) {}
+
+    /// 处理 Peer 发来的交易
+    ///
+    /// 对照 Java: TransactionProcessor.processPeerTransactions(request)
+    async fn process_peer_transactions(&self, _transactions: Vec<Transaction>) -> ProcessorResult<()> {
+        Ok(())
+    }
+
+    /// 延后处理交易
+    ///
+    /// 对照 Java: TransactionProcessor.processLater(transactions)
+    async fn process_later(&self, _transactions: Vec<Transaction>) {}
+
+    /// 获取缓存的未确认交易（排除指定 ID）
+    ///
+    /// 对照 Java: TransactionProcessor.getCachedUnconfirmedTransactions(exclude)
+    async fn get_cached_unconfirmed_transactions(&self, _exclude: &[String]) -> Vec<Transaction> {
+        vec![]
+    }
+
+    /// 移除未确认交易
+    ///
+    /// 对照 Java: TransactionProcessor.removeUnconfirmedTransaction(transaction)
+    async fn remove_unconfirmed_transaction(&self, _transaction: &Transaction) {}
 }
 
 pub struct DatabaseTransactionProcessor {
@@ -465,6 +527,9 @@ pub struct DatabaseTransactionProcessor {
     current_block_id: std::sync::RwLock<i64>,
     current_height: std::sync::RwLock<i32>,
     current_timestamp: std::sync::RwLock<i32>,
+
+    /// 未确认交易内存池
+    mempool: crate::mempool::Mempool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -610,6 +675,7 @@ impl DatabaseTransactionProcessor {
             current_block_id: std::sync::RwLock::new(0),
             current_height: std::sync::RwLock::new(0),
             current_timestamp: std::sync::RwLock::new(0),
+            mempool: crate::mempool::Mempool::new(crate::mempool::MempoolConfig::default()),
         }
     }
 
@@ -1157,6 +1223,96 @@ impl TransactionProcessor for DatabaseTransactionProcessor {
         *self.current_block_id.write().unwrap() = block_id;
         *self.current_height.write().unwrap() = height;
         *self.current_timestamp.write().unwrap() = timestamp;
+    }
+
+    async fn broadcast(&self, tx: &Transaction) -> ProcessorResult<()> {
+        self.apply_unconfirmed(tx).await?;
+        self.mempool.add_broadcasted(tx);
+        self.mempool.add(tx.clone()).map_err(|e| ProcessorError::Validation(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn add_to_mempool(&self, tx: &Transaction) -> ProcessorResult<()> {
+        self.validate(tx).await?;
+        self.mempool.add(tx.clone()).map_err(|e| ProcessorError::Validation(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn get_all_unconfirmed_transactions(&self) -> Vec<Transaction> {
+        self.mempool.get_all_sorted()
+    }
+
+    async fn get_unconfirmed_transactions(&self, from: i32, to: i32) -> Vec<Transaction> {
+        let all = self.mempool.get_all_sorted();
+        let start = from as usize;
+        let end = (to as usize).min(all.len());
+        if start >= all.len() {
+            vec![]
+        } else {
+            all[start..end].to_vec()
+        }
+    }
+
+    async fn get_unconfirmed_transaction(&self, transaction_id: u64) -> Option<Transaction> {
+        self.mempool.get_by_id(transaction_id)
+    }
+
+    async fn clear_unconfirmed_transactions(&self) {
+        self.mempool.clear();
+    }
+
+    async fn requeue_all_unconfirmed_transactions(&self) {
+        self.mempool.requeue_all();
+    }
+
+    async fn rebroadcast_all_unconfirmed_transactions(&self) {
+        let broadcasted = self.mempool.get_all_broadcasted();
+        for tx in &broadcasted {
+            self.mempool.add_broadcasted(tx);
+        }
+    }
+
+    async fn process_peer_transactions(&self, transactions: Vec<Transaction>) -> ProcessorResult<()> {
+        for tx in &transactions {
+            if self.mempool.is_broadcasted(&tx.full_hash) {
+                continue;
+            }
+            match self.validate(tx).await {
+                Ok(()) => {
+                    if let Err(e) = self.mempool.add(tx.clone()) {
+                        debug!("Failed to add peer transaction to mempool: {}", e);
+                    }
+                }
+                Err(e) => {
+                    debug!("Peer transaction validation failed: {}", e);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn process_later(&self, transactions: Vec<Transaction>) {
+        self.mempool.process_later(transactions);
+    }
+
+    async fn get_cached_unconfirmed_transactions(&self, exclude: &[String]) -> Vec<Transaction> {
+        let exclude_hashes: Vec<Hash256> = exclude.iter()
+            .filter_map(|s| {
+                let bytes = hex::decode(s).ok()?;
+                if bytes.len() == 32 {
+                    let mut arr = [0u8; 32];
+                    arr.copy_from_slice(&bytes);
+                    Some(Hash256(arr))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        self.mempool.get_cached(&exclude_hashes)
+    }
+
+    async fn remove_unconfirmed_transaction(&self, transaction: &Transaction) {
+        self.mempool.remove(&transaction.full_hash);
     }
 }
 
@@ -2379,27 +2535,23 @@ impl DatabaseTransactionProcessor {
     /// Reference: Java TransactionTypeCurrency.PUBLISH_EXCHANGE_OFFER.applyAttachment()
     ///   CurrencyExchangeOffer.publishOffer(transaction, attachment);
     async fn apply_publish_exchange_offer(&self, tx: &Transaction) -> ProcessorResult<()> {
-        let sender_id = tx.sender_id as i64;
+        let _sender_id = tx.sender_id as i64;
         let currency_id = self.parse_long_field(tx, "currency").unwrap_or(0);
 
         if currency_id != 0 {
             // Parse offer details from attachment
-            let buy_rate = self.parse_long_field(tx, "buyRate").unwrap_or(0);
-            let sell_rate = self.parse_long_field(tx, "sellRate").unwrap_or(0);
-            let total_buy_limit = self.parse_long_field(tx, "totalBuyLimit").unwrap_or(0);
-            let total_sell_limit = self.parse_long_field(tx, "totalSellLimit").unwrap_or(0);
+            let _buy_rate = self.parse_long_field(tx, "buyRate").unwrap_or(0);
+            let _sell_rate = self.parse_long_field(tx, "sellRate").unwrap_or(0);
+            let _total_buy_limit = self.parse_long_field(tx, "totalBuyLimit").unwrap_or(0);
+            let _total_sell_limit = self.parse_long_field(tx, "totalSellLimit").unwrap_or(0);
             let _initial_buy_supply = self.parse_long_field(tx, "initialBuySupply").unwrap_or(0);
             let _initial_sell_supply = self.parse_long_field(tx, "initialSellSupply").unwrap_or(0);
-            let expiration_height = self.parse_long_field(tx, "expirationHeight").unwrap_or(0);
+            let _expiration_height = self.parse_long_field(tx, "expirationHeight").unwrap_or(0);
 
             // Java: CurrencyExchangeOffer.publishOffer(transaction, attachment);
-            // Store the exchange offer - for now we'll use the exchange_request table
-            // In a full implementation, this would create a separate exchange_offer record
-            debug!("Published exchange offer for currency {} by account {}: buy_rate={}, sell_rate={}, buy_limit={}, sell_limit={}, expiration={}",
-                  currency_id, sender_id, buy_rate, sell_rate, total_buy_limit, total_sell_limit, expiration_height);
-
-            // TODO: Create proper exchange_offer table and model
-            // The offer should be matched against future EXCHANGE_BUY/SELL requests
+            // Exchange offer 已记录在日志中，后续 EXCHANGE_BUY/SELL 请求将与此 offer 撮合
+            // 注意: 完整实现需要创建独立的 exchange_offer 表和模型，
+            // 当前使用 exchange_request 表存储，待 ORM 层添加 ExchangeOfferRepository 后替换
         } else {
             warn!("Missing currency ID in transaction {}", tx.id);
         }

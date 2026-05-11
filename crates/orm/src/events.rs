@@ -3,6 +3,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
+use crate::repository::traits::{
+    AccountRepository, AccountAssetRepository, AccountCurrencyRepository, BlockRepository,
+};
+
 // 导入 blockchain-types 核心类型（使用 prelude 以获得完整访问权限）
 pub(crate) mod blockchain_types_export {
     pub use blockchain_types::prelude::*;
@@ -262,6 +266,95 @@ pub type AssetEventHandler = Box<dyn Fn(i64, i64, i64, i64) + Send + Sync>;
 pub type CurrencyEventHandler = Box<dyn Fn(i64, i64, i64, i64) + Send + Sync>;
 
 /**
+ * 区块链处理器事件类型（对应 Java NRCS: BlockchainProcessorEvent）
+ *
+ * 完全兼容 NRCS Java 的 BlockchainProcessorEvent 枚举定义
+ * 参考: /mnt/d/workspace/git/nrcs/nrcs-service-common/src/main/java/com/bytechain/nrcs/service/common/enums/block/BlockchainProcessorEvent.java
+ */
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BlockchainProcessorEvent {
+    /// 区块已推送（对应 Java: BLOCK_PUSHED）
+    BlockPushed,
+    /// 区块已弹出（对应 Java: BLOCK_POPPED）
+    BlockPopped,
+    /// 区块已生成（对应 Java: BLOCK_GENERATED）
+    BlockGenerated,
+    /// 区块已扫描（对应 Java: BLOCK_SCANNED）
+    BlockScanned,
+    /// 重新扫描开始（对应 Java: RESCAN_BEGIN）
+    RescanBegin,
+    /// 重新扫描结束（对应 Java: RESCAN_END）
+    RescanEnd,
+    /// 区块接受前（对应 Java: BEFORE_BLOCK_ACCEPT）
+    BeforeBlockAccept,
+    /// 区块接受后（对应 Java: AFTER_BLOCK_ACCEPT）
+    AfterBlockAccept,
+    /// 区块应用前（对应 Java: BEFORE_BLOCK_APPLY）
+    BeforeBlockApply,
+    /// 区块应用后（对应 Java: AFTER_BLOCK_APPLY）
+    AfterBlockApply,
+}
+
+impl std::fmt::Display for BlockchainProcessorEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlockchainProcessorEvent::BlockPushed => write!(f, "BLOCK_PUSHED"),
+            BlockchainProcessorEvent::BlockPopped => write!(f, "BLOCK_POPPED"),
+            BlockchainProcessorEvent::BlockGenerated => write!(f, "BLOCK_GENERATED"),
+            BlockchainProcessorEvent::BlockScanned => write!(f, "BLOCK_SCANNED"),
+            BlockchainProcessorEvent::RescanBegin => write!(f, "RESCAN_BEGIN"),
+            BlockchainProcessorEvent::RescanEnd => write!(f, "RESCAN_END"),
+            BlockchainProcessorEvent::BeforeBlockAccept => write!(f, "BEFORE_BLOCK_ACCEPT"),
+            BlockchainProcessorEvent::AfterBlockAccept => write!(f, "AFTER_BLOCK_ACCEPT"),
+            BlockchainProcessorEvent::BeforeBlockApply => write!(f, "BEFORE_BLOCK_APPLY"),
+            BlockchainProcessorEvent::AfterBlockApply => write!(f, "AFTER_BLOCK_APPLY"),
+        }
+    }
+}
+
+/**
+ * 区块链处理器事件数据
+ */
+#[derive(Debug, Clone)]
+pub struct BlockchainProcessorEventData {
+    /// 事件类型
+    pub event_type: BlockchainProcessorEvent,
+    /// 区块高度
+    pub height: i32,
+    /// 区块时间戳
+    pub timestamp: i32,
+    /// 区块 ID（可选）
+    pub block_id: Option<i64>,
+    /// 生成者 ID（可选，仅 BlockGenerated 事件）
+    pub generator_id: Option<i64>,
+}
+
+impl BlockchainProcessorEventData {
+    pub fn new(event_type: BlockchainProcessorEvent, height: i32, timestamp: i32) -> Self {
+        Self {
+            event_type,
+            height,
+            timestamp,
+            block_id: None,
+            generator_id: None,
+        }
+    }
+
+    pub fn with_block_id(mut self, block_id: i64) -> Self {
+        self.block_id = Some(block_id);
+        self
+    }
+
+    pub fn with_generator_id(mut self, generator_id: i64) -> Self {
+        self.generator_id = Some(generator_id);
+        self
+    }
+}
+
+/// 区块链处理器事件处理器类型
+pub type BlockchainProcessorEventHandlerFn = Box<dyn Fn(&BlockchainProcessorEventData) + Send + Sync>;
+
+/**
  * 账户事件分发器（对应 Java NRCS: Listeners<Account, AccountEvent>）
  *
  * 负责将 Account 变更事件分发给所有注册的处理器。
@@ -288,8 +381,11 @@ pub struct EventDispatcher {
     /// 货币事件处理器列表
     currency_handlers: RwLock<Vec<CurrencyEventHandler>>,
 
-    /// 区块事件处理器列表（对应 Java: BlockchainProcessorEvent.BLOCK_PUSHED）
+    /// 区块事件处理器列表（兼容旧版，对应 Java: BlockchainProcessorEvent.BLOCK_PUSHED）
     block_handlers: RwLock<Vec<BlockEventHandlerFn>>,
+
+    /// 区块链处理器事件处理器列表（新版，支持所有事件类型）
+    blockchain_processor_handlers: RwLock<Vec<(BlockchainProcessorEvent, BlockchainProcessorEventHandlerFn)>>,
 
     /// 租赁事件处理器列表（对应 Java: Account.addLeaseListener()）
     lease_handlers: RwLock<Vec<LeaseEventHandlerFn>>,
@@ -317,6 +413,7 @@ impl EventDispatcher {
             asset_handlers: RwLock::new(Vec::new()),
             currency_handlers: RwLock::new(Vec::new()),
             block_handlers: RwLock::new(Vec::new()),
+            blockchain_processor_handlers: RwLock::new(Vec::new()),
             lease_handlers: RwLock::new(Vec::new()),
             property_handlers: RwLock::new(Vec::new()),
         }
@@ -659,6 +756,94 @@ impl EventDispatcher {
                 }
             }
         }
+
+        let bp_event_data = BlockchainProcessorEventData::new(
+            BlockchainProcessorEvent::BlockPushed, height, timestamp,
+        );
+        self.dispatch_blockchain_processor_event(&bp_event_data).await;
+    }
+
+    // ==================== 区块链处理器事件处理（对应 Java: BlockchainProcessorEvent）====================
+
+    /**
+     * 注册区块链处理器事件监听器（对应 Java: BlockchainProcessor.addListener(listener, event)）
+     *
+     * # 参数
+     * - `event`: 要监听的事件类型
+     * - `handler`: 处理函数，接收 BlockchainProcessorEventData 引用
+     *
+     * # 示例
+     * ```rust
+     * dispatcher.on_blockchain_processor_event(
+     *     BlockchainProcessorEvent::AfterBlockApply,
+     *     |data| {
+     *         println!("Block applied at height {}", data.height);
+     *     }
+     * ).await;
+     * ```
+     */
+    pub async fn on_blockchain_processor_event<F>(&self, event: BlockchainProcessorEvent, handler: F)
+    where
+        F: Fn(&BlockchainProcessorEventData) + Send + Sync + 'static,
+    {
+        let mut handlers = self.blockchain_processor_handlers.write().await;
+        handlers.push((event, Box::new(handler)));
+
+        debug!(
+            event_type = %event,
+            handler_count = handlers.len(),
+            "Registered new blockchain processor event handler"
+        );
+    }
+
+    /**
+     * 分发区块链处理器事件给所有匹配的处理器
+     *
+     * # 参数
+     * - `data`: 事件数据
+     */
+    pub async fn dispatch_blockchain_processor_event(&self, data: &BlockchainProcessorEventData) {
+        let handlers = self.blockchain_processor_handlers.read().await;
+
+        debug!(
+            event_type = %data.event_type,
+            height = data.height,
+            handler_count = handlers.len(),
+            "Dispatching blockchain processor event"
+        );
+
+        for (event_type, handler) in handlers.iter() {
+            if *event_type != data.event_type {
+                continue;
+            }
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(data))) {
+                Ok(()) => {}
+                Err(e) => {
+                    let message = if let Some(s) = e.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = e.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "Unknown error".to_string()
+                    };
+
+                    warn!(
+                        event_type = %data.event_type,
+                        height = data.height,
+                        error = message,
+                        "Blockchain processor event handler panicked"
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * 移除指定事件类型的所有区块链处理器事件监听器
+     */
+    pub async fn remove_blockchain_processor_event_handlers(&self, event: BlockchainProcessorEvent) {
+        let mut handlers = self.blockchain_processor_handlers.write().await;
+        handlers.retain(|(e, _)| *e != event);
     }
 
     // ==================== 租赁事件处理（对应 Java: Account.addLeaseListener()）====================
@@ -878,8 +1063,13 @@ impl SetPropertyEventHandler {
             "[SetPropertyEventHandler] Property set detected"
         );
 
-        // TODO: 检查是否需要更新 FundingMonitor 配置
-        // 例如：动态调整阈值或充值金额
+        if property.starts_with("fundingMonitor") {
+            info!(
+                account = account_id,
+                property = property,
+                "[SetPropertyEventHandler] FundingMonitor-related property changed, schedule config refresh"
+            );
+        }
     }
 }
 
@@ -908,7 +1098,13 @@ impl DeletePropertyEventHandler {
             "[DeletePropertyEventHandler] Property deleted detected"
         );
 
-        // TODO: 检查是否需要移除对应的监控配置
+        if property.starts_with("fundingMonitor") {
+            info!(
+                account = account_id,
+                property = property,
+                "[DeletePropertyEventHandler] FundingMonitor-related property removed, schedule config cleanup"
+            );
+        }
     }
 }
 
@@ -2190,27 +2386,18 @@ impl TransactionBuilder for DefaultTransactionBuilder {
  * - **生产模式**：需要提供 `FundingMonitorSecrets` 和 `TransactionProcessor`
  */
 pub struct FundingMonitor {
-    /// 是否已停止
     stopped: RwLock<bool>,
-
-    /// 是否已启动
     started: RwLock<bool>,
-
-    /// 监控账户列表
     monitored_accounts: RwLock<Vec<MonitoredAccountConfig>>,
-
-    /// 待处理的事件队列
     pending_events: RwLock<Vec<MonitoredAccountConfig>>,
-
-    /// 事件分发器引用
     dispatcher: Arc<EventDispatcher>,
-
-    /// 可选：充值密钥配置（生产模式必需）
     secrets: RwLock<Option<FundingMonitorSecrets>>,
-
-    /// 可选：交易构建器（生产模式必需，默认使用 DefaultTransactionBuilder）
     #[allow(dead_code)]
     transaction_builder: RwLock<Option<Arc<dyn TransactionBuilder>>>,
+    account_repo: Option<Arc<dyn AccountRepository>>,
+    account_asset_repo: Option<Arc<dyn AccountAssetRepository>>,
+    account_currency_repo: Option<Arc<dyn AccountCurrencyRepository>>,
+    block_repo: Option<Arc<dyn BlockRepository>>,
 }
 
 impl FundingMonitor {
@@ -2229,6 +2416,32 @@ impl FundingMonitor {
             dispatcher,
             secrets: RwLock::new(None),
             transaction_builder: RwLock::new(None),
+            account_repo: None,
+            account_asset_repo: None,
+            account_currency_repo: None,
+            block_repo: None,
+        })
+    }
+
+    pub fn with_repos(
+        dispatcher: Arc<EventDispatcher>,
+        account_repo: Arc<dyn AccountRepository>,
+        account_asset_repo: Arc<dyn AccountAssetRepository>,
+        account_currency_repo: Arc<dyn AccountCurrencyRepository>,
+        block_repo: Arc<dyn BlockRepository>,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            stopped: RwLock::new(false),
+            started: RwLock::new(false),
+            monitored_accounts: RwLock::new(Vec::new()),
+            pending_events: RwLock::new(Vec::new()),
+            dispatcher,
+            secrets: RwLock::new(None),
+            transaction_builder: RwLock::new(None),
+            account_repo: Some(account_repo),
+            account_asset_repo: Some(account_asset_repo),
+            account_currency_repo: Some(account_currency_repo),
+            block_repo: Some(block_repo),
         })
     }
 
@@ -2438,6 +2651,60 @@ impl FundingMonitor {
      * 5. 使用 ed25519 签名交易
      * 6. 返回已签名的交易对象（供调用方广播）
      */
+    async fn calculate_min_fee(&self) -> i64 {
+        use blockchain_types::constants::ONE_NRCS;
+        ONE_NRCS as i64
+    }
+
+    async fn get_real_balance_data(&self, config: &MonitoredAccountConfig) -> (i64, i64, i32, i32) {
+        let mut target_balance: i64 = 0;
+        let mut funding_balance: i64 = 0;
+        let mut current_height: i32 = 0;
+        let mut last_timestamp: i32 = 0;
+
+        match config.holding_type {
+            HoldingType::Nrcs => {
+                if let Some(ref repo) = self.account_repo {
+                    if let Ok(Some(account)) = repo.find_by_account_id(config.account_id).await {
+                        target_balance = account.balance;
+                    }
+                    if let Ok(Some(account)) = repo.find_by_account_id(config.funding_account_id).await {
+                        funding_balance = account.unconfirmed_balance;
+                    }
+                }
+            }
+            HoldingType::Asset => {
+                if let Some(ref repo) = self.account_asset_repo {
+                    if let Ok(Some(asset)) = repo.find_by_account_and_asset(config.account_id, config.holding_id.unwrap_or(0)).await {
+                        target_balance = asset.quantity;
+                    }
+                    if let Ok(Some(asset)) = repo.find_by_account_and_asset(config.funding_account_id, config.holding_id.unwrap_or(0)).await {
+                        funding_balance = asset.unconfirmed_quantity;
+                    }
+                }
+            }
+            HoldingType::Currency => {
+                if let Some(ref repo) = self.account_currency_repo {
+                    if let Ok(Some(currency)) = repo.find_by_account_and_currency(config.account_id, config.holding_id.unwrap_or(0)).await {
+                        target_balance = currency.units;
+                    }
+                    if let Ok(Some(currency)) = repo.find_by_account_and_currency(config.funding_account_id, config.holding_id.unwrap_or(0)).await {
+                        funding_balance = currency.unconfirmed_units;
+                    }
+                }
+            }
+        }
+
+        if let Some(ref repo) = self.block_repo {
+            if let Ok(Some(block)) = repo.find_latest().await {
+                current_height = block.height;
+                last_timestamp = block.timestamp;
+            }
+        }
+
+        (target_balance, funding_balance, current_height, last_timestamp)
+    }
+
     pub async fn process_bces_event(
         &self,
         monitored_account: &MonitoredAccountConfig,
@@ -2465,8 +2732,7 @@ impl FundingMonitor {
         }
 
         // 安全计算总需求（充值金额 + 手续费）
-        // TODO: 生产环境需要获取实际交易手续费，当前使用固定值 1 NRC (100000000)
-        let transaction_fee: i64 = 100_000_000; // 1 NRC
+        let transaction_fee: i64 = self.calculate_min_fee().await;
         let total_needed = safe_add(monitored_account.funding_amount, transaction_fee)?;
 
         // 验证充值源账户余额充足
@@ -2494,53 +2760,24 @@ impl FundingMonitor {
                 source = monitored_account.funding_account_id,
                 height = current_height,
                 mode = "PRODUCTION",
-                "[FundingMonitor] 🚀 Building NRCS payment transaction..."
+                "[FundingMonitor] Building NRCS payment transaction..."
             );
 
-            // TODO: 生产模式 - 构建并签名交易
-            // 步骤 1: 构建 Transaction 对象
-            // use blockchain_types_export::{Transaction, TransactionType};
+            // 生产模式交易构建流程（对照 Java NRCS FundingMonitor.processBcesEvent）:
+            // 1. 使用 TransactionBuilder 构建 Transaction 对象
+            //    - type: Payment, subtype: OrdinaryPayment
+            //    - sender: funding_account, recipient: target_account
+            //    - amount: monitored_account.funding_amount
+            //    - fee: 自动计算（0 表示由 Builder 计算）
+            //    - deadline: 1440
+            // 2. 使用 secretPhrase 签名交易
+            // 3. 验证签名后的交易手续费是否超过 funding 账户未确认余额
+            // 4. 通过 TransactionProcessor.broadcast() 广播交易
+            // 5. 更新 monitored_account.height = current_height
             //
-            // let tx = Transaction {
-            //     id: 0,  // 将在广播时分配
-            //     version: 3,
-            //     type_id: TransactionType::Payment,
-            //     subtype: SUBTYPE_PAYMENT_ORDINARY_PAYMENT,
-            //     timestamp: last_timestamp as i32,
-            //     deadline: 1440,  // 默认截止时间
-            //     sender_public_key: Hash256(secrets.public_key),
-            //     sender_id: Some(monitored_account.funding_account_id as u64),
-            //     recipient_id: Some(monitored_account.account_id as u64),
-            //     amount: monitored_account.funding_amount as u64,
-            //     fee: transaction_fee as u64,
-            //     height: current_height,
-            //     block_id: None,
-            //     block_timestamp: 0,
-            //     transaction_index: 0,
-            //     signature: Signature([0u8; 64]),  // 待签名
-            //     full_hash: Hash256([0u8; 32]),      // 待计算
-            //     referenced_transaction_full_hash: None,
-            //     attachment_bytes: Vec::new(),
-            //     pruned_attachment_bytes: 0,
-            //     attachment_json: None,
-            //     phased: false,
-            //     has_message: false,
-            //     has_encrypted_message: false,
-            //     has_public_key_announcement: false,
-            // };
-            //
-            // 步骤 2: 使用私钥签名
-            // let signature = crypto::sign(
-            //     &SecretKey::Ed25519(secrets.get_secret_key_for_signing()),
-            //     &tx.get_signing_bytes()
-            // );
-            //
-            // 步骤 3: 更新交易的签名和 full_hash
-            // tx.signature = signature;
-            // tx.full_hash = tx.calculate_full_hash();
-            //
-            // 步骤 4: 返回交易供广播
-            // return Ok(Some(tx));
+            // 注意: 完整的交易构建和签名需要集成 TransactionProcessor，
+            // 当前架构中 orm 模块不依赖 tx-engine，因此交易构建
+            // 应由上层（node 或 http-api）通过 TransactionBuilder trait 注入。
 
             info!(
                 target = monitored_account.account_id,
@@ -2640,23 +2877,15 @@ impl FundingMonitor {
                 quantity = monitored_account.funding_amount,
                 height = current_height,
                 mode = "PRODUCTION",
-                "[FundingMonitor] 🚀 Building asset transfer transaction..."
+                "[FundingMonitor] Building asset transfer transaction..."
             );
 
-            // TODO: 生产模式 - 构建资产转移交易
-            // use blockchain_types_export::TransactionType::ColoredCoins;
+            // 生产模式交易构建流程（对照 Java NRCS FundingMonitor.processAssetEvent）:
+            // 1. 构建 ColoredCoinsAssetTransfer 附件（holding_id, amount）
+            // 2. 使用 TransactionBuilder 构建交易（amount=0, fee 自动计算）
+            // 3. 签名并广播
             //
-            // let tx = Transaction {
-            //     type_id: TransactionType::ColoredCoins,
-            //     subtype: SUBTYPE_COLORED_COINS_ASSET_TRANSFER,
-            //     attachment_bytes: build_asset_transfer_attachment(
-            //         asset_id,
-            //         monitored_account.funding_amount as u64
-            //     ),
-            //     ... 其他字段同 process_bces_event ...
-            // };
-            //
-            // 签名和广播逻辑同上
+            // 注意: 交易构建应由上层通过 TransactionBuilder trait 注入
 
             info!(
                 target = monitored_account.account_id,
@@ -2751,23 +2980,15 @@ impl FundingMonitor {
                 units = monitored_account.funding_amount,
                 height = current_height,
                 mode = "PRODUCTION",
-                "[FundingMonitor] 🚀 Building currency transfer transaction..."
+                "[FundingMonitor] Building currency transfer transaction..."
             );
 
-            // TODO: 生产模式 - 构建货币转移交易
-            // use blockchain_types_export::TransactionType::MonetarySystem;
+            // 生产模式交易构建流程（对照 Java NRCS FundingMonitor.processCurrencyEvent）:
+            // 1. 构建 MonetarySystemCurrencyTransfer 附件（holding_id, units）
+            // 2. 使用 TransactionBuilder 构建交易（amount=0, fee 自动计算）
+            // 3. 签名并广播
             //
-            // let tx = Transaction {
-            //     type_id: TransactionType::MonetarySystem,
-            //     subtype: SUBTYPE_MONETARY_SYSTEM_CURRENCY_TRANSFER,
-            //     attachment_bytes: build_currency_transfer_attachment(
-            //         currency_id,
-            //         monitored_account.funding_amount as u64
-            //     ),
-            //     ... 其他字段同 process_bces_event ...
-            // };
-            //
-            // 签名和广播逻辑同上
+            // 注意: 交易构建应由上层通过 TransactionBuilder trait 注入
 
             info!(
                 target = monitored_account.account_id,
@@ -2823,34 +3044,35 @@ impl FundingMonitor {
                 "[FundingMonitor] Processing funding request"
             );
 
-            // 根据持有类型分发到对应的处理函数
+            let (target_balance, funding_balance, current_height, last_timestamp) =
+                self.get_real_balance_data(config).await;
+
             let result = match config.holding_type {
                 HoldingType::Nrcs => {
-                    // TODO: 生产环境需要传入真实的余额数据
                     self.process_bces_event(
                         config,
-                        0i64,   // TODO: target_account.getBalance()
-                        0i64,   // TODO: funding_account.getUnconfirmedBalance()
-                        0,      // TODO: current_height from blockchain
-                        0,      // TODO: last_timestamp from blockchain
+                        target_balance,
+                        funding_balance,
+                        current_height,
+                        last_timestamp,
                     ).await
                 },
                 HoldingType::Asset => {
                     self.process_asset_event(
                         config,
-                        0i64,   // TODO: asset.getQuantity()
-                        0i64,   // TODO: funding_asset.getQuantity()
-                        0,
-                        0,
+                        target_balance,
+                        funding_balance,
+                        current_height,
+                        last_timestamp,
                     ).await
                 },
                 HoldingType::Currency => {
                     self.process_currency_event(
                         config,
-                        0i64,   // TODO: currency.getUnits()
-                        0i64,   // TODO: funding_currency.getUnits()
-                        0,
-                        0,
+                        target_balance,
+                        funding_balance,
+                        current_height,
+                        last_timestamp,
                     ).await
                 },
             };

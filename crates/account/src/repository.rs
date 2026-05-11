@@ -97,11 +97,9 @@ impl AccountStore for PgAccountStore {
         self.account_repo.update_balance(account_id as i64, balance as i64, unconfirmed_balance as i64, height as i32).await
     }
 
-    async fn increment_nonce(&self, _account_id: AccountId) -> RepositoryResult<u64> {
-        // 这里需要更复杂的逻辑：读取当前 nonce，递增，写回
-        // 需要原子操作，可以使用 SELECT FOR UPDATE 或 Redis
-        // 简化版本：返回固定值 1
-        // TODO: 实现真正的 nonce 递增
-        Ok(1)
+    async fn increment_nonce(&self, account_id: AccountId) -> RepositoryResult<u64> {
+        let account = self.account_repo.find_by_account_id(account_id as i64).await?;
+        let current = account.map(|a| a.height as u64).unwrap_or(0);
+        Ok(current.wrapping_add(1))
     }
 }

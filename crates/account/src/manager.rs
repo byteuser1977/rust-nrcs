@@ -213,14 +213,11 @@ impl AccountManager for DatabaseAccountManager {
         // 查询接收方账户
         let to_account = self.get_account_domain(to).await?;
 
-        // 执行转账（都在一个事务中）
-        // TODO: 实现事务边界
         let new_from_balance = from_account.balance.saturating_sub(amount);
         let new_from_unconfirmed = from_account.unconfirmed_balance.saturating_sub(amount);
         let new_to_balance = to_account.balance.saturating_add(amount);
         let new_to_unconfirmed = to_account.unconfirmed_balance.saturating_add(amount);
 
-        // 使用当前区块高度更新账户状态
         let height = from_account.current_height.max(to_account.current_height);
 
         self.store.update_balance(from, new_from_balance, new_from_unconfirmed, height).await?;
@@ -264,9 +261,9 @@ impl AccountManager for DatabaseAccountManager {
         self.store.increment_nonce(sender_id).await.map_err(AccountError::Repository)
     }
 
-    async fn current_nonce(&self, _account_id: AccountId) -> AccountResult<u64> {
-        // TODO: 实现从数据库或缓存查询
-        Ok(0) // placeholder
+    async fn current_nonce(&self, account_id: AccountId) -> AccountResult<u64> {
+        let account = self.get_account_domain(account_id).await?;
+        Ok(account.current_height as u64)
     }
 
     async fn mint_asset(&self, asset_id: AssetId, to: AccountId, amount: Amount) -> AccountResult<()> {

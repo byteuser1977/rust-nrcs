@@ -106,12 +106,14 @@ impl TransactionDaemon {
     ///
     /// 注意：当前实现返回空列表，实际集成时需要从 tx-engine 的内存池获取
     async fn get_pending_transactions() -> Vec<Value> {
-        // TODO: 实际实现应该从以下来源获取：
-        // 1. tx-engine 模块的内存池 (MemPool)
+        // 对照 Java NRCS: TransactionProcessor.getAllUnconfirmedTransactions()
+        // 数据来源:
+        // 1. tx-engine 模块的内存池 (Mempool)
         // 2. 数据库中未确认的交易
         // 3. 本地创建但未广播的交易
-
-        // 当前返回空列表作为占位符
+        //
+        // 注意: 完整实现需要集成 tx-engine 的 Mempool，
+        // 当前返回空列表，待上层注入 TransactionProcessor 后替换
         Vec::new()
     }
 

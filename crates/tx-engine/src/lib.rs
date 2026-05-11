@@ -53,6 +53,11 @@ pub use broadcast::{
     TxBroadcaster, BroadcastConfig, BroadcastError, BroadcastResult,
     BroadcastedTx, TxConfirmationTracker,
 };
+pub use extensions::listener::{
+    TransactionEvent, TransactionEventData, TransactionListener,
+    EventDispatcher, TransactionProcessEvent,
+    add_listener, add_process_listener, notify_listeners, notify_process_event, get_dispatcher,
+};
 pub use ledger::{
     LedgerEvent, LedgerHolding, AccountLedger, LedgerEntry,
     LedgerConfig, AccountLedgerEvent,

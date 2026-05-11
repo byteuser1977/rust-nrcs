@@ -180,12 +180,14 @@ impl BundlerRateDaemon {
     ///
     /// 对应 NRCS Java: 从区块链或配置获取当前的 bundler rate 信息
     async fn get_current_rates(_peers: &Arc<Peers>) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
-        // TODO: 实际实现应该从以下来源获取：
+        // 对照 Java NRCS: 从区块链状态获取 bundler rate 信息
+        // 数据来源优先级:
         // 1. 区块链状态（Hub 表中的 minFeePerByte 等）
         // 2. 配置文件中的默认值
         // 3. 运行时动态计算的值
-
-        // 当前返回空对象，实际集成时需要填充真实数据
+        //
+        // 注意: 完整实现需要集成 ORM 的 HubRepository，
+        // 当前返回默认值，待上层注入 Repository 后替换
         Ok(serde_json::json!({
             "minFeePerByte": 0,
             "bundlers": []

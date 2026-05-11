@@ -69,6 +69,12 @@ pub struct Peer {
     pub is_old_version: bool,
     /// 是否分享地址
     pub share_address: bool,
+    /// 禁用的 API 列表
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled_apis: Option<Vec<String>>,
+    /// 区块链状态 (0=UP_TO_DATE, 1=DOWNLOADING, 2=FORK, 3=LIGHT_CLIENT)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blockchain_state: Option<u8>,
     /// 下载流量
     pub downloaded_volume: u64,
     /// 上传流量
@@ -112,6 +118,8 @@ impl Peer {
             blacklisting_cause: None,
             is_old_version: false,
             share_address: true,
+            disabled_apis: None,
+            blockchain_state: None,
             downloaded_volume: 0,
             uploaded_volume: 0,
             port: address.port(),
@@ -1294,6 +1302,8 @@ mod tests {
             blacklisting_cause: None,
             is_old_version: false,
             share_address: true,
+            disabled_apis: None,
+            blockchain_state: None,
             downloaded_volume: 0,
             uploaded_volume: 0,
             port: 8080,

@@ -74,11 +74,34 @@ pub async fn get_blocks(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let start_time = Instant::now();
     
-    let _first_index = req.first_index.unwrap_or(0) as i64;
-    let _last_index = req.last_index.unwrap_or(99) as i64;
-    
-    // TODO: 实现分页查询
-    let blocks: Vec<serde_json::Value> = vec![];
+    let first_index = req.first_index.unwrap_or(0) as i32;
+    let last_index = req.last_index.unwrap_or(99) as i32;
+
+    let block_models = _state.block_repo
+        .find_range(first_index, last_index)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let blocks: Vec<serde_json::Value> = block_models.iter()
+        .filter_map(|m| {
+            m.to_domain().ok().map(|b| {
+                let hash = b.compute_hash().unwrap_or(Hash256([0u8; 32]));
+                serde_json::json!({
+                    "block": b.id.map(|id| id.to_string()).unwrap_or_default(),
+                    "height": b.height,
+                    "generator": b.generator_id.map(|id| id.to_string()).unwrap_or_default(),
+                    "timestamp": b.timestamp,
+                    "numberOfTransactions": b.transactions.len(),
+                    "totalAmountNQT": b.total_amount.to_string(),
+                    "totalFeeNQT": b.total_fee.to_string(),
+                    "payloadLength": b.payload_length,
+                    "blockSignature": hex::encode(b.block_signature.0),
+                    "previousBlock": b.previous_block_id.map(|id| id.to_string()),
+                    "fullHash": hex::encode(hash.0),
+                })
+            })
+        })
+        .collect();
     
     let processing_time = start_time.elapsed().as_millis() as u32;
     

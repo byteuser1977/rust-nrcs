@@ -19,6 +19,9 @@ pub mod transaction;
 pub mod connection;
 /// 事件分发系统（用于账户多表联动）
 pub mod events;
+/// 测试数据库池工具
+#[cfg(test)]
+pub mod test_pool;
 
 pub use models::*;
 pub use repository::*;

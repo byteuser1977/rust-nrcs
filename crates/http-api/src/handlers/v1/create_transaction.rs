@@ -8,6 +8,7 @@ use serde_json::json;
 use crate::error::ApiError;
 use crate::request_handler::{ApiRequest, RsRespBuilder, RsRespWithData};
 use crate::state::ApiState;
+use crate::parameter_parser::ParameterParser;
 
 pub struct CommonTransactionParams {
     pub secret_phrase: Option<String>,
@@ -16,12 +17,21 @@ pub struct CommonTransactionParams {
     pub deadline: u16,
     pub broadcast: bool,
     pub referenced_transaction_full_hash: Option<String>,
+
+    // 附件参数（对照 Java: CreateTransactionCallBuilder）
     pub message: Option<String>,
     pub message_is_text: Option<bool>,
     pub encrypted_message_data: Option<String>,
     pub encrypted_message_nonce: Option<String>,
+    pub encrypt_to_self_message_data: Option<String>,
+    pub encrypt_to_self_message_nonce: Option<String>,
+    pub recipient_public_key_announcement: Option<String>,
+
+    // Phasing 参数（对照 Java: AppendixPhasing）
     pub phased: bool,
     pub phasing_params: Option<serde_json::Value>,
+
+    // EC 区块参数（对照 Java: ecBlockId/ecBlockHeight）
     pub ec_block_id: Option<u64>,
     pub ec_block_height: Option<u32>,
     pub timestamp: Option<u32>,
@@ -57,16 +67,22 @@ impl CreateTransactionHelper {
         };
 
         let referenced_transaction_full_hash = req.get_string("referencedTransactionFullHash");
+
         let message = req.get_string("message");
         let message_is_text = req.get_string("messageIsText")
             .map(|v| v.eq_ignore_ascii_case("true"));
         let encrypted_message_data = req.get_string("encryptedMessageData");
         let encrypted_message_nonce = req.get_string("encryptedMessageNonce");
+        let encrypt_to_self_message_data = req.get_string("encryptToSelfMessageData");
+        let encrypt_to_self_message_nonce = req.get_string("encryptToSelfMessageNonce");
+        let recipient_public_key_announcement = req.get_string("recipientPublicKey");
+
         let phased = req.get_string("phased")
             .map(|v| v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
-        let phasing_params = req.get_string("phasingParams")
-            .and_then(|s| serde_json::from_str(&s).ok());
+
+        let phasing_params = ParameterParser::parse_phasing_params(req, None)?;
+
         let ec_block_height = req.get_string("ecBlockHeight")
             .and_then(|s| s.parse::<u32>().ok());
         let ec_block_id = req.get_string("ecBlockId")
@@ -85,6 +101,9 @@ impl CreateTransactionHelper {
             message_is_text,
             encrypted_message_data,
             encrypted_message_nonce,
+            encrypt_to_self_message_data,
+            encrypt_to_self_message_nonce,
+            recipient_public_key_announcement,
             phased,
             phasing_params,
             ec_block_id,
@@ -171,9 +190,59 @@ impl CreateTransactionHelper {
         if params.encrypted_message_data.is_some() {
             tx.has_encrypted_message = true;
         }
+        if params.encrypt_to_self_message_data.is_some() {
+            tx.has_encrypttoself_message = true;
+        }
+        if params.recipient_public_key_announcement.is_some() {
+            tx.has_public_key_announcement = true;
+        }
 
         if let Some(ref att) = attachment_json {
             tx.attachment_json = att.as_object().cloned();
+        }
+
+        if let Some(ref phasing) = params.phasing_params {
+            if tx.attachment_json.is_none() {
+                tx.attachment_json = Some(serde_json::Map::new());
+            }
+            if let Some(ref mut att) = tx.attachment_json {
+                att.insert("phasing".to_string(), phasing.clone());
+            }
+        }
+
+        if params.message.is_some() || params.encrypted_message_data.is_some() {
+            if tx.attachment_json.is_none() {
+                tx.attachment_json = Some(serde_json::Map::new());
+            }
+            if let Some(ref mut att) = tx.attachment_json {
+                if let Some(ref msg) = params.message {
+                    let mut message_obj = serde_json::Map::new();
+                    message_obj.insert("message".to_string(), json!(msg));
+                    if let Some(is_text) = params.message_is_text {
+                        message_obj.insert("messageIsText".to_string(), json!(is_text));
+                    }
+                    att.insert("message".to_string(), json!(message_obj));
+                }
+                if let Some(ref data) = params.encrypted_message_data {
+                    let mut enc_msg_obj = serde_json::Map::new();
+                    enc_msg_obj.insert("data".to_string(), json!(data));
+                    if let Some(ref nonce) = params.encrypted_message_nonce {
+                        enc_msg_obj.insert("nonce".to_string(), json!(nonce));
+                    }
+                    att.insert("encryptedMessage".to_string(), json!(enc_msg_obj));
+                }
+                if let Some(ref data) = params.encrypt_to_self_message_data {
+                    let mut enc_self_obj = serde_json::Map::new();
+                    enc_self_obj.insert("data".to_string(), json!(data));
+                    if let Some(ref nonce) = params.encrypt_to_self_message_nonce {
+                        enc_self_obj.insert("nonce".to_string(), json!(nonce));
+                    }
+                    att.insert("encryptToSelfMessage".to_string(), json!(enc_self_obj));
+                }
+                if let Some(ref pk_hex) = params.recipient_public_key_announcement {
+                    att.insert("recipientPublicKey".to_string(), json!(pk_hex));
+                }
+            }
         }
 
         let mut builder = RsRespBuilder::new();
@@ -459,9 +528,5 @@ fn transaction_to_json(tx: &Transaction) -> serde_json::Value {
 }
 
 fn format_account_rs(account_id: u64) -> String {
-    format!("NRCS-{}-{}-{}",
-        account_id % 10000,
-        (account_id / 10000) % 10000,
-        (account_id / 100000000) % 10000
-    )
+    common::convert::rs_account(account_id)
 }

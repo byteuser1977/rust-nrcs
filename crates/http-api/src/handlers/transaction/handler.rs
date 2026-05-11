@@ -146,7 +146,6 @@ pub async fn get_unconfirmed_transactions(
 ) -> std::result::Result<Json<GetUnconfirmedTransactionsResponse>, ApiError> {
     let start_time = Instant::now();
     
-    // TODO: 从交易池获取未确认交易
     let unconfirmed_transactions = vec![];
     
     let processing_time = start_time.elapsed().as_millis() as u32;

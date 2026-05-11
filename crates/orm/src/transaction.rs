@@ -41,11 +41,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_transaction_commit() {
-        // TODO: Add integration test with test database
+        let pool = crate::test_pool::create_test_pool().await;
+        if pool.is_none() {
+            return;
+        }
+        let pool = pool.unwrap();
+        let mut tx = pool.begin().await.expect("Failed to begin transaction");
+        sqlx::query("SELECT 1").execute(&mut tx).await.expect("Query failed");
+        tx.commit().await.expect("Failed to commit");
     }
 
     #[tokio::test]
     async fn test_transaction_rollback() {
-        // TODO: Add integration test with test database
+        let pool = crate::test_pool::create_test_pool().await;
+        if pool.is_none() {
+            return;
+        }
+        let pool = pool.unwrap();
+        let mut tx = pool.begin().await.expect("Failed to begin transaction");
+        sqlx::query("SELECT 1").execute(&mut tx).await.expect("Query failed");
+        tx.rollback().await.expect("Failed to rollback");
     }
 }
