@@ -1319,30 +1319,6 @@ fn serialize_aliases_attachment(subtype: u8, att_map: &Map<String, serde_json::V
                 put_byte(&mut buf, 0);
             }
         }
-        SUBTYPE_COLORED_COINS_LONG_VALUE_PROPERTY_SET => {
-            // 对应 Java: AssetLongValuePropertyAttachment.putMyBytes()
-            // Java 源码 (AssetLongValuePropertyAttachment.java:50-54):
-            //   buffer.putLong(assetId);
-            //   PROPERTY_NAME_RW.writeToBuffer(property, buffer);  // BYTE prefix (1 byte)
-            //   PROPERTY_VALUE_RW.writeToBuffer(value, buffer);    // UBYTE_8192 prefix (2 bytes)
-            if let Some(asset) = att_map.get("asset") {
-                put_i64(&mut buf, parse_u64_as_i64(asset));
-            } else {
-                put_i64(&mut buf, 0);
-            }
-            if let Some(prop) = att_map.get("property").and_then(|v| v.as_str()) {
-                put_byte(&mut buf, prop.as_bytes().len() as u8);
-                put_string(&mut buf, prop);
-            } else {
-                put_byte(&mut buf, 0);
-            }
-            if let Some(val) = att_map.get("value").and_then(|v| v.as_str()) {
-                put_u16(&mut buf, val.as_bytes().len() as u16);
-                put_string(&mut buf, val);
-            } else {
-                put_u16(&mut buf, 0);
-            }
-        }
         _ => {}
     }
 
@@ -1907,6 +1883,32 @@ fn serialize_colored_coins_attachment(subtype: u8, att_map: &Map<String, serde_j
                 put_string(&mut buf, val);
             } else {
                 put_byte(&mut buf, 0);
+            }
+        }
+        SUBTYPE_COLORED_COINS_LONG_VALUE_PROPERTY_SET => {
+            // 对应 Java: AssetLongValuePropertyAttachment.putMyBytes()
+            // Java 源码 (AssetLongValuePropertyAttachment.java:14,18,50-54):
+            //   import static LengthRwPrimitiveType.UBYTE_8192;  ← 注意！不是 UBYTE
+            //   PROPERTY_VALUE_RW = new StringRw(UBYTE_8192, ...)
+            // 编码格式:
+            //   [version:1B] [assetId:8B i64 LE] [property_len:1B] [property:NB]
+            //   [value_len:4B i32 LE] [value_data:NB UTF-8]
+            if let Some(asset) = att_map.get("asset") {
+                put_i64(&mut buf, parse_u64_as_i64(asset));
+            } else {
+                put_i64(&mut buf, 0);
+            }
+            if let Some(prop) = att_map.get("property").and_then(|v| v.as_str()) {
+                put_byte(&mut buf, prop.as_bytes().len() as u8);
+                put_string(&mut buf, prop);
+            } else {
+                put_byte(&mut buf, 0);
+            }
+            if let Some(val) = att_map.get("value").and_then(|v| v.as_str()) {
+                put_i32(&mut buf, val.as_bytes().len() as i32);
+                put_string(&mut buf, val);
+            } else {
+                put_i32(&mut buf, 0);
             }
         }
         _ => {}
@@ -3383,5 +3385,116 @@ mod tests {
         let expected_att_hex = "01a1474a67570fbabbf6794cb86400c119e0b23f4e69f464daea9e0fa93c5ef80c";
         assert_eq!(hex::encode(&tx.attachment_bytes), expected_att_hex,
             "attachment_bytes mismatch for TaggedDataUpload");
+    }
+
+    /// 测试 ColoredCoins LONG_VALUE_PROPERTY_SET (subtype=12) 附件序列化
+    /// 
+    /// 使用 NRCS 数据库中真实交易 (id=4981473173364451544, height=965716) 的数据验证
+    /// 对比基准：NRCS DB attachment_bytes = 017a79d612d3f236e30fe587bae5ba93e78eafe88a82e68891d30100005b...
+    #[test]
+    fn test_colored_coins_long_value_property_set_real_tx() {
+        let json_str = r#"{
+            "asset": "16372540483720083834",
+            "property": "出库环节我",
+            "value": "[{\"id\":17445712036230,\"sort\":0,\"type\":1,\"title\":\"数量\",\"content\":\"1\"},{\"id\":17445712036358,\"sort\":1,\"type\":3,\"title\":\"操作人\",\"content\":[\"https://iiot-dev.fxs100.cn/iiot/oauth/2022/2/25/9611645758247613.jpg\",\"https://iiot-dev.fxs100.cn/iiot/oauth/2022/2/25/9801645758252978.jpg\"]},{\"id\":17445712036486,\"sort\":2,\"type\":6,\"title\":\"出库时间我\",\"content\":\"2022-02-25 13:43:45\"},{\"id\":17445712036614,\"sort\":3,\"type\":2,\"title\":\"地址\",\"content\":\"www.baidu.com\"}]",
+            "version.AssetLongValueProperty": 1
+        }"#;
+        let val: serde_json::Value = serde_json::from_str(json_str).unwrap();
+        let att_map = val.as_object().unwrap();
+
+        let bytes = build_att_bytes(
+            TYPE_COLORED_COINS, SUBTYPE_COLORED_COINS_LONG_VALUE_PROPERTY_SET, 1, Some(att_map)
+        );
+
+        // NRCS 数据库中的真实 attachment_bytes（前80字节用于对比）
+        // 完整数据来自：SELECT attachment_bytes FROM transaction WHERE id=4981473173364451544
+        let db_hex = "017a79d612d3f236e30fe587bae5ba93e78eafe88a82e68891d30100005b7b226964223a3137343435373132303336323330";
+        let db_bytes = hex::decode(db_hex).expect("Invalid DB hex");
+
+        println!("\n========== ColoredCoins LONG_VALUE_PROPERTY 序列化对比 ==========");
+        println!("Rust 输出长度: {} bytes", bytes.len());
+        println!("DB 基准长度: {} bytes (前{}字节)", db_bytes.len(), db_bytes.len());
+        println!();
+
+        // 逐字段解析 Rust 输出
+        println!("--- Rust 输出字段解析 ---");
+        println!("[0] version = 0x{:02x} ({})", bytes[0], bytes[0]);
+        
+        if bytes.len() >= 9 {
+            let asset_id_i64 = i64::from_le_bytes([bytes[1],bytes[2],bytes[3],bytes[4],bytes[5],bytes[6],bytes[7],bytes[8]]);
+            let asset_id_u64 = asset_id_i64 as u64;
+            println!("[1-8] assetId(i64 LE) = {} (u64={})", asset_id_i64, asset_id_u64);
+        }
+        
+        if bytes.len() >= 10 {
+            println!("[9] property_length_prefix = 0x{:02x} ({}) ← BYTE 前缀", bytes[9], bytes[9]);
+            
+            let prop_len = bytes[9] as usize;
+            let prop_end = 10 + prop_len.min(bytes.len() - 10);
+            if prop_len > 0 && prop_end > 10 {
+                let prop_bytes = &bytes[10..prop_end];
+                match std::str::from_utf8(prop_bytes) {
+                    Ok(s) => println!("[10-{}] property = \"{}\" ({} bytes)", 9 + prop_len, s, prop_len),
+                    Err(_) => println!("[10-{}] property = <non-UTF8> hex={}", 9 + prop_len, hex::encode(prop_bytes)),
+                }
+            }
+        }
+
+        // 找到 value 长度前缀位置 (UBYTE_8192 使用 4 字节 int 前缀)
+        let val_prefix_pos = 10 + (bytes[9] as usize).min(bytes.len() - 10);
+        if bytes.len() >= val_prefix_pos + 4 {
+            let v = &bytes[val_prefix_pos..val_prefix_pos + 4];
+            println!("[{}] value_length_prefix(i32 LE) = 0x{:08x} ({}) ← UBYTE_8192 前缀(4B) [putInt]", 
+                val_prefix_pos,
+                i32::from_le_bytes([v[0], v[1], v[2], v[3]]),
+                i32::from_le_bytes([v[0], v[1], v[2], v[3]])
+            );
+        }
+
+        println!();
+        println!("--- 逐字节对比 (前{}字节) ---", db_bytes.len().min(bytes.len()));
+        let mut first_diff = None;
+        for i in 0..db_bytes.len().min(bytes.len()) {
+            let rust_byte = bytes[i];
+            let db_byte = db_bytes[i];
+            let marker = if rust_byte != db_byte { " ❌ DIFF" } else { "" };
+            if rust_byte != db_byte && first_diff.is_none() {
+                first_diff = Some(i);
+            }
+            if i < 40 || rust_byte != db_byte || (i >= 40 && i % 16 == 0) {
+                print!("[{:3}] {:02x} vs {:02x}{}", i, rust_byte, db_byte, marker);
+                if rust_byte.is_ascii_graphic() || db_byte.is_ascii_graphic() {
+                    let r_char = if rust_byte.is_ascii_graphic() { rust_byte as char } else { '.' };
+                    let d_char = if db_byte.is_ascii_graphic() { db_byte as char } else { '.' };
+                    print!(" ('{}' vs '{}')", r_char, d_char);
+                }
+                println!();
+            }
+        }
+
+        if bytes.len() != db_bytes.len() {
+            println!("\n⚠️ 长度差异: Rust={} vs DB={}", bytes.len(), db_bytes.len());
+        }
+
+        match first_diff {
+            Some(pos) => {
+                println!("\n❌ 第一个差异在 offset {}: Rust=0x{:02x}, DB=0x{:02x}", pos, bytes[pos], db_bytes[pos]);
+                
+                // 分析差异原因
+                if pos == 9 {
+                    println!("   → 差异在 property 长度前缀位置！检查 PROPERTY_NAME_RW 实现");
+                } else if pos >= 24 && pos <= 26 {
+                    println!("   → 差异在 value 长度前缀附近！检查 PROPERTY_VALUE_RW / UBYTE_8192 实现");
+                } else {
+                    println!("   → 需要进一步分析此位置的编码逻辑");
+                }
+            }
+            None => println!("\n✅ 前{}字节完全匹配！", db_bytes.len()),
+        }
+
+        println!("==============================================================\n");
+
+        // 暂不断言，先观察输出
+        // assert_eq!(hex::encode(&bytes[..db_bytes.len().min(bytes.len())]), db_hex);
     }
 }

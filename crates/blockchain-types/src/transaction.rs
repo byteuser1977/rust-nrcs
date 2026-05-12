@@ -522,18 +522,6 @@ impl Transaction {
             .and_then(|a| a.as_object())
             .cloned();
 
-        // Debug: 打印 ColoredCoins subtype=12 的 attachment 原始数据
-        if type_byte == TYPE_COLORED_COINS && subtype == SUBTYPE_COLORED_COINS_LONG_VALUE_PROPERTY_SET {
-            tracing::warn!(
-                "[DEBUG] ColoredCoins LONG_VALUE_PROPERTY tx: attachmentBytes present={}, attachment keys={:?}",
-                obj.get("attachmentBytes").is_some(),
-                att_obj.as_ref().map(|m| m.keys().collect::<Vec<_>>())
-            );
-            if let Some(ref att) = att_obj {
-                tracing::warn!("[DEBUG] attachment full JSON: {}", serde_json::to_string(att).unwrap_or_default());
-            }
-        }
-
         // 使用二进制协议序列化 attachment_bytes（与 Java NRCS 一致）
         // 优先使用 JSON 中的 attachmentBytes 字段（hex 编码），否则从 attachment 对象生成
         let mut pruned_bytes: u32 = 0;
