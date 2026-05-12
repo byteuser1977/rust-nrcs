@@ -2258,6 +2258,62 @@ impl PgAccountAssetRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    /**
+     * 校验并修复 account_asset 表的数据一致性（PostgreSQL 版本）
+     *
+     * 检测条件：unconfirmed_quantity 应该 >= quantity
+     * 如果不满足，自动将 unconfirmed_quantity 修正为 quantity
+     *
+     * # 返回值
+     * 返回发现并修复的不一致记录数量
+     */
+    pub async fn verify_and_fix_consistency(&self) -> RepositoryResult<i64> {
+        let inconsistent = sqlx::query_as::<_, AccountAssetModel>(
+            r#"SELECT * FROM "account_asset" WHERE "latest" = TRUE AND "unconfirmed_quantity" < "quantity""#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+
+        let count = inconsistent.len() as i64;
+
+        if count > 0 {
+            tracing::warn!(
+                inconsistent_count = count,
+                "Found inconsistent account_asset records (PostgreSQL), fixing..."
+            );
+
+            for record in &inconsistent {
+                tracing::warn!(
+                    account = record.account_id,
+                    asset = record.asset_id,
+                    quantity = record.quantity,
+                    unconfirmed_quantity = record.unconfirmed_quantity,
+                    expected = record.quantity,
+                    "Fixing inconsistent account_asset record (PostgreSQL)"
+                );
+
+                sqlx::query(
+                    r#"UPDATE "account_asset" SET "unconfirmed_quantity" = $1 WHERE "db_id" = $2"#
+                )
+                .bind(record.quantity)
+                .bind(record.db_id)
+                .execute(&self.pool)
+                .await
+                .map_err(RepositoryError::DbError)?;
+            }
+
+            tracing::info!(
+                fixed_count = count,
+                "Fixed all inconsistent account_asset records (PostgreSQL)"
+            );
+        } else {
+            tracing::debug!("All account_asset records are consistent (PostgreSQL)");
+        }
+
+        Ok(count)
+    }
 }
 
 #[async_trait]
