@@ -275,7 +275,8 @@ pub async fn ensure_genesis(
         // 生成 Generator 的手续费扣除账本记录
         //
         // - event_type: 50 (TRANSACTION_FEE)
-        // - holding_type: 1 (UNCONFIRMED_NRCS_BALANCE)
+        // - holding_type: 1 (NRCS_BALANCE) ✅ 对齐 NRCS 数据库
+        // - holding_id: 0 (NRCS 数据库标准值)
         // - change: 负数表示扣减
         // - balance: 累计余额（反映所有交易的累计扣减）
         gen_cumulative_balance -= fee;
@@ -284,8 +285,8 @@ pub async fn ensure_genesis(
             account_id: generator_id,
             event_type: 50,
             event_id: tx_id,
-            holding_type: 1,
-            holding_id: None,
+            holding_type: 1,           // NRCS_BALANCE
+            holding_id: Some(0),       // ✅ 修复：NRCS 数据库中 holding_id=0（不是 NULL）
             change: -fee,
             balance: gen_cumulative_balance,
             block_id,
@@ -297,7 +298,8 @@ pub async fn ensure_genesis(
         // 生成 Generator 的金额扣除账本记录
         //
         // - event_type: 3 (ORDINARY_PAYMENT)
-        // - holding_type: 1 (UNCONFIRMED_NRCS_BALANCE)
+        // - holding_type: 1 (NRCS_BALANCE) ✅ 对齐 NRCS 数据库
+        // - holding_id: 0 (NRCS 数据库标准值)
         // - change: 负数表示扣减
         // - balance: 累计余额（包含本次 fee 和 amount 扣减）
         gen_cumulative_balance -= amount;
@@ -306,8 +308,8 @@ pub async fn ensure_genesis(
             account_id: generator_id,
             event_type: 3,
             event_id: tx_id,
-            holding_type: 1,
-            holding_id: None,
+            holding_type: 1,           // NRCS_BALANCE
+            holding_id: Some(0),       // ✅ 修复：NRCS 数据库中 holding_id=0（不是 NULL）
             change: -amount,
             balance: gen_cumulative_balance,
             block_id,
@@ -319,7 +321,8 @@ pub async fn ensure_genesis(
         // 生成 Recipient 的金额接收账本记录
         //
         // - event_type: 3 (ORDINARY_PAYMENT)
-        // - holding_type: 1 (UNCONFIRMED_NRCS_BALANCE)
+        // - holding_type: 1 (NRCS_BALANCE) ✅ 对齐 NRCS 数据库
+        // - holding_id: 0 (NRCS 数据库标准值)
         // - change: 正数表示增加
         // - balance: 接收者收到的金额
         let recipient_ledger = AccountLedgerModel {
@@ -327,8 +330,8 @@ pub async fn ensure_genesis(
             account_id: recipient_id,
             event_type: 3,
             event_id: tx_id,
-            holding_type: 1,
-            holding_id: None,
+            holding_type: 1,           // NRCS_BALANCE
+            holding_id: Some(0),       // ✅ 修复：NRCS 数据库中 holding_id=0（不是 NULL）
             change: amount,
             balance: amount,
             block_id,

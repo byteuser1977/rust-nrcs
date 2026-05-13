@@ -95,58 +95,11 @@
       </el-dropdown>
     </div>
 
-    <!-- Send Money Dialog -->
-    <el-dialog v-model="showSendMoneyDialog" :title="'Send NRC'" width="480px" destroy-on-close class="nrcs-dialog">
-      <el-form :model="sendMoneyForm" label-position="top" label-width="100px">
-        <el-form-item label="Recipient">
-          <el-input v-model="sendMoneyForm.recipient" placeholder="NRCS address or ID" />
-        </el-form-item>
-        <el-form-item label="Amount">
-          <el-input v-model="sendMoneyForm.amountNQT" placeholder="0.00">
-            <template #append>NRC</template>
-          </el-input>
-        </el-form-item>
-        <el-form-item label="Fee">
-          <el-input v-model="sendMoneyForm.feeNQT" placeholder="1">
-            <template #append>NRC</template>
-          </el-input>
-        </el-form-item>
-        <el-form-item label="Deadline">
-          <el-input-number v-model="sendMoneyForm.deadline" :min="1" :max="1440" controls-position="right" />
-        </el-form-item>
-        <el-form-item label="Secret Phrase">
-          <el-input v-model="sendMoneyForm.secretPhrase" type="password" show-password />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showSendMoneyDialog = false">Cancel</el-button>
-        <el-button type="primary" @click="handleSendMoney" :loading="isSending">Send</el-button>
-      </template>
-    </el-dialog>
+    <!-- Send Money Modal -->
+    <SendMoneyModal v-model:visible="showSendMoneyDialog" @success="onSendMoneySuccess" />
 
-    <!-- Send Message Dialog -->
-    <el-dialog v-model="showSendMessageDialog" :title="'Send Message'" width="480px" destroy-on-close class="nrcs-dialog">
-      <el-form :model="sendMessageForm" label-position="top" label-width="100px">
-        <el-form-item label="Recipient">
-          <el-input v-model="sendMessageForm.recipient" placeholder="NRCS address or ID" />
-        </el-form-item>
-        <el-form-item label="Message">
-          <el-input v-model="sendMessageForm.message" type="textarea" :rows="4" placeholder="Enter message..." />
-        </el-form-item>
-        <el-form-item label="Fee">
-          <el-input v-model="sendMessageForm.feeNQT" placeholder="1">
-            <template #append>NRC</template>
-          </el-input>
-        </el-form-item>
-        <el-form-item label="Secret Phrase">
-          <el-input v-model="sendMessageForm.secretPhrase" type="password" show-password />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showSendMessageDialog = false">Cancel</el-button>
-        <el-button type="primary" @click="handleSendMessage" :loading="isSendingMessage">Send</el-button>
-      </template>
-    </el-dialog>
+    <!-- Send Message Modal -->
+    <SendMessageModal v-model:visible="showSendMessageDialog" @success="onSendMessageSuccess" />
 
     <!-- Notifications Drawer -->
     <el-drawer v-model="showNotifications" title="Notifications" direction="rtl" size="380px">
@@ -160,9 +113,10 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
-import { nrcsApi } from '@/api/modules/nrcs.api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Breadcrumb from './Breadcrumb.vue'
+import SendMoneyModal from '@/components/modals/SendMoneyModal.vue'
+import SendMessageModal from '@/components/modals/SendMessageModal.vue'
 
 interface Props { showBreadcrumb?: boolean }
 withDefaults(defineProps<Props>(), { showBreadcrumb: true })
@@ -177,12 +131,16 @@ const notificationCount = ref(0)
 const notifications = ref<any[]>([])
 const showSendMoneyDialog = ref(false)
 const showSendMessageDialog = ref(false)
-const showNotifications = ref(false)
-const isSending = ref(false)
-const isSendingMessage = ref(false)
 
-const sendMoneyForm = ref({ recipient: '', amountNQT: '', feeNQT: '1', deadline: 1440, secretPhrase: '' })
-const sendMessageForm = ref({ recipient: '', message: '', feeNQT: '1', secretPhrase: '' })
+const onSendMoneySuccess = () => {
+  ElMessage.success(t('sendMoney.success'))
+}
+
+const onSendMessageSuccess = () => {
+  ElMessage.success(t('sendMessage.success'))
+}
+
+const showNotifications = ref(false)
 
 const breadcrumbRoutes = computed(() => {
   return router.currentRoute.value.matched.map(r => ({ path: r.path, title: (r.meta?.title as string) || '' }))
@@ -207,47 +165,13 @@ function handleSettingsCommand(cmd: string) {
 async function handleLogoutCommand(cmd: string) {
   const confirms: Record<string, () => Promise<boolean>> = {
     logout: () => ElMessageBox.confirm('Are you sure you want to log out?', 'Confirm', { type: 'warning' }).then(() => true).catch(() => false),
-    'logout-stop-forging': () => ElMessageBox.confirm('Log out and stop forging?', 'Confirm', { type: 'warning' }).then(async () => { try { await nrcsApi.stopForging() } catch {} return true }).catch(() => false),
+    'logout-stop-forging': () => ElMessageBox.confirm('Log out and stop forging?', 'Confirm', { type: 'warning' }).then(() => true).catch(() => false),
     'logout-clear-data': () => ElMessageBox.confirm('This will clear all user data. Continue?', 'Warning', { type: 'warning' }).then(() => true).catch(() => false)
   }
   if (await confirms[cmd]()) {
     localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token'); localStorage.removeItem('nrcs_account_rs'); localStorage.removeItem('nrcs_balance_nqt'); localStorage.removeItem('nrcs_secret_phrase')
     await router.push('/login')
   }
-}
-
-async function handleSendMoney() {
-  if (!sendMoneyForm.value.recipient || !sendMoneyForm.value.amountNQT || !sendMoneyForm.value.secretPhrase) { ElMessage.warning('Please fill all fields'); return }
-  try {
-    isSending.value = true
-    await nrcsApi.sendMoney({
-      secretPhrase: sendMoneyForm.value.secretPhrase,
-      recipient: sendMoneyForm.value.recipient,
-      amountNQT: String(Math.round(parseFloat(sendMoneyForm.value.amountNQT) * 100000000)),
-      feeNQT: String(Math.round(parseFloat(sendMoneyForm.value.feeNQT) * 100000000)),
-      deadline: sendMoneyForm.value.deadline
-    })
-    ElMessage.success('Transaction sent successfully')
-    showSendMoneyDialog.value = false
-    sendMoneyForm.value = { recipient: '', amountNQT: '', feeNQT: '1', deadline: 1440, secretPhrase: '' }
-  } catch (e: any) { ElMessage.error(e.message || 'Failed to send') }
-  finally { isSending.value = false }
-}
-
-async function handleSendMessage() {
-  if (!sendMessageForm.value.recipient || !sendMessageForm.value.message || !sendMessageForm.value.secretPhrase) { ElMessage.warning('Please fill all fields'); return }
-  try {
-    isSendingMessage.value = true
-    await nrcsApi.sendMessage({
-      secretPhrase: sendMessageForm.value.secretPhrase, recipient: sendMessageForm.value.recipient,
-      message: sendMessageForm.value.message, messageIsText: true,
-      feeNQT: String(Math.round(parseFloat(sendMessageForm.value.feeNQT) * 100000000)), deadline: 1440
-    })
-    ElMessage.success('Message sent successfully')
-    showSendMessageDialog.value = false
-    sendMessageForm.value = { recipient: '', message: '', feeNQT: '1', secretPhrase: '' }
-  } catch (e: any) { ElMessage.error(e.message || 'Failed to send') }
-  finally { isSendingMessage.value = false }
 }
 </script>
 

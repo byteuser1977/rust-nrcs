@@ -433,6 +433,70 @@ export const nrcsApi = {
     return nrcsPost<any>('issueCurrency', data)
   },
 
+  orderCurrency(data: { secretPhrase: string; currency: string; unitsQNT: string; rateNQT: string; offerType: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('exchangeCurrency', data)
+  },
+
+  transferCurrency(data: { secretPhrase: string; currency: string; unitsQNT: string; recipient: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('transferCurrency', data)
+  },
+
+  getSellOffers(currency: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ offers: any[] }>('getSellOffers', { currency, firstIndex, lastIndex })
+  },
+
+  getBuyOffers(currency: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ offers: any[] }>('getBuyOffers', { currency, firstIndex, lastIndex })
+  },
+
+  getExchanges(currency?: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ exchanges: any[] }>('getExchanges', { currency, firstIndex, lastIndex })
+  },
+
+  getCurrencyTransfers(currency?: string, account?: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ transfers: any[] }>('getCurrencyTransfers', { currency, account, firstIndex, lastIndex })
+  },
+
+  transferAsset(data: { secretPhrase: string; asset: string; quantityQNT: string; recipient: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('transferAsset', data)
+  },
+
+  getAssetAccounts(asset: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ accountAssets: any[] }>('getAssetAccounts', { asset, firstIndex, lastIndex })
+  },
+
+  getAssetTransfers(asset?: string, account?: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ transfers: any[] }>('getAssetTransfers', { asset, account, firstIndex, lastIndex })
+  },
+
+  searchDGSGoods(query?: string, tag?: string, seller?: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ goods: NrcsDGSProduct[] }>('searchDGSGoods', { query, tag, seller, firstIndex, lastIndex })
+  },
+
+  dgsPriceChange(data: { secretPhrase: string; goods: string; priceNQT: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('dgsPriceChange', data)
+  },
+
+  dgsQuantityChange(data: { secretPhrase: string; goods: string; deltaQuantity: number; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('dgsQuantityChange', data)
+  },
+
+  dgsDelisting(data: { secretPhrase: string; goods: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('dgsDelisting', data)
+  },
+
+  dgsDelivery(data: { secretPhrase: string; purchase: string; goodsData?: string; goodsIsText?: boolean; discountNQT?: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('dgsDelivery', data)
+  },
+
+  dgsFeedback(data: { secretPhrase: string; purchase: string; message?: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('dgsFeedback', data)
+  },
+
+  dgsRefund(data: { secretPhrase: string; purchase: string; refundNQT?: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('dgsRefund', data)
+  },
+
   getLastExchanges(currencyIds?: string) {
     return nrcsGet<{ exchanges: any[] }>('getLastExchanges', { currencyIds })
   },

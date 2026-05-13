@@ -104,6 +104,22 @@ pub trait AccountAssetRepository: Repository<AccountAssetModel> {
     async fn decrease_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
     // Unconfirmed quantity operations (for mempool pre-deduction)
     async fn add_to_unconfirmed_quantity(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
+
+    /**
+     * 只更新已确认资产数量（不影响未确认数量）
+     *
+     * 对应 Java NRCS: Account.addToAssetBalanceQNT()
+     *
+     * 使用场景：
+     * - ASSET_TRANSFER (发送方): 只减少已确认数量，不改变 unconfirmed
+     * - ASSET_DELETE: 同上
+     *
+     * # 参数
+     * - `account_id`: 账户 ID（有符号 i64）
+     * - `asset_id`: 资产 ID（有符号 i64）
+     * - `delta`: 变化量（正数表示增加，负数表示减少）
+     */
+    async fn update_confirmed_quantity_only(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()>;
 }
 
 #[async_trait]

@@ -121,7 +121,14 @@ body {
 
   .el-card__body {
     padding: $space-xl;
+    background: transparent !important;
   }
+}
+
+// Global page container - dark background
+.page-container {
+  min-height: calc(100vh - #{$header-height} - 32px);
+  color: $text-primary;
 }
 
 .el-table {
@@ -129,12 +136,50 @@ body {
   --el-table-tr-bg-color: transparent;
   --el-table-header-bg-color: rgba(255, 255, 255, 0.02);
   --el-table-row-hover-bg-color: rgba($primary, 0.04);
-  --el-table-border-color: $border-default;
+  --el-table-border-color: $border-subtle;
   --el-table-text-color: $text-primary;
   --el-table-header-text-color: $text-muted;
   font-size: $font-size-sm;
   border-radius: $radius-md;
   overflow: hidden;
+  background: transparent !important;
+
+  // Outer border
+  border: 1px solid $border-subtle !important;
+
+  // Inner wrappers - force dark background
+  &::before,
+  .el-table__inner-wrapper::before {
+    background-color: transparent !important;
+  }
+
+  .el-table__inner-wrapper {
+    background: transparent !important;
+  }
+
+  .el-table__header-wrapper,
+  .el-table__body-wrapper,
+  .el-table__footer-wrapper {
+    background: transparent !important;
+
+    &::after {
+      background-color: $border-subtle !important;
+    }
+  }
+
+  // Empty state
+  .el-table__empty-block {
+    background: rgba(0, 0, 0, 0.15) !important;
+    color: $text-muted !important;
+  }
+
+  // Fixed columns shadow
+  .el-table-fixed-column--left,
+  .el-table-fixed-column--right {
+    &::before {
+      background-color: $border-subtle !important;
+    }
+  }
 
   th.el-table__cell {
     font-weight: 600;
@@ -143,20 +188,100 @@ body {
     letter-spacing: $letter-spacing-wide;
     color: $text-muted;
     background: rgba(255, 255, 255, 0.02) !important;
-    border-bottom: 1px solid $border-default;
+    border-bottom: 1px solid $border-subtle !important;
   }
 
   td.el-table__cell {
-    border-bottom: 1px solid $border-default;
+    border-bottom: 1px solid rgba($border-default, 0.4) !important;
     transition: background $duration-fast ease;
+    background: transparent !important;
   }
 
   tr.el-table__row {
     transition: all $duration-fast ease;
+    background: transparent !important;
+
+    &:hover > td {
+      background: rgba($primary, 0.04) !important;
+      border-bottom-color: rgba($primary, 0.15) !important;
+    }
+
+    &.striped > td,
+    &:nth-child(even) > td {
+      background: rgba(255, 255, 255, 0.01) !important;
+    }
+
+    // Last row - no bottom border
+    &:last-child > td {
+      border-bottom: none !important;
+    }
+  }
   }
 
   .el-empty__description p {
     color: $text-muted;
+  }
+
+  // Pagination inside table footer
+  .el-pagination {
+    .btn-prev,
+    .btn-next,
+    li {
+      background: $bg-elevated;
+      color: $text-secondary;
+
+      &.is-active,
+      &:hover {
+        color: $primary;
+        background: rgba($primary, 0.08);
+      }
+    }
+  }
+}
+
+// Pagination - dark theme
+.el-pagination {
+  --el-pagination-button-bg-color: $bg-elevated;
+  --el-pagination-hover-color: $primary;
+
+  .btn-prev,
+  .btn-next {
+    background: $bg-elevated !important;
+    color: $text-secondary !important;
+    border-radius: $radius-md;
+
+    &:hover {
+      color: $primary !important;
+      background: rgba($primary, 0.08) !important;
+    }
+  }
+
+  li {
+    background: $bg-elevated !important;
+    color: $text-secondary !important;
+    border-radius: $radius-md;
+    min-width: 32px;
+
+    &.is-active {
+      color: $primary !important;
+      font-weight: 700;
+      background: rgba($primary, 0.12) !important;
+    }
+
+    &:hover {
+      color: $primary !important;
+      background: rgba($primary, 0.08) !important;
+    }
+  }
+
+  .el-pagination__total,
+  .el-pagination__jump {
+    color: $text-secondary;
+  }
+
+  .el-input__wrapper {
+    background: $bg-elevated !important;
+    box-shadow: 0 0 0 1px $border-default inset !important;
   }
 }
 
@@ -316,6 +441,201 @@ body {
 
   .el-alert__title {
     font-size: $font-size-sm;
+  }
+}
+
+// Form components
+.el-form {
+  .el-form-item__label {
+    color: $text-secondary;
+    font-weight: 500;
+    font-size: $font-size-sm;
+  }
+
+  .el-form-item__error {
+    color: $danger;
+  }
+}
+
+.el-form-item {
+  margin-bottom: $space-md;
+
+  &.is-error {
+    .el-input__wrapper,
+    .el-textarea__inner {
+      border-color: $danger !important;
+      box-shadow: 0 0 0 1px rgba($danger, 0.3) !important;
+    }
+  }
+}
+
+// Select dropdown
+.el-select-dropdown {
+  border-radius: $radius-lg !important;
+  border: 1px solid $border-default !important;
+  background: linear-gradient(180deg, $surface-700, $surface-800) !important;
+  box-shadow: $shadow-lg !important;
+  backdrop-filter: blur(16px);
+
+  .el-select-dropdown__item {
+    color: $text-secondary;
+    font-size: $font-size-sm;
+    transition: all $duration-fast ease;
+
+    &:hover {
+      background: $bg-hover !important;
+      color: $primary !important;
+    }
+
+    &.is-selected {
+      color: $primary !important;
+      font-weight: 600;
+    }
+  }
+}
+
+// Popover
+.el-popover {
+  border-radius: $radius-lg !important;
+  border: 1px solid $border-default !important;
+  background: linear-gradient(135deg, $surface-800, $surface-900) !important;
+  box-shadow: $shadow-lg !important;
+  backdrop-filter: blur(20px);
+  color: $text-primary;
+}
+
+// Message Box (confirm dialogs)
+.el-message-box {
+  border-radius: $radius-xl !important;
+  border: 1px solid $border-default !important;
+  background: linear-gradient(135deg, $surface-800, $surface-900) !important;
+  box-shadow: $shadow-lg, 0 0 60px rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px);
+
+  .el-message-box__title {
+    color: $text-primary;
+    font-weight: 600;
+  }
+
+  .el-message-box__message {
+    color: $text-secondary;
+  }
+
+  .el-message-box__btns {
+    .el-button--primary {
+      background: $primary;
+      border-color: $primary;
+    }
+  }
+}
+
+// Notification
+.el-notification {
+  border-radius: $radius-lg !important;
+  border: 1px solid $border-default !important;
+  background: linear-gradient(135deg, $surface-800, $surface-900) !important;
+  box-shadow: $shadow-lg !important;
+  backdrop-filter: blur(12px);
+
+  .el-notification__title {
+    color: $text-primary;
+  }
+
+  .el-notification__content {
+    color: $text-secondary;
+  }
+}
+
+// Message (toast)
+.el-message {
+  border-radius: $radius-lg !important;
+  border: 1px solid $border-default !important;
+  background: linear-gradient(135deg, $surface-700, $surface-800) !important;
+  box-shadow: $shadow-lg !important;
+  backdrop-filter: blur(12px);
+  padding: $space-md $space-lg;
+
+  .el-message__content {
+    color: $text-primary;
+    font-weight: 500;
+  }
+
+  &--success { border-left: 3px solid $success; }
+  &--warning { border-left: 3px solid $warning; }
+  &--error { border-left: 3px solid $danger; }
+  &--info { border-left: 3px solid $info; }
+}
+
+// Textarea
+.el-textarea__inner {
+  background: rgba(26, 34, 52, 0.7) !important;
+  color: $text-primary !important;
+  border-radius: $radius-md !important;
+  border: 1px solid $border-default !important;
+
+  &:focus {
+    border-color: $primary !important;
+    box-shadow: 0 0 0 1px $primary-glow !important;
+  }
+
+  &::placeholder {
+    color: $text-muted;
+  }
+}
+
+// Checkbox & Radio
+.el-checkbox,
+.el-radio {
+  color: $text-secondary;
+
+  .el-checkbox__label,
+  .el-radio__label {
+    color: $text-secondary;
+    font-size: $font-size-sm;
+  }
+
+  .el-checkbox__input.is-checked + .el-checkbox__label,
+  .el-radio__input.is-checked + .el-radio__label {
+    color: $primary;
+  }
+}
+
+// Switch
+.el-switch {
+  .el-switch__core {
+    border: 1px solid $border-default;
+    background: $bg-elevated;
+  }
+
+  &.is-checked .el-switch__core {
+    background: $primary;
+    border-color: $primary;
+  }
+}
+
+// Slider
+.el-slider {
+  .el-slider__runway {
+    background: $border-default;
+  }
+
+  .el-slider__bar {
+    background: $primary;
+  }
+
+  .el-slider__button {
+    border: 2px solid $primary;
+  }
+}
+
+// Progress
+.el-progress {
+  .el-progress-bar__outer {
+    background: rgba($border-default, 0.5);
+  }
+
+  .el-progress-bar__inner {
+    background: linear-gradient(90deg, $primary, $primary-light);
   }
 }
 

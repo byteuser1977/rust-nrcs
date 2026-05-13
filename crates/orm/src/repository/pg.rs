@@ -2515,6 +2515,51 @@ impl AccountAssetRepository for PgAccountAssetRepository {
 
         Ok(())
     }
+
+    /**
+     * 只更新已确认资产数量（不影响未确认数量）
+     *
+     * 对应 Java NRCS: Account.addToAssetBalanceQNT()
+     *
+     * 使用场景：
+     * - ASSET_TRANSFER (发送方): applyAttachment 阶段只更新 quantity
+     * - ASSET_DELETE: 同上
+     *
+     * 与 decrease_quantity() 的区别：
+     * - decrease_quantity(): 同时更新 quantity 和 unconfirmed_quantity
+     * - update_confirmed_quantity_only(): 只更新 quantity，保持 unconfirmed 不变
+     */
+    async fn update_confirmed_quantity_only(&self, account_id: i64, asset_id: i64, delta: i64) -> RepositoryResult<()> {
+        let result = sqlx::query(
+            r#"
+            UPDATE "account_asset"
+            SET "quantity" = "quantity" + $1, "latest" = TRUE
+            WHERE "account_id" = $2 AND "asset_id" = $3 AND "quantity" + $1 >= 0
+            "#,
+        )
+        .bind(delta)
+        .bind(account_id)
+        .bind(asset_id)
+        .execute(&self.pool)
+        .await
+        .map_err(RepositoryError::DbError)?;
+
+        if result.rows_affected() == 0 {
+            return Err(RepositoryError::Validation(format!(
+                "Insufficient confirmed asset balance or record not found: account={}, asset={}, delta={}",
+                account_id, asset_id, delta
+            )));
+        }
+
+        tracing::debug!(
+            account = account_id,
+            asset = asset_id,
+            delta = delta,
+            "Updated confirmed asset quantity only (unconfirmed unchanged)"
+        );
+
+        Ok(())
+    }
 }
 
 #[async_trait]
