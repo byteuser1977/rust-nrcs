@@ -1,5 +1,5 @@
 import type { ApiResponse, User, LoginCredentials, RegisterCredentials } from '@/types'
-import { post, get } from '../client'
+import { post, get, put } from '../client'
 
 /**
  * 账户相关 API 模块

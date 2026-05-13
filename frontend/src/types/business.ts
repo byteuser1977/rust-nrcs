@@ -1,5 +1,138 @@
 import type { UserRole, TxStatus, ChainId } from './enums'
 
+export interface UserInfo {
+  id: string
+  name: string
+  email: string
+  address: string
+  role: UserRole
+  avatar?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface LoginResponse {
+  token: string
+  user: UserInfo
+  expires_at: string
+}
+
+export interface RegisterRequest {
+  name: string
+  email: string
+  address: string
+  signature: string
+}
+
+export interface UpdateProfileRequest {
+  name?: string
+  email?: string
+  avatar?: string
+}
+
+export interface Permission {
+  resource: string
+  actions: string[]
+}
+
+export interface NodeStatus {
+  status: 'online' | 'offline' | 'syncing'
+  version: string
+  uptime: number
+}
+
+export interface PeerInfo {
+  id: string
+  address: string
+  port: number
+  connected_at: string
+}
+
+export interface NodeMetrics {
+  cpu_usage: number
+  memory_usage: number
+  disk_usage: number
+  network_in: number
+  network_out: number
+  active_connections: number
+}
+
+export interface ChainInfo {
+  chain_id: string
+  network_name: string
+  block_height: number
+  block_hash: string
+  difficulty: string
+  transaction_count: number
+  peer_count: number
+}
+
+export interface SendTransactionRequest {
+  from: string
+  to: string
+  value: string
+  gas_limit?: number
+  gas_price?: string
+  data?: string
+  nonce?: number
+}
+
+export interface TransactionFilter {
+  from?: string
+  to?: string
+  status?: TxStatus
+  start_block?: number
+  end_block?: number
+  start_time?: number
+  end_time?: number
+}
+
+export interface PaginatedResponse<T> {
+  total: number
+  page: number
+  size: number
+  list: T[]
+}
+
+export interface FeeEstimate {
+  gas_limit: number
+  gas_price: string
+  total_fee: string
+}
+
+export interface TransactionReceipt {
+  hash: string
+  block_number: number
+  from: string
+  to: string | null
+  value: string
+  gas_used: number
+  status: TxStatus
+  contract_address?: string
+  logs: Array<{
+    address: string
+    topics: string[]
+    data: string
+  }>
+}
+
+export interface ContractDeployRequest {
+  bytecode: string
+  abi: any[]
+  constructor_args?: any[]
+  gas_limit?: number
+  value?: string
+}
+
+export interface ContractCallRequest {
+  address: string
+  abi: any[]
+  function_name: string
+  args?: any[]
+  gas_limit?: number
+  value?: string
+}
+
 /**
  * 用户信息
  */

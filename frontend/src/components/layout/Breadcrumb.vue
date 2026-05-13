@@ -3,7 +3,7 @@
     <el-breadcrumb-item
       v-for="(route, index) in routes"
       :key="index"
-      :to="index < routes.length - 1 ? { path: route.path } : null"
+      :to="index < routes.length - 1 ? { path: route.path } : undefined"
     >
       {{ route.title }}
     </el-breadcrumb-item>

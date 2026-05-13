@@ -1,113 +1,184 @@
 <template>
-  <el-container class="main-layout">
-    <!-- 顶部导航栏 -->
-    <Header :show-breadcrumb="true" class="layout-header" />
-
-    <el-container class="main-container">
-      <!-- 侧边栏 -->
-      <Sidebar
-        :routes="menuRoutes"
-        class="layout-sidebar"
-      />
-
-      <!-- 主内容区 -->
-      <el-main class="layout-main">
-        <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
-            <component :is="Component" />
-          </transition>
-        </router-view>
-      </el-main>
-    </el-container>
-  </el-container>
+  <div class="shell" :class="{ 'shell--nav-collapsed': isCollapsed }">
+    <Header :show-breadcrumb="true" class="topbar" @toggle-sidebar="toggleSidebar" />
+    <Sidebar class="nav" />
+    <main class="content">
+      <router-view v-slot="{ Component }">
+        <transition name="dashboard-enter" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </main>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAppStore } from '@/stores/modules/app.store'
-import { useAccountStore } from '@/stores/modules/account.store'
 import Header from './Header.vue'
 import Sidebar from './Sidebar.vue'
-import type { AppRouteRecordRaw } from '@/types/router'
+import { useAppStore } from '@/stores/app'
 
-const router = useRouter()
 const appStore = useAppStore()
-const accountStore = useAccountStore()
+const isCollapsed = computed(() => appStore.isSidebarCollapsed)
 
-// 计算当前用户可访问的路由菜单
-const menuRoutes = computed<AppRouteRecordRaw[]>(() => {
-  const allRoutes = router.getRoutes()
-  const userRoles = accountStore.userRoles
-
-  return allRoutes.filter(route => {
-    // 只显示需要认证的路由
-    if (route.meta?.requireAuth === false) {
-      return false
-    }
-
-    // 检查隐藏标记
-    if (route.meta?.hidden) {
-      return false
-    }
-
-    // 检查权限（如果没有meta.roles，则显示给所有登录用户）
-    if (route.meta?.roles && userRoles.length > 0) {
-      return userRoles.some(role => route.meta?.roles?.includes(role))
-    }
-
-    return true
-  })
-})
+const toggleSidebar = () => {
+  appStore.toggleSidebar()
+}
 </script>
 
 <style scoped lang="scss">
-.main-layout {
+@use '@/assets/styles/variables' as *;
+
+.shell {
+  --shell-pad: 16px;
+  --shell-gap: 16px;
+  --shell-nav-width: #{$sidebar-width};
+  --shell-topbar-height: #{$header-height};
+  --shell-focus-duration: 200ms;
+  --shell-focus-ease: var(--ease-out);
+
   height: 100vh;
-  width: 100vw;
-}
+  display: grid;
+  grid-template-columns: var(--shell-nav-width) minmax(0, 1fr);
+  grid-template-rows: var(--shell-topbar-height) 1fr;
+  grid-template-areas:
+    "topbar topbar"
+    "nav content";
+  gap: 0;
+  animation: dashboard-enter 0.4s $ease-out;
+  transition: grid-template-columns var(--shell-focus-duration) $ease-out;
+  overflow: hidden;
+  background: $bg;
 
-.main-container {
-  height: calc(100vh - 60px);
-}
+  &--nav-collapsed {
+    grid-template-columns: 0px minmax(0, 1fr);
 
-.layout-sidebar {
-  background: var(--sidebar-bg, #fff);
-  border-right: 1px solid var(--border-color, #e4e7ed);
-  transition: width 0.3s ease;
-  overflow-y: auto;
+    .nav {
+      width: 0;
+      padding: 0;
+      border-width: 0;
+      overflow: hidden;
+      pointer-events: none;
+      opacity: 0;
+    }
+  }
 
-  &.el-menu--collapse {
-    width: 64px;
+  @supports (height: 100dvh) {
+    height: 100dvh;
   }
 }
 
-.layout-main {
-  background: var(--content-bg, #f2f3f5);
-  padding: 16px;
+.topbar {
+  grid-area: topbar;
+  position: sticky;
+  top: 0;
+  z-index: $z-header;
+}
+
+.nav {
+  grid-area: nav;
   overflow-y: auto;
+  overflow-x: hidden;
+  padding: $space-md ($space-sm + 4px);
+  background: $bg;
+  scrollbar-width: none;
+  transition:
+    width var(--shell-focus-duration) $ease-out,
+    padding var(--shell-focus-duration) $ease-out,
+    opacity var(--shell-focus-duration) $ease-out;
+  min-height: 0;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
-.layout-header {
-  flex-shrink: 0;
+.content {
+  grid-area: content;
+  padding: 12px 16px 32px;
+  display: block;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: $bg-content;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: $border-default;
+    border-radius: $radius-full;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: $border-strong;
+  }
 }
 
-// 页面切换动画
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
+@keyframes dashboard-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.fade-enter-from,
-.fade-leave-to {
+.dashboard-enter-active,
+.dashboard-enter-leave-active {
+  transition: opacity $duration-normal ease, transform $duration-normal ease;
+}
+
+.dashboard-enter-from {
   opacity: 0;
+  transform: translateY(12px);
 }
 
-// 侧边栏暗色模式
-html.dark {
-  .layout-sidebar {
-    background: #1f2937;
-    border-right-color: #374151;
+.dashboard-enter-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+
+@media (max-width: 1100px) {
+  .shell {
+    --shell-pad: 12px;
+    --shell-gap: 12px;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      "topbar"
+      "nav"
+      "content";
+  }
+
+  .nav {
+    position: static;
+    max-height: none;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid $border-default;
+    padding: 10px 14px;
+    background: $bg;
+  }
+
+  .topbar {
+    position: static;
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .content {
+    padding: 12px 14px 32px;
   }
 }
 </style>

@@ -7,18 +7,15 @@ import type { ThemeConfig } from '@/types'
  */
 
 interface AppState {
-  // 主题配置
   theme: ThemeConfig
-  // 侧边栏状态
   sidebarCollapsed: boolean
-  // 导航栏高度
   navbarHeight: number
-  // 设备类型
   device: 'desktop' | 'mobile'
-  // 语言
   locale: string
-  // 加载状态
   loading: boolean
+  isConnected: boolean
+  blockHeight: number
+  forging: boolean
 }
 
 export const useAppStore = defineStore('app', {
@@ -34,7 +31,10 @@ export const useAppStore = defineStore('app', {
     navbarHeight: 60,
     device: 'desktop',
     locale: 'zh-CN',
-    loading: false
+    loading: false,
+    isConnected: false,
+    blockHeight: 0,
+    forging: false
   }),
 
   getters: {

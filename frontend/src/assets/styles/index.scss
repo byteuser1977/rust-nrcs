@@ -1,180 +1,421 @@
-// 全局样式入口
+// ============================================================
+//  NRCS Global Styles - Refined Dark Fintech
+// ============================================================
 
-// 1. 导入变量
 @use 'variables.scss' as *;
 
-// 2. 重置样式（基于 normalize.css）
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+// --- Reset ---
+
 *,
 *::before,
 *::after {
   box-sizing: border-box;
-}
-
-html,
-body {
   margin: 0;
   padding: 0;
-  height: 100%;
-  font-family: $font-family-base;
-  font-size: $font-size-base;
-  line-height: $line-height-base;
-  color: $text-primary;
-  background-color: $bg-color;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
 }
 
-// 3. 滚动条样式
+html {
+  font-size: $font-size-base;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-height: 100vh;
+  font-family: $font-body;
+  line-height: $line-height-normal;
+  color: $text-primary;
+  background-color: $bg;
+  overflow-x: hidden;
+}
+
+#app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+// --- Scrollbar (Custom) ---
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: $sidebar-bg;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
+  background: $surface-500;
+  border-radius: $radius-full;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: $surface-400;
   }
 }
 
-// 4. Element Plus 暗色主题覆盖
-.el-button--default {
-  --el-button-bg-color: rgba(255, 255, 255, 0.05);
-  --el-button-border-color: rgba(255, 255, 255, 0.1);
-  --el-button-text-color: #{$text-regular};
-  --el-button-hover-bg-color: rgba(255, 255, 255, 0.1);
-  --el-button-hover-border-color: rgba(255, 255, 255, 0.2);
+// --- Selection ---
+
+::selection {
+  background: rgba($primary, 0.3);
+  color: #fff;
+}
+
+// ============================================================
+// Element Plus Theme Override
+// ============================================================
+
+.el-button {
+  border-radius: $radius-md !important;
+  font-weight: 500;
+  letter-spacing: $letter-spacing-tight;
+  transition: all $duration-normal $ease-out !important;
+
+  &--primary {
+    --el-button-bg-color: #{$primary};
+    --el-button-border-color: #{$primary};
+    --el-button-text-color: #{$surface-900};
+    --el-button-hover-bg-color: #{$primary-light};
+    --el-button-hover-border-color: #{$primary-light};
+    --el-button-active-bg-color: #{$primary-dark};
+    box-shadow: 0 2px 8px rgba($primary, 0.25);
+
+    &:hover {
+      box-shadow: 0 4px 16px rgba($primary, 0.35) !important;
+    }
+  }
+
+  &--default {
+    --el-button-bg-color: transparent;
+    --el-button-border-color: #{$border-default};
+    --el-button-text-color: #{$text-secondary};
+    --el-button-hover-bg-color: #{$bg-hover};
+    --el-button-hover-border-color: #{$primary-glow};
+    --el-button-hover-text-color: #{$primary};
+
+    &.is-plain:hover {
+      color: $primary;
+      background: $primary-subtle;
+      border-color: $primary-glow;
+    }
+  }
 }
 
 .el-card {
-  background-color: $card-bg;
-  border-color: $border-color;
+  border-radius: $radius-lg !important;
+  border: 1px solid $border-default !important;
+  background: linear-gradient(135deg, rgba(26, 34, 52, 0.85), rgba(17, 24, 39, 0.95)) !important;
+  backdrop-filter: blur(12px);
+  box-shadow: $shadow-card !important;
+  transition: all $duration-slow $ease-out !important;
+
+  .el-card__header {
+    padding: $space-lg $space-xl;
+    border-bottom: 1px solid $border-default;
+    background: rgba(255, 255, 255, 0.01);
+    border-radius: $radius-lg $radius-lg 0 0;
+  }
+
+  .el-card__body {
+    padding: $space-xl;
+  }
 }
 
 .el-table {
-  background-color: transparent;
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-header-bg-color: rgba(255, 255, 255, 0.02);
+  --el-table-row-hover-bg-color: rgba($primary, 0.04);
+  --el-table-border-color: $border-default;
+  --el-table-text-color: $text-primary;
+  --el-table-header-text-color: $text-muted;
+  font-size: $font-size-sm;
+  border-radius: $radius-md;
+  overflow: hidden;
+
   th.el-table__cell {
-    background-color: rgba(255, 255, 255, 0.02);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: $font-size-xs;
+    letter-spacing: $letter-spacing-wide;
+    color: $text-muted;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border-bottom: 1px solid $border-default;
   }
+
+  td.el-table__cell {
+    border-bottom: 1px solid $border-default;
+    transition: background $duration-fast ease;
+  }
+
   tr.el-table__row {
-    background-color: transparent;
-    &:hover > td {
-      background-color: rgba(255, 255, 255, 0.03) !important;
-    }
+    transition: all $duration-fast ease;
+  }
+
+  .el-empty__description p {
+    color: $text-muted;
   }
 }
 
 .el-menu {
-  background-color: transparent;
-  border-color: transparent;
-  .el-menu-item {
-    color: $text-regular;
+  border-right: none !important;
+  background: transparent !important;
+
+  .el-menu-item,
+  .el-sub-menu__title {
+    color: $text-secondary !important;
+    font-weight: 450;
+    font-size: $font-size-sm;
+    border-radius: $radius-md;
+    margin: 2px $space-sm;
+    transition: all $duration-normal $ease-out !important;
+    height: 40px;
+    line-height: 40px;
+
     &:hover {
-      background-color: rgba($primary-color, 0.05);
+      background: $bg-hover !important;
+      color: $text-primary !important;
     }
+
     &.is-active {
-      background-color: rgba($primary-color, 0.1);
-      color: $primary-color;
+      background: linear-gradient(90deg, $primary-subtle, transparent) !important;
+      color: $primary !important;
+      font-weight: 600;
+      position: relative;
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 3px;
+        height: 20px;
+        background: $primary;
+        border-radius: $radius-full;
+      }
+    }
+  }
+
+  .el-sub-menu {
+    > .el-menu {
+      background: rgba(0, 0, 0, 0.15) !important;
+      border-radius: $radius-md;
+      margin: 2px $space-sm;
+    }
+  }
+}
+
+.el-input {
+  --el-input-bg-color: rgba(26, 34, 52, 0.7);
+  --el-input-border-color: $border-default;
+  --el-input-text-color: $text-primary;
+  --el-input-placeholder-color: $text-muted;
+  --el-input-hover-border-color: $surface-400;
+  --el-input-focus-border-color: $primary;
+
+  .el-input__wrapper {
+    border-radius: $radius-md !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    transition: all $duration-normal $ease-out !important;
+    background: var(--el-input-bg-color);
+
+    &:hover {
+      border-color: var(--el-input-hover-border-color) !important;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 0 1px $primary-glow !important;
+    }
+
+    &.is-focus {
+      border-color: var(--el-input-focus-border-color) !important;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2), 0 0 0 1px $primary-glow, 0 0 12px $primary-glow !important;
     }
   }
 }
 
 .el-pagination {
   --el-pagination-bg-color: transparent;
-  --el-pagination-button-color: $text-regular;
-  button {
-    background-color: transparent !important;
+  --el-pagination-button-color: $text-secondary;
+  --el-pagination-button-bg-color: transparent;
+  --el-pagination-hover-color: $primary;
+
+  button,
+  li {
+    border-radius: $radius-sm !important;
+    background: transparent !important;
+    transition: all $duration-fast ease !important;
+  }
+
+  .is-active {
+    background: $primary-subtle !important;
+    color: $primary !important;
   }
 }
 
-.el-input__inner,
-.el-textarea__inner {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: $border-color;
-  color: $text-primary;
-  &:hover {
-    border-color: $primary-color;
-  }
-  &:focus {
-    border-color: $primary-color;
-  }
-  &::placeholder {
-    color: $text-placeholder;
-  }
-}
+.el-dialog {
+  border-radius: $radius-xl !important;
+  border: 1px solid $border-default !important;
+  background: linear-gradient(135deg, $surface-800, $surface-900) !important;
+  box-shadow: $shadow-lg, 0 0 60px rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px);
 
-.el-select .el-input__inner {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.el-dialog,
-.el-popover {
-  background-color: $header-bg;
-  border-color: $border-color;
-}
-
-.el-tooltip__trigger {
-  outline: none;
-}
-
-// 5. 通用工具类
-.text-center {
-  text-align: center;
-}
-
-.text-right {
-  text-align: right;
-}
-
-.text-ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.clickable {
-  cursor: pointer;
-}
-
-// 6. 动画
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.3s ease;
-}
-
-.slide-enter-from,
-.slide-leave-to {
-  transform: translateX(-100%);
-}
-
-// 7. 打印样式
-@media print {
-  .app-header,
-  .sidebar,
-  .app-footer {
-    display: none;
+  .el-dialog__header {
+    border-bottom: 1px solid $border-default;
+    padding: $space-lg $space-xl;
   }
 
-  .content {
-    margin: 0 !important;
-    padding: 0 !important;
+  .el-dialog__title {
+    font-family: $font-display;
+    font-weight: 600;
+    font-size: $font-size-lg;
+    color: $text-primary;
+  }
+}
+
+.el-dropdown-menu {
+  border-radius: $radius-lg !important;
+  border: 1px solid $border-default !important;
+  background: linear-gradient(180deg, $surface-700, $surface-800) !important;
+  box-shadow: $shadow-lg !important;
+  backdrop-filter: blur(16px);
+  padding: $space-xs;
+
+  .el-dropdown-menu__item {
+    border-radius: $radius-sm !important;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+    transition: all $duration-fast ease !important;
+
+    &:hover {
+      background: $bg-hover !important;
+      color: $primary !important;
+    }
+  }
+}
+
+.el-badge__content {
+  font-family: $font-body;
+  font-weight: 600;
+  font-size: 10px;
+  border: none !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.el-drawer {
+  background: linear-gradient(180deg, $surface-800, $surface-900) !important;
+  border-left: 1px solid $border-default !important;
+}
+
+.el-alert {
+  border-radius: $radius-md !important;
+  border: 1px solid $border-default !important;
+  background: rgba($primary, 0.04) !important;
+  backdrop-filter: blur(8px);
+
+  .el-alert__title {
+    font-size: $font-size-sm;
+  }
+}
+
+.el-tag {
+  border-radius: $radius-full !important;
+  font-weight: 500;
+  font-size: $font-size-xs;
+  letter-spacing: $letter-spacing-tight;
+  border: none !important;
+  padding: 2px 10px;
+
+  &--success { background: $success-subtle; color: $success; }
+  &--warning { background: $warning-subtle; color: $warning; }
+  &--danger { background: $danger-subtle; color: $danger; }
+  &--info { background: rgba($info, 0.15); color: $info; }
+  &--primary { background: $primary-subtle; color: $primary; }
+}
+
+.el-tooltip__trigger:focus-visible {
+  outline: 2px solid $primary;
+  outline-offset: 2px;
+  border-radius: $radius-sm;
+}
+
+// ============================================================
+// Utility Classes
+// ============================================================
+
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.text-mono { font-family: $font-mono; }
+.text-accent { color: $primary; }
+.text-success { color: $success; }
+.text-warning { color: $warning; }
+.text-danger { color: $danger; }
+.text-muted { color: $text-muted; }
+.text-sm { font-size: $font-size-sm; }
+.text-lg { font-size: $font-size-lg; }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+
+.clickable { cursor: pointer; user-select: none; }
+
+.glass-panel {
+  background: $card;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: $radius-lg;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.glow-border {
+  border: 1px solid $primary-glow;
+  box-shadow: 0 4px 20px rgba($primary, 0.15);
+}
+
+// ============================================================
+// Animations
+// ============================================================
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba($primary, 0.3); }
+  50% { box-shadow: 0 0 16px rgba($primary, 0.5); }
+}
+
+.fade-enter-active { animation: fadeIn $duration-normal $ease-out; }
+.fade-leave-active { animation: fadeOut $duration-fast ease reverse; }
+.slide-enter-active { animation: slideInLeft $duration-normal $ease-out; }
+
+.animate-fade-in-up {
+  animation: fadeInUp $duration-slow $ease-out both;
+}
+
+.animate-stagger > * {
+  animation: fadeInUp $duration-slow $ease-out both;
+
+  @for $i from 1 through 12 {
+    &:nth-child(#{$i}) {
+      animation-delay: #{$i * 60}ms;
+    }
   }
 }

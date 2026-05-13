@@ -1,99 +1,174 @@
-// SCSS 变量 - 主题配置
-// 基于 Element Plus 颜色系统
+@use 'sass:color';
+@use 'sass:map';
 
-// 主色调
-$primary-color: #409eff !default;
-$primary-light: #66b1ff !default;
-$primary-dark: #3a8ee6 !default;
+// ===========================================
+// NRCS Design System (Based on OpenClaw-CN)
+// ===========================================
 
-// 成功色
-$success-color: #67c23a !default;
-$warning-color: #e6a23c !default;
-$danger-color: #f56c6c !default;
-$info-color: #909399 !default;
+// --- Color Palette ---
+$bg: #12141a;
+$bg-accent: #14161d;
+$bg-elevated: #1a1d25;
+$bg-hover: #262a35;
+$bg-muted: #262a35;
+$bg-content: #0f1117;
 
-// 文本颜色
-$text-primary: #e5e5e5 !default;
-$text-regular: #c0c4cc !default;
-$text-secondary: #909399 !default;
-$text-placeholder: #6c757d !default;
+// Card / Surface
+$card: #181b22;
+$card-foreground: #f4f4f5;
+$card-highlight: rgba(255, 255, 255, 0.05);
+$popover: #181b22;
 
-// 背景颜色
-$bg-color: #0a0a0a !default;
-$header-bg: #141414 !default;
-$sidebar-bg: #0f0f0f !default;
-$content-bg: #0a0a0a !default;
-$card-bg: rgba(255, 255, 255, 0.03) !default;
+// Panel
+$panel: #12141a;
+$panel-strong: #1a1d25;
+$panel-hover: #262a35;
 
-// 边框颜色
-$border-color: rgba(255, 255, 255, 0.1) !default;
-$border-light: rgba(255, 255, 255, 0.05) !default;
+// Text
+$text-primary: #e4e4e7;
+$text-strong: #fafafa;
+$text-secondary: #71717a;
+$text-muted: #52525b;
 
-// 布局尺寸
-$header-height: 60px !default;
-$sidebar-width: 240px !default;
-$sidebar-collapsed-width: 64px !default;
+// Border
+$border-default: #27272a;
+$border-subtle: #1f2027;
+$border-strong: #3f3f46;
+$border-hover: #52525b;
+$border-glow: rgba(255, 92, 92, 0.3);
+$input-border: $border-default;
+$divider: rgba(255, 255, 255, 0.06);
 
-// 圆角
-$border-radius: 4px !default;
-$border-radius-lg: 8px !default;
-$border-radius-xl: 12px !default;
+// Accent - Signature Red (OpenClaw Style)
+$primary: #ff5c5c;
+$primary-hover: #ff7070;
+$primary-muted: #ff5c5c;
+$primary-subtle: rgba(255, 92, 92, 0.15);
+$primary-foreground: #fafafa;
+$primary-glow: rgba(255, 92, 92, 0.25);
 
-// 阴影
-$box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3) !default;
-$box-shadow-light: 0 2px 4px 0 rgba(0, 0, 0, 0.12) !default;
+// Secondary - Teal accent
+$secondary: #1e2028;
+$secondary-foreground: #f4f4f5;
+$accent-2: #14b8a6;
+$accent-2-muted: rgba(20, 184, 166, 0.7);
+$accent-2-subtle: rgba(20, 184, 166, 0.15);
 
-// 过渡
-$transition-base: all 0.3s ease !default;
-$transition-fast: all 0.2s ease !default;
+// Semantic Colors
+$success: #22c55e;
+$success-muted: rgba(34, 197, 94, 0.75);
+$success-subtle: rgba(34, 197, 94, 0.12);
+$success-glow: rgba(34, 197, 94, 0.25);
 
-// Z-index
-$z-index-dropdown: 1000 !default;
-$z-index-modal: 2000 !default;
-$z-index-tooltip: 3000 !default;
+$warning: #f59e0b;
+$warning-muted: rgba(245, 158, 11, 0.75);
+$warning-subtle: rgba(245, 158, 11, 0.12);
+$warning-glow: rgba(245, 158, 11, 0.25);
 
-// 字体
-$font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif !default;
-$font-family-mono: 'Monaco', 'Consolas', 'Liberation Mono', 'Menlo', monospace !default;
-$font-size-base: 14px !default;
-$font-size-lg: 16px !default;
-$font-size-sm: 12px !default;
+$danger: #ef4444;
+$danger-muted: rgba(239, 68, 68, 0.75);
+$danger-subtle: rgba(239, 68, 68, 0.12);
+$danger-glow: rgba(239, 68, 68, 0.25);
 
-// 行高
-$line-height-base: 1.5 !default;
-$line-height-lg: 1.8 !default;
+$info: #3b82f6;
+$info-muted: rgba(59, 130, 246, 0.75);
+$info-subtle: rgba(59, 130, 246, 0.15);
+$info-glow: rgba(59, 130, 246, 0.25);
 
-// 暗色主题变量
-$dark-bg: #0a0a0a;
-$dark-card-bg: rgba(255, 255, 255, 0.03);
-$dark-border: rgba(255, 255, 255, 0.1);
+// Focus & Ring
+$focus-ring-color: #ff5c5c;
+$focus-ring: 0 0 0 2px $bg, 0 0 0 4px $focus-ring-color;
+$focus-glow: 0 0 0 2px $bg, 0 0 0 4px $focus-ring-color, 0 0 20px $primary-glow;
 
-// 响应式断点
-$breakpoint-sm: 768px !default;
-$breakpoint-md: 1024px !default;
-$breakpoint-lg: 1440px !default;
+// Grid Line
+$grid-line: rgba(255, 255, 255, 0.04);
 
-// 导出为 CSS 自定义属性（可选，用于 JavaScript 动态切换主题）
-:root {
-  --color-primary: #{$primary-color};
-  --color-success: #{$success-color};
-  --color-warning: #{$warning-color};
-  --color-danger: #{$danger-color};
-  --color-info: #{$info-color};
+// --- Typography ---
+$font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+$font-body: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+$font-display: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
-  --color-text-primary: #{$text-primary};
-  --color-text-regular: #{$text-regular};
-  --color-text-secondary: #{$text-secondary};
+$font-size-xs: 11px;
+$font-size-sm: 13px;
+$font-size-base: 14px;
+$font-size-md: 16px;
+$font-size-lg: 18px;
+$font-size-xl: 22px;
+$font-size-2xl: 28px;
+$font-size-3xl: 36px;
 
-  --bg-color: #{$bg-color};
-  --header-bg: #{$header-bg};
-  --sidebar-bg: #{$sidebar-bg};
-  --content-bg: #{$content-bg};
-  --card-bg: #{$card-bg};
+$line-height-tight: 1.1;
+$line-height-normal: 1.55;
+$line-height-relaxed: 1.65;
 
-  --border-color: #{$border-color};
+$letter-spacing-tight: -0.035em;
+$letter-spacing-normal: -0.02em;
+$letter-spacing-wide: 0.05em;
 
-  --header-height: #{$header-height};
-  --sidebar-width: #{$sidebar-width};
-  --sidebar-collapsed-width: #{$sidebar-collapsed-width};
-}
+// --- Spacing ---
+$space-xs: 4px;
+$space-sm: 8px;
+$space-md: 12px;
+$space-lg: 16px;
+$space-xl: 20px;
+$space-2xl: 24px;
+$space-3xl: 32px;
+$space-4xl: 48px;
+
+// --- Layout Dimensions ---
+$header-height: 56px;
+$header-bg: #16181d;
+$sidebar-width: 280px;
+$sidebar-collapsed-width: 0px;
+
+// --- Radii ---
+$radius-sm: 6px;
+$radius-md: 8px;
+$radius-lg: 12px;
+$radius-xl: 16px;
+$radius-full: 9999px;
+
+// --- Shadows ---
+$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+$shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.03);
+$shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.03);
+$shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.03);
+$shadow-glow: 0 0 30px $primary-glow;
+$shadow-card: $shadow-md;
+
+// --- Transitions ---
+$ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+$ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+$ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+$ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+$ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+$duration-fast: 120ms;
+$duration-normal: 200ms;
+$duration-slow: 350ms;
+
+// --- Z-Index ---
+$z-dropdown: 100;
+$z-sticky: 200;
+$z-header: 40;
+$z-sidebar: 30;
+$z-modal: 1000;
+$z-tooltip: 1100;
+
+// --- Breakpoints ---
+$breakpoint-sm: 480px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+
+// --- Legacy Aliases (for compatibility) ---
+$surface-900: $bg;
+$surface-800: $bg-accent;
+$surface-700: $bg-elevated;
+$surface-600: $card;
+$surface-500: $border-default;
+$surface-400: $border-strong;
+$surface-300: $text-secondary;
+
+$primary-light: $primary-hover;
+$primary-dark: #dc2626;

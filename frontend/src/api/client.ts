@@ -1,12 +1,20 @@
-import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
-import type { ApiResponse, RequestConfig, ApiError } from '@/types'
+import axios, { type AxiosInstance, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
+import type { RequestConfig, ApiError } from '@/types'
 import { useAccountStore } from '@/stores/modules/account.store'
 import { useUiStore } from '@/stores/modules/ui.store'
 import { ElMessage } from 'element-plus'
 
-/**
- * 创建 Axios 实例
- */
+interface Metadata {
+  startTime: number
+  requestId: string
+}
+
+interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
+  metadata?: Metadata
+  retryCount?: number
+  silent?: boolean
+}
+
 const createInstance = (): AxiosInstance => {
   const instance = axios.create({
     baseURL: import.meta.env.VITE_API_BASE_URL,
@@ -15,7 +23,7 @@ const createInstance = (): AxiosInstance => {
       'Content-Type': 'application/json',
       'X-Requested-With': 'XMLHttpRequest'
     },
-    transformResponse: [(data, headers) => {
+    transformResponse: [(data) => {
       try {
         return JSON.parse(data as string)
       } catch {
@@ -24,23 +32,18 @@ const createInstance = (): AxiosInstance => {
     }]
   })
 
-  // Request Interceptor
   instance.interceptors.request.use(
-    (config) => {
+    (config: ExtendedAxiosRequestConfig) => {
       const accountStore = useAccountStore()
-      const uiStore = useUiStore()
       const startTime = Date.now()
 
-      // 注入 Token
       if (accountStore.accessToken) {
         config.headers.Authorization = `Bearer ${accountStore.accessToken}`
       }
 
-      // 设置请求 ID
       const requestId = crypto.randomUUID()
       config.headers['X-Request-Id'] = requestId
 
-      // 开发环境日志
       if (import.meta.env.DEV) {
         console.group(`[API Request] ${config.method?.toUpperCase()} ${config.url}`)
         console.log('Request ID:', requestId)
@@ -53,7 +56,6 @@ const createInstance = (): AxiosInstance => {
         console.groupEnd()
       }
 
-      // 存储开始时间（用于计算响应耗时）
       config.metadata = { startTime, requestId }
 
       return config
@@ -64,23 +66,21 @@ const createInstance = (): AxiosInstance => {
     }
   )
 
-  // Response Interceptor
   instance.interceptors.response.use(
     (response: AxiosResponse) => {
-      const { config, data, status, headers } = response
-      const startTime = (config as any).metadata?.startTime as number
+      const { config, data, status } = response
+      const extendedConfig = config as ExtendedAxiosRequestConfig
+      const startTime = extendedConfig.metadata?.startTime || 0
       const duration = Date.now() - startTime
 
-      // 开发环境日志
       if (import.meta.env.DEV) {
         console.group(`[API Response] ${status} ${config.url}`)
-        console.log('Request ID:', (config as any).metadata?.requestId)
+        console.log('Request ID:', extendedConfig.metadata?.requestId)
         console.log('Duration:', `${duration}ms`)
         console.log('Data:', data)
         console.groupEnd()
       }
 
-      // 检查业务错误码（假设 code: 0 表示成功）
       if (data && data.code !== undefined && data.code !== 0) {
         const apiError: ApiError = {
           code: data.code,
@@ -88,25 +88,23 @@ const createInstance = (): AxiosInstance => {
           details: data.data
         }
 
-        handleBusinessError(apiError, config as RequestConfig)
+        handleBusinessError(apiError, config as ExtendedAxiosRequestConfig)
         return Promise.reject(apiError)
       }
 
-      // 返回 data.data 或直接返回 data（取决于后端格式）
       return data.data !== undefined ? data.data : data
     },
     async (error) => {
       const { response, config } = error
 
-      // 计算耗时
-      const startTime = (config as any)?.metadata?.startTime
+      const extendedConfig = config as ExtendedAxiosRequestConfig | undefined
+      const startTime = extendedConfig?.metadata?.startTime
       const duration = startTime ? Date.now() - startTime : 0
 
       if (import.meta.env.DEV) {
         console.error(`[API Error] ${config?.url} - ${duration}ms`, error)
       }
 
-      // 网络错误
       if (!response) {
         ElMessage.error('网络连接失败，请检查网络')
         return Promise.reject({
@@ -118,7 +116,6 @@ const createInstance = (): AxiosInstance => {
 
       const { status, data } = response
 
-      // HTTP 状态码处理
       switch (status) {
         case 401:
           handleUnauthorized()
@@ -138,10 +135,9 @@ const createInstance = (): AxiosInstance => {
         case 502:
         case 503:
           ElMessage.error('服务器暂时不可用')
-          // 尝试重试
-          if ((config as RequestConfig)?.retryCount !== undefined && (config as RequestConfig).retryCount < 3) {
-            (config as RequestConfig).retryCount = ((config as RequestConfig).retryCount || 0) + 1
-            return handleRetry(config as RequestConfig)
+          if (extendedConfig?.retryCount !== undefined && extendedConfig.retryCount < 3) {
+            extendedConfig.retryCount = (extendedConfig.retryCount || 0) + 1
+            return handleRetry(extendedConfig)
           }
           break
       }
@@ -160,11 +156,7 @@ const createInstance = (): AxiosInstance => {
   return instance
 }
 
-/**
- * 处理业务错误
- */
-function handleBusinessError(error: ApiError, config?: RequestConfig) {
-  const accountStore = useAccountStore()
+function handleBusinessError(error: ApiError, config?: ExtendedAxiosRequestConfig) {
   const uiStore = useUiStore()
 
   switch (error.code) {
@@ -180,21 +172,16 @@ function handleBusinessError(error: ApiError, config?: RequestConfig) {
       })
       break
     default:
-      // 显示错误消息（除非 silent）
       if (!config?.silent) {
         ElMessage.error(error.message)
       }
   }
 }
 
-/**
- * 处理未授权
- */
 function handleUnauthorized() {
   const accountStore = useAccountStore()
   accountStore.logout()
 
-  // 跳转到登录页（保留原路径）
   const router = useRouter()
   router.replace({
     name: 'login',
@@ -202,10 +189,7 @@ function handleUnauthorized() {
   })
 }
 
-/**
- * 重试逻辑（指数退避）
- */
-async function handleRetry(config: RequestConfig): Promise<any> {
+async function handleRetry(config: ExtendedAxiosRequestConfig): Promise<any> {
   const retryCount = config.retryCount || 0
   const maxRetries = 3
   const baseDelay = 1000
@@ -223,17 +207,14 @@ async function handleRetry(config: RequestConfig): Promise<any> {
 
   await new Promise(resolve => setTimeout(resolve, delay))
 
-  // 克隆 config 避免修改原对象
   const newConfig = { ...config, retryCount }
   return request(config.url || '', newConfig)
 }
 
-// 导出单例
 export const request = createInstance()
 
-/**
- * 类型化请求方法
- */
+export default request
+
 export function get<T = any>(url: string, config?: RequestConfig): Promise<T> {
   return request.get(url, config) as Promise<T>
 }

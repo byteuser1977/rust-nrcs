@@ -1,442 +1,415 @@
 <template>
-  <header class="app-header">
+  <header class="nrcs-header">
     <div class="header-left">
-      <!-- 侧边栏折叠按钮 -->
-      <el-button
-        class="collapse-btn"
-        text
-        @click="toggleSidebar"
-      >
-        <el-icon :size="22">
-          <Fold v-if="!isCollapsed" />
-          <Expand v-else />
-        </el-icon>
-      </el-button>
-
-      <!-- 面包屑 -->
+      <button class="collapse-toggle" @click="toggleSidebar" :title="isCollapsed ? '展开' : '折叠'">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path v-if="!isCollapsed" d="M3 12h18M3 6h18M3 18h18" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round"/>
+          <path v-else d="M4 6h16v12H4z M15 3l6 6-6 6" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       <Breadcrumb v-if="showBreadcrumb" :routes="breadcrumbRoutes" />
     </div>
 
-    <div class="header-right">
-      <!-- 全局搜索（可选） -->
-      <el-input
-        v-if="showSearch"
-        v-model="searchQuery"
-        placeholder="搜索..."
-        :prefix-icon="Search"
-        class="header-search"
-        clearable
-        @clear="handleSearch('')"
-        @keyup.enter="handleSearch(searchQuery)"
-      />
+    <div class="header-actions">
+      <div class="action-group">
+        <button class="action-btn action-btn--primary" @click="showSendMoneyDialog = true" :title="t('header.sendNRC')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><line x1="22" y1="2" x2="11" y2="13" stroke="#0b1121" stroke-width="2" stroke-linecap="round"/><polygon points="22,2 15,9 11,16" fill="#0b1121"/></svg>
+          <span class="action-label">{{ t('header.sendNRC') }}</span>
+        </button>
 
-      <!-- 全屏切换 -->
-      <el-tooltip content="全屏" placement="bottom">
-        <el-button
-          class="header-btn"
-          text
-          @click="toggleFullscreen"
-        >
-          <el-icon :size="18">
-            <FullScreen v-if="!isFullscreen" />
-            <Aim v-else />
-          </el-icon>
-        </el-button>
-      </el-tooltip>
+        <button class="action-btn" @click="showSendMessageDialog = true" :title="t('header.sendMessage')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
 
-      <!-- 主题切换 -->
-      <el-tooltip :content="isDark ? '浅色模式' : '深色模式'" placement="bottom">
-        <el-button
-          class="header-btn"
-          text
-          @click="toggleTheme"
-        >
-          <el-icon :size="18">
-            <Sunny v-if="isDark" />
-            <Moon v-else />
-          </el-icon>
-        </el-button>
-      </el-tooltip>
+      <div class="divider-v"></div>
 
-      <!-- 通知中心 -->
-      <el-badge
-        :value="notificationCount"
-        :max="99"
-        :hidden="notificationCount === 0"
-        class="notification-badge"
-      >
-        <el-tooltip content="通知" placement="bottom">
-          <el-button
-            class="header-btn"
-            text
-            @click="showNotifications = true"
-          >
-            <el-icon :size="18"><Bell /></el-icon>
-          </el-button>
-        </el-tooltip>
-      </el-badge>
+      <button class="icon-btn" @click="navigateTo('/settings/blocks')" :title="t('header.clientStatus')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="14" rx="2" stroke="#94a3b8" stroke-width="1.8"/><line x1="8" y1="21" x2="16" y2="21" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round"/><line x1="12" y1="17" x2="12" y2="21" stroke="#94a3b8" stroke-width="1.8"/></svg>
+      </button>
 
-      <!-- 语言切换 -->
-      <el-dropdown v-if="showLocaleSelector" @command="changeLocale">
-        <el-button class="header-btn" text>
-          <el-icon><Globe /></el-icon>
-          <span class="locale-label">{{ currentLocale }}</span>
-        </el-button>
+      <button class="icon-btn icon-btn--badge" @click="navigateTo('/dashboard/transactions')" :title="t('header.unconfirmedTxs')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#94a3b8" stroke-width="1.8"/><polyline points="12,6 12,12 16,14" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span class="btn-badge" v-if="unconfirmedCount > 0">{{ unconfirmedCount > 99 ? '99+' : unconfirmedCount }}</span>
+      </button>
+
+      <button class="icon-btn icon-btn--badge" @click="showNotifications = true" :title="t('header.notifications')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18c0-2-3-4-3-9zM13.73 21a2 2 0 01-3.46 0" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span class="btn-badge btn-badge--pulse" v-if="notificationCount > 0">{{ notificationCount > 99 ? '99+' : notificationCount }}</span>
+      </button>
+
+      <button class="icon-btn" @click="navigateTo('/contacts')" :title="t('header.contacts')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7" r="4" stroke="#94a3b8" stroke-width="1.8"/></svg>
+      </button>
+
+      <el-dropdown trigger="click" @command="handleSettingsCommand">
+        <button class="icon-btn" :title="t('header.notifications')">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="#94a3b8" stroke-width="1.8"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.82 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010 2.82l.06.06a1.65 1.65 0 00.33 1.82 1.65 1.65 0 001 1.51V21a2 2 0 002 2 2 2 0 002-2v-.09a1.65 1.65 0 001-1.51 1.65 1.65 0 00.33-1.82l.06-.06a2 2 0 012.82 0 2 2 0 010-2.82l-.06-.06A1.65 1.65 0 009 4.68a1.65 1.65 0 00-1-1.51V3a2 2 0 012-2 2 2 0 002 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 00-.33 1.82l-.06.06a2 2 0 01-2.82 0z" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item
-              v-for="locale in supportedLocales"
-              :key="locale.value"
-              :command="locale.value"
-              :disabled="locale.value === currentLocale"
-            >
-              {{ locale.label }}
-            </el-dropdown-item>
+            <template #default>
+              <!-- Group: Network -->
+              <div class="dd-group-label">{{ t('header.clientStatus') }}</div>
+              <el-dropdown-item command="blocks">{{ t('settings.blocks') }}</el-dropdown-item>
+              <el-dropdown-item command="peers">{{ t('settings.peers') }}</el-dropdown-item>
+              <el-dropdown-item command="generators">{{ t('settings.generators') }}</el-dropdown-item>
+              <el-dropdown-item command="scheduled-transactions">{{ t('settings.scheduledTransactions') }}</el-dropdown-item>
+              <el-dropdown-item command="monitors">{{ t('settings.monitors') }}</el-dropdown-item>
+              <!-- Divider -->
+              <div class="dd-divider"></div>
+              <el-dropdown-item command="plugins">{{ t('settings.plugins') }}</el-dropdown-item>
+              <!-- Divider -->
+              <div class="dd-divider"></div>
+              <div class="dd-group-label">{{ t('header.accountSettings') }}</div>
+              <el-dropdown-item command="account-settings">{{ t('settings.accountSettings') }}</el-dropdown-item>
+              <!-- Divider -->
+              <div class="dd-divider"></div>
+              <div class="dd-group-label">Tools</div>
+              <el-dropdown-item command="generate-token">{{ t('settings.tokenGenerator') }}</el-dropdown-item>
+              <el-dropdown-item command="generate-hallmark">{{ t('settings.hallmarkGenerator') }}</el-dropdown-item>
+              <el-dropdown-item command="calculate-hash">{{ t('settings.hashCalculator') }}</el-dropdown-item>
+              <el-dropdown-item command="transaction-operations">{{ t('settings.transactionOperations') }}</el-dropdown-item>
+              <!-- Divider -->
+              <div class="dd-divider"></div>
+              <el-dropdown-item command="api-console">{{ t('settings.apiConsole') }} →</el-dropdown-item>
+            </template>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
 
-      <!-- 用户下拉菜单 -->
-      <el-dropdown @command="handleCommand">
-        <span class="user-dropdown">
-          <el-avatar
-            :size="32"
-            :src="userAvatar"
-            class="user-avatar"
-          />
-          <span class="username">{{ userName }}</span>
-          <el-icon class="arrow-icon"><ArrowDown /></el-icon>
-        </span>
+      <el-dropdown trigger="click" @command="handleLogoutCommand">
+        <button class="user-chip" :title="t('header.logout')">
+          <div class="chip-avatar">N</div>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="#94a3b8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="profile">
-              <el-icon><User /></el-icon>
-              个人资料
-            </el-dropdown-item>
-            <el-dropdown-item command="settings">
-              <el-icon><Setting /></el-icon>
-              设置
-            </el-dropdown-item>
-            <el-dropdown-item divided command="logout">
-              <el-icon><SwitchButton /></el-icon>
-              退出登录
-            </el-dropdown-item>
+            <template #default>
+              <el-dropdown-item command="logout">{{ t('header.logout') }}</el-dropdown-item>
+              <el-dropdown-item command="logout-stop-forging">{{ t('header.logoutStopForging') }}</el-dropdown-item>
+              <el-dropdown-item command="logout-clear-data">{{ t('header.logoutClearData') }}</el-dropdown-item>
+            </template>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
     </div>
 
-    <!-- 通知面板 -->
-    <el-drawer
-      v-model="showNotifications"
-      title="通知中心"
-      direction="rtl"
-      size="360px"
-    >
-      <template #default>
-        <div v-if="notifications.length === 0" class="empty-notifications">
-          <el-empty description="暂无通知" />
-        </div>
-        <el-timeline v-else>
-          <el-timeline-item
-            v-for="notification in notifications"
-            :key="notification.id"
-            :timestamp="notification.time"
-            :type="notification.type"
-            :color="notification.color"
-          >
-            <div class="notification-item" @click="handleNotificationClick(notification)">
-              <div class="notification-title">{{ notification.title }}</div>
-              <div class="notification-content">{{ notification.content }}</div>
-            </div>
-          </el-timeline-item>
-        </el-timeline>
+    <!-- Send Money Dialog -->
+    <el-dialog v-model="showSendMoneyDialog" :title="'Send NRC'" width="480px" destroy-on-close class="nrcs-dialog">
+      <el-form :model="sendMoneyForm" label-position="top" label-width="100px">
+        <el-form-item label="Recipient">
+          <el-input v-model="sendMoneyForm.recipient" placeholder="NRCS address or ID" />
+        </el-form-item>
+        <el-form-item label="Amount">
+          <el-input v-model="sendMoneyForm.amountNQT" placeholder="0.00">
+            <template #append>NRC</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="Fee">
+          <el-input v-model="sendMoneyForm.feeNQT" placeholder="1">
+            <template #append>NRC</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="Deadline">
+          <el-input-number v-model="sendMoneyForm.deadline" :min="1" :max="1440" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="Secret Phrase">
+          <el-input v-model="sendMoneyForm.secretPhrase" type="password" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showSendMoneyDialog = false">Cancel</el-button>
+        <el-button type="primary" @click="handleSendMoney" :loading="isSending">Send</el-button>
       </template>
+    </el-dialog>
+
+    <!-- Send Message Dialog -->
+    <el-dialog v-model="showSendMessageDialog" :title="'Send Message'" width="480px" destroy-on-close class="nrcs-dialog">
+      <el-form :model="sendMessageForm" label-position="top" label-width="100px">
+        <el-form-item label="Recipient">
+          <el-input v-model="sendMessageForm.recipient" placeholder="NRCS address or ID" />
+        </el-form-item>
+        <el-form-item label="Message">
+          <el-input v-model="sendMessageForm.message" type="textarea" :rows="4" placeholder="Enter message..." />
+        </el-form-item>
+        <el-form-item label="Fee">
+          <el-input v-model="sendMessageForm.feeNQT" placeholder="1">
+            <template #append>NRC</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="Secret Phrase">
+          <el-input v-model="sendMessageForm.secretPhrase" type="password" show-password />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showSendMessageDialog = false">Cancel</el-button>
+        <el-button type="primary" @click="handleSendMessage" :loading="isSendingMessage">Send</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Notifications Drawer -->
+    <el-drawer v-model="showNotifications" title="Notifications" direction="rtl" size="380px">
+      <div v-if="notifications.length === 0" style="padding: 40px 0;"><el-empty description="No notifications" /></div>
     </el-drawer>
   </header>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useAppStore } from '@/stores/modules/app.store'
-import { useAccountStore } from '@/stores/modules/account.store'
-import { ElMessageBox } from 'element-plus'
+import { useAppStore } from '@/stores/app'
+import { nrcsApi } from '@/api/modules/nrcs.api'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import Breadcrumb from './Breadcrumb.vue'
 
-interface Props {
-  showBreadcrumb?: boolean
-  showSearch?: boolean
-  showLocaleSelector?: boolean
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  showBreadcrumb: true,
-  showSearch: false,
-  showLocaleSelector: true
-})
-
-const emit = defineEmits<{
-  search: [query: string]
-  sidebarToggle: []
-}>()
+interface Props { showBreadcrumb?: boolean }
+withDefaults(defineProps<Props>(), { showBreadcrumb: true })
+const emit = defineEmits<{ sidebarToggle: [] }>()
 
 const router = useRouter()
-const { locale } = useI18n()
+const { t } = useI18n()
 const appStore = useAppStore()
-const accountStore = useAccountStore()
-
-// 状态
-const searchQuery = ref('')
-const showNotifications = ref(false)
-const notifications = ref([
-  // TODO: 从 API 加载通知
-])
-
-// 计算属性
 const isCollapsed = computed(() => appStore.isSidebarCollapsed)
-const isDark = computed(() => appStore.isDark)
-const userName = computed(() => accountStore.displayName || 'Admin')
-const userAvatar = computed(() => accountStore.userInfo?.avatar || '')
-const notificationCount = computed(() => notifications.value.length)
-const currentLocale = computed(() => locale.value)
-const supportedLocales = computed(() => [
-  { label: '简体中文', value: 'zh-CN' },
-  { label: 'English', value: 'en-US' }
-])
+const unconfirmedCount = ref(0)
+const notificationCount = ref(0)
+const notifications = ref<any[]>([])
+const showSendMoneyDialog = ref(false)
+const showSendMessageDialog = ref(false)
+const showNotifications = ref(false)
+const isSending = ref(false)
+const isSendingMessage = ref(false)
 
-// 面包屑路由
+const sendMoneyForm = ref({ recipient: '', amountNQT: '', feeNQT: '1', deadline: 1440, secretPhrase: '' })
+const sendMessageForm = ref({ recipient: '', message: '', feeNQT: '1', secretPhrase: '' })
+
 const breadcrumbRoutes = computed(() => {
-  const matched = router.currentRoute.value.matched
-  return matched.map(route => ({
-    path: route.path,
-    title: route.meta?.title || '未命名'
-  }))
+  return router.currentRoute.value.matched.map(r => ({ path: r.path, title: (r.meta?.title as string) || '' }))
 })
 
-// 方法
-const toggleSidebar = () => {
-  appStore.toggleSidebar()
-  emit('sidebarToggle')
+function toggleSidebar() { appStore.toggleSidebar(); emit('sidebarToggle') }
+function navigateTo(path: string) { router.push(path) }
+
+function handleSettingsCommand(cmd: string) {
+  const map: Record<string, string> = {
+    blocks: '/settings/blocks', peers: '/settings/peers', generators: '/settings/generators',
+    'scheduled-transactions': '/settings/scheduled-transactions', monitors: '/settings/monitors',
+    plugins: '/settings/plugins', 'account-settings': '/settings/account',
+    'generate-token': '/settings/token', 'generate-hallmark': '/settings/hallmark',
+    'calculate-hash': '/settings/hash-calculator', 'transaction-operations': '/settings/transaction-operations',
+    'api-console': '/test'
+  }
+  if (cmd === 'api-console') window.open(map[cmd], '_blank')
+  else if (map[cmd]) router.push(map[cmd])
 }
 
-const toggleFullscreen = () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen()
-  } else {
-    document.exitFullscreen()
+async function handleLogoutCommand(cmd: string) {
+  const confirms: Record<string, () => Promise<boolean>> = {
+    logout: () => ElMessageBox.confirm('Are you sure you want to log out?', 'Confirm', { type: 'warning' }).then(() => true).catch(() => false),
+    'logout-stop-forging': () => ElMessageBox.confirm('Log out and stop forging?', 'Confirm', { type: 'warning' }).then(async () => { try { await nrcsApi.stopForging() } catch {} return true }).catch(() => false),
+    'logout-clear-data': () => ElMessageBox.confirm('This will clear all user data. Continue?', 'Warning', { type: 'warning' }).then(() => true).catch(() => false)
+  }
+  if (await confirms[cmd]()) {
+    localStorage.removeItem('access_token'); localStorage.removeItem('refresh_token'); localStorage.removeItem('nrcs_account_rs'); localStorage.removeItem('nrcs_balance_nqt'); localStorage.removeItem('nrcs_secret_phrase')
+    await router.push('/login')
   }
 }
 
-const toggleTheme = () => {
-  appStore.toggleTheme()
+async function handleSendMoney() {
+  if (!sendMoneyForm.value.recipient || !sendMoneyForm.value.amountNQT || !sendMoneyForm.value.secretPhrase) { ElMessage.warning('Please fill all fields'); return }
+  try {
+    isSending.value = true
+    await nrcsApi.sendMoney({
+      secretPhrase: sendMoneyForm.value.secretPhrase,
+      recipient: sendMoneyForm.value.recipient,
+      amountNQT: String(Math.round(parseFloat(sendMoneyForm.value.amountNQT) * 100000000)),
+      feeNQT: String(Math.round(parseFloat(sendMoneyForm.value.feeNQT) * 100000000)),
+      deadline: sendMoneyForm.value.deadline
+    })
+    ElMessage.success('Transaction sent successfully')
+    showSendMoneyDialog.value = false
+    sendMoneyForm.value = { recipient: '', amountNQT: '', feeNQT: '1', deadline: 1440, secretPhrase: '' }
+  } catch (e: any) { ElMessage.error(e.message || 'Failed to send') }
+  finally { isSending.value = false }
 }
 
-const changeLocale = (localeCode: string) => {
-  locale.value = localeCode
-  // 可以保存到 localStorage
-  localStorage.setItem('locale', localeCode)
+async function handleSendMessage() {
+  if (!sendMessageForm.value.recipient || !sendMessageForm.value.message || !sendMessageForm.value.secretPhrase) { ElMessage.warning('Please fill all fields'); return }
+  try {
+    isSendingMessage.value = true
+    await nrcsApi.sendMessage({
+      secretPhrase: sendMessageForm.value.secretPhrase, recipient: sendMessageForm.value.recipient,
+      message: sendMessageForm.value.message, messageIsText: true,
+      feeNQT: String(Math.round(parseFloat(sendMessageForm.value.feeNQT) * 100000000)), deadline: 1440
+    })
+    ElMessage.success('Message sent successfully')
+    showSendMessageDialog.value = false
+    sendMessageForm.value = { recipient: '', message: '', feeNQT: '1', secretPhrase: '' }
+  } catch (e: any) { ElMessage.error(e.message || 'Failed to send') }
+  finally { isSendingMessage.value = false }
 }
-
-const handleSearch = (query: string) => {
-  emit('search', query)
-}
-
-const handleCommand = async (command: string) => {
-  switch (command) {
-    case 'profile':
-      await router.push('/account/profile')
-      break
-    case 'settings':
-      // 打开设置对话框
-      break
-    case 'logout':
-      try {
-        await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-          type: 'warning'
-        })
-        await accountStore.logout()
-        await router.push('/login')
-      } catch {
-        // 用户取消
-      }
-      break
-  }
-}
-
-const handleNotificationClick = (notification: any) => {
-  // 标记为已读，跳转到相关页面
-  showNotifications.value = false
-}
-
-// 加载通知
-const loadNotifications = async () => {
-  // TODO: 调用通知 API
-}
-
-// 监听 locale 从本地存储恢复
-watch(
-  () => props.showLocaleSelector,
-  (val) => {
-    if (val) {
-      const savedLocale = localStorage.getItem('locale')
-      if (savedLocale && savedLocale !== locale.value) {
-        locale.value = savedLocale
-      }
-    }
-  },
-  { immediate: true }
-)
-
-defineExpose({
-  loadNotifications
-})
 </script>
 
 <style scoped lang="scss">
-.app-header {
+.nrcs-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 60px;
-  padding: 0 16px;
-  background: #fff;
-  border-bottom: 1px solid #e4e7ed;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  height: $header-height;
+  padding: 0 $space-xl;
+  background: $header-bg;
+  border-bottom: 1px solid $border-subtle;
+  backdrop-filter: blur(20px);
+  position: relative;
+  z-index: $z-header;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba($primary, 0.3), transparent);
+  }
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 12px;
-  }
+    gap: $space-lg;
 
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    .header-btn {
-      padding: 8px;
-      color: #606266;
-
-      &:hover {
-        color: #409eff;
-        background: #ecf5ff;
-      }
-    }
-
-    .header-search {
-      width: 200px;
-      margin-right: 8px;
-    }
-
-    .locale-label {
-      margin-left: 4px;
-      font-size: 14px;
-    }
-
-    .notification-badge {
-      .el-badge__content {
-        transform: translateY(-50%) translateX(50%);
-      }
-    }
-
-    .user-dropdown {
+    .collapse-toggle {
+      width: 34px; height: 34px;
+      border: none;
+      background: transparent;
+      border-radius: $radius-sm;
+      cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin-left: 8px;
-      padding: 4px 8px;
-      border-radius: 4px;
+      justify-content: center;
+      color: $text-muted;
+      transition: all $duration-fast ease;
+
+      &:hover { color: $text-primary; background: $bg-hover; }
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    .action-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: $radius-md;
+      font-size: $font-size-sm;
+      font-weight: 600;
+      letter-spacing: $letter-spacing-tight;
       cursor: pointer;
-      transition: background 0.3s;
+      transition: all $duration-normal $ease-out-expo;
+      border: 1px solid transparent;
+      color: $text-secondary;
+      background: transparent;
 
       &:hover {
-        background: #f5f7fa;
+        color: $text-primary;
+        background: $bg-hover;
+        border-color: $border-default;
       }
 
-      .username {
-        font-size: 14px;
-        color: #303133;
-        max-width: 100px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      &--primary {
+        color: $surface-900;
+        background: linear-gradient(135deg, $primary, $primary-dark);
+        border-color: transparent;
+        box-shadow: 0 2px 8px rgba($primary, 0.25);
+
+        &:hover {
+          box-shadow: 0 4px 16px rgba($primary, 0.35);
+          transform: translateY(-1px);
+        }
+
+        .action-label { display: inline; }
+      }
+    }
+
+    .divider-v {
+      width: 1px; height: 20px;
+      background: $divider;
+      margin: 0 6px;
+    }
+
+    .icon-btn {
+      width: 36px; height: 36px;
+      border: none;
+      background: transparent;
+      border-radius: $radius-sm;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: $text-muted;
+      position: relative;
+      transition: all $duration-fast ease;
+
+      &:hover {
+        color: $text-primary;
+        background: $bg-hover;
       }
 
-      .arrow-icon {
+      &--badge {
+        .btn-badge {
+          position: absolute;
+          top: -2px; right: -2px;
+          min-width: 16px; height: 16px;
+          padding: 0 4px;
+          border-radius: $radius-full;
+          font-size: 10px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: $danger;
+          color: white;
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+
+          &--pulse { animation: pulse-glow 2s infinite; }
+        }
+      }
+    }
+
+    .user-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px 4px 4px;
+      border-radius: $radius-full;
+      border: 1px solid $border-subtle;
+      cursor: pointer;
+      transition: all $duration-fast ease;
+      margin-left: 4px;
+
+      &:hover { border-color: $border-glow; background: $bg-hover; }
+
+      .chip-avatar {
+        width: 26px; height: 26px;
+        border-radius: $radius-sm;
+        background: linear-gradient(135deg, $primary-light, $primary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: $font-display;
         font-size: 12px;
-        color: #909399;
+        font-weight: 800;
+        color: $surface-900;
       }
-    }
-  }
-}
-
-.empty-notifications {
-  padding: 40px 0;
-}
-
-.notification-item {
-  padding: 8px 12px;
-  background: #f5f7fa;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.3s;
-
-  &:hover {
-    background: #ecf5ff;
-  }
-
-  .notification-title {
-    font-weight: 500;
-    margin-bottom: 4px;
-    color: #303133;
-  }
-
-  .notification-content {
-    font-size: 13px;
-    color: #606266;
-    line-height: 1.4;
-  }
-}
-
-// 深色模式
-html.dark {
-  .app-header {
-    background: #1f2937;
-    border-bottom-color: #374151;
-
-    .header-btn {
-      color: #d1d5db;
-
-      &:hover {
-        color: #409eff;
-        background: rgba(64, 158, 255, 0.1);
-      }
-    }
-
-    .user-dropdown {
-      &:hover {
-        background: rgba(255, 255, 255, 0.1);
-      }
-
-      .username {
-        color: #d1d5db;
-      }
-    }
-  }
-
-  .notification-item {
-    background: rgba(255, 255, 255, 0.05);
-
-    &:hover {
-      background: rgba(64, 158, 255, 0.1);
-    }
-
-    .notification-title,
-    .notification-content {
-      color: #d1d5db;
     }
   }
 }

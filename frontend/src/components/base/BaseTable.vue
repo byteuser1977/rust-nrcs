@@ -16,7 +16,7 @@
     <el-table
       ref="tableRef"
       :data="data"
-      :loading="loading"
+      v-bind="$attrs"
       :stripe="stripe"
       :border="border"
       :size="size"
@@ -27,6 +27,7 @@
       :tree-props="treeProps"
       :highlight-current-row="highlightCurrentRow"
       :current-row-key="currentRowKey"
+      v-loading="loading"
       @selection-change="handleSelectionChange"
       @sort-change="handleSortChange"
       @filter-change="handleFilterChange"
@@ -45,7 +46,7 @@
       <el-table-column
         v-if="showIndex"
         type="index"
-        label="序号"
+        label="#"
         width="60"
         fixed="left"
       />
@@ -88,7 +89,7 @@
 
             <!-- 地址格式化 -->
             <span v-else-if="column.type === 'address'">
-              {{ formatAddress(row[column.prop], column.addressLength) }}
+              {{ formatAddressUtil(row[column.prop], column.addressLength) }}
             </span>
 
             <!-- 金额格式化 -->
@@ -124,15 +125,15 @@
         <template #default="{ row, $index }">
           <slot name="actions" :row="row" :index="$index">
             <BaseButton
-              v-for="action in actions"
-              :key="action.prop"
-              v-if="!action.hidden?.(row, $index)"
-              :type="action.type"
-              :size="action.size || 'small'"
-              :disabled="action.disabled?.(row, $index)"
-              @click="action.handler?.(row, $index)"
+              v-for="act in actions"
+              :key="act.prop"
+              v-if="!act.hidden?.(row, $index)"
+              :type="act.type"
+              :size="act.size || 'small'"
+              :disabled="act.disabled?.(row, $index)"
+              @click="act.handler?.(row, $index)"
             >
-              {{ action.label }}
+              {{ act.label }}
             </BaseButton>
           </slot>
         </template>
@@ -159,48 +160,38 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import type { TableProps, TableColumn } from 'element-plus'
+import { ElTable } from 'element-plus'
 import BaseButton from './BaseButton.vue'
 import StatusBadge from './StatusBadge.vue'
-import { formatAddress, formatTime } from '@/utils/format'
+import { formatAddress as formatAddressUtil, formatTime } from '@/utils/format'
 
-// 表格列定义
-export interface TableColumnConfig extends TableColumn {
-  // 列类型
-  type?: 'default' | 'status' | 'datetime' | 'address' | 'amount' | 'hash'
-  // 状态映射（type=status时使用）
-  statusMap?: Record<string, { type: 'success' | 'warning' | 'danger' | 'info'; text?: string }>
-  // 地址截断长度（type=address时使用）
-  addressLength?: number
-  // 金额小数位数（type=amount时使用）
-  decimals?: number
-  // 哈希截断长度（type=hash时使用）
-  hashLength?: number
-  // 单元格格式化函数
-  formatter?: (row: any, column: TableColumn, cellValue: any) => any
-  // 是否显示溢出提示（默认 true）
-  showOverflowTooltip?: boolean
-  // 是否可排序
-  sortable?: boolean | 'custom'
-  // 固定位置
+export interface TableColumnConfig {
+  prop: string
+  label: string
+  width?: number | string
+  minWidth?: number | string
   fixed?: boolean | ('left' | 'right')
+  sortable?: boolean | 'custom'
+  resizable?: boolean
+  formatter?: (row: any, column: any, cellValue: any) => any
+  showOverflowTooltip?: boolean
+  type?: 'default' | 'status' | 'datetime' | 'address' | 'amount' | 'hash'
+  statusMap?: Record<string, { type: 'success' | 'warning' | 'danger' | 'info'; text?: string }>
+  addressLength?: number
+  decimals?: number
+  hashLength?: number
 }
 
-// 表格操作按钮配置
 export interface TableAction {
   prop: string
   label: string
   type?: 'primary' | 'success' | 'warning' | 'danger' | 'info'
   size?: 'large' | 'default' | 'small'
-  // 是否隐藏当前行按钮
   hidden?: (row: any, index: number) => boolean
-  // 是否禁用
   disabled?: (row: any, index: number) => boolean
-  // 点击处理
   handler: (row: any, index: number) => void
 }
 
-// 分页配置
 export interface PaginationConfig {
   currentPage: number
   pageSize: number
@@ -211,47 +202,26 @@ export interface PaginationConfig {
 }
 
 interface Props {
-  // 表格数据
   data: any[]
-  // 表格列配置
   columns: TableColumnConfig[]
-  // 表格加载状态
   loading?: boolean
-  // 斑马纹
   stripe?: boolean
-  // 边框
   border?: boolean
-  // 尺寸
-  size?: TableProps['size']
-  // 最大高度
+  size?: 'large' | 'default' | 'small'
   maxHeight?: number | string
-  // 固定高度
   height?: number | string
-  // 行key
   rowKey?: string | ((row: any) => string)
-  // 默认展开所有行（树形表格）
   defaultExpandAll?: boolean
-  // 树形表格的子节点字段
   treeProps?: Record<string, string>
-  // 是否高亮当前行
   highlightCurrentRow?: boolean
-  // 当前行key
   currentRowKey?: any
-  // 是否显示选择框
   showSelection?: boolean
-  // 是否显示序号列
   showIndex?: boolean
-  // 是否显示工具栏
   showToolbar?: boolean
-  // 操作列配置
   actions?: TableAction[]
-  // 操作列标题
   actionLabel?: string
-  // 操作列固定位置
   actionFixed?: boolean | 'left' | 'right'
-  // 操作列宽度
   actionWidth?: number | string
-  // 分页配置
   pagination?: PaginationConfig | boolean
 }
 
@@ -273,28 +243,20 @@ const props = withDefaults(defineProps<Props>(), {
   pagination: false
 })
 
-const emit = defineEmits<{
-  // 选择变化
-  'selection-change': [selection: any[]]
-  // 排序变化
-  'sort-change': [sort: { column: any; prop: string; order: string }]
-  // 筛选变化
-  'filter-change': [filters: any]
-  // 当前行变化
-  'current-change': [row: any, oldRow: any]
-  // 行点击
-  'row-click': [row: any, column: any, event: MouseEvent]
-  // 分页
-  'pagination-change': [page: number; size: number]
-  // 刷新
-  refresh: []
-}>()
+const emit = defineEmits({
+  'selection-change': (_selection: any[]) => true,
+  'sort-change': (_sort: { column: any; prop: string; order: string }) => true,
+  'filter-change': (_filters: any) => true,
+  'current-change': (_row: any, _oldRow: any) => true,
+  'row-click': (_row: any, _column: any, _event: MouseEvent) => true,
+  'pagination-change': (_page: number, _size: number) => true,
+  'refresh': () => true
+})
 
-const tableRef = ref()
+const tableRef = ref<InstanceType<typeof ElTable>>()
 const paginationCurrentPage = ref(1)
 const paginationPageSize = ref(20)
 
-// 分页配置计算
 const paginationTotal = computed(() => {
   if (typeof props.pagination === 'object') {
     return props.pagination.total
@@ -317,7 +279,6 @@ const paginationBackground = computed(() => {
   return true
 })
 
-// 监听分页变化
 watch(() => props.pagination, (newVal) => {
   if (typeof newVal === 'object') {
     paginationCurrentPage.value = newVal.currentPage
@@ -325,7 +286,6 @@ watch(() => props.pagination, (newVal) => {
   }
 }, { immediate: true })
 
-// 事件处理
 const handleSelectionChange = (selection: any[]) => {
   emit('selection-change', selection)
 }
@@ -360,13 +320,8 @@ const handlePageSizeChange = (size: number) => {
   }
 }
 
-// 格式化辅助方法
 const formatDateTime = (value: any): string => {
   return formatTime(value)
-}
-
-const formatAddress = (address: string, length: number = 8): string => {
-  return formatAddress(address, length)
 }
 
 const formatAmount = (value: number | string, decimals: number = 4): string => {
@@ -380,7 +335,6 @@ const formatHash = (hash: string, length: number = 8): string => {
   return `${hash.slice(0, length)}...${hash.slice(-length)}`
 }
 
-// 暴露表格实例方法
 defineExpose({
   tableRef,
   clearSelection: () => tableRef.value?.clearSelection(),
@@ -396,31 +350,33 @@ defineExpose({
 </script>
 
 <style scoped lang="scss">
+@use '@/assets/styles/variables' as *;
+
 .base-table {
   .table-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
-    padding: 8px 12px;
-    background: #fff;
-    border-radius: 4px;
+    margin-bottom: $space-md;
+    padding: $space-sm $space-md;
+    background: $card;
+    border-radius: $radius-md;
 
     .toolbar-left,
     .toolbar-right {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: $space-sm;
     }
   }
 
   .table-pagination {
-    margin-top: 16px;
+    margin-top: $space-lg;
     display: flex;
     justify-content: flex-end;
-    padding: 12px;
-    background: #fff;
-    border-radius: 4px;
+    padding: $space-md;
+    background: $card;
+    border-radius: $radius-md;
   }
 }
 </style>

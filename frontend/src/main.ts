@@ -1,17 +1,17 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import { createI18n } from 'vue-i18n'
-import { loadLanguageAsync } from '@/locales'
 import router from '@/router'
 import App from '@/App.vue'
 
 // 引入全局样式
 import '@/assets/styles/index.scss'
 
-// 引入 Element Plus（按需自动导入配置已由 unplugin-vue-components 处理）
+// 引入 Element Plus
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
-import 'element-plus/dist/index.css'
+
+// 引入 i18n 和语言包
+import { i18n } from '@/locales'
 
 // 创建应用实例
 const app = createApp(App)
@@ -24,17 +24,10 @@ app.use(pinia)
 app.use(router)
 
 // 3. Vue I18n（国际化）
-const i18n = createI18n({
-  legacy: false,
-  locale: 'zh-CN',
-  fallbackLocale: 'en-US',
-  messages: {} // 动态加载
-})
 app.use(i18n)
 
 // 4. Element Plus（全局注册）
 app.use(ElementPlus, {
-  // 可选：全局配置
   size: 'default',
   zIndex: 3000
 })
@@ -58,7 +51,7 @@ app.config.errorHandler = (err, instance, info) => {
   console.error('Info:', info)
 }
 
-// 未处理的 Promise  reject 警告
+// 未处理的 Promise reject 警告
 app.config.warnHandler = (msg, instance, trace) => {
   console.warn('[Vue Warn]', msg)
   if (instance) {
