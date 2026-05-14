@@ -3217,29 +3217,16 @@ impl DatabaseTransactionProcessor {
 
         match tx.type_id {
             TransactionType::ColoredCoins => {
-                /**
-                 * ✅ 修复：ASSET_ISSUANCE/SUBTYPE=0 的 quantity 必须从 attachment 解析
-                 *
-                 * Java NRCS 逻辑：
-                 * - ASSET_ISSUANCE.applyAttachment() 使用 attachment.getQuantityQNT()
-                 * - 对于 singleton 资产，quantityQNT = 1（不是 tx.amount）
-                 * - tx.amount 通常用于 NRCS 手续费，而不是资产数量
-                 *
-                 * 错误的原代码使用 tx.amount 导致：
-                 * - change = 0 (当 tx.amount != 实际资产数量时)
-                 * - 与 NRCS 数据库不一致
-                 */
                 let asset_id = self.parse_long_field(tx, "asset").unwrap_or(tx.id as i64);
 
                 // 根据 subtype 选择不同的 quantity 来源
-                // 对齐 apply_asset_transfer() 和 apply_ask_order_placement() 的解析逻辑
                 let quantity = match tx.subtype {
                     0 => { // ASSET_ISSUANCE: 从 attachment JSON 解析
                         self.parse_long_field(tx, "quantityQNT")
                             .or_else(|| self.parse_long_field(tx, "quantity"))
                             .unwrap_or(1)  // singleton 默认为 1
                     }
-                    _ => { // 其他 subtype (ASSET_TRANSFER=1, ASK_ORDER_PLACEMENT=2 等): 从 attachment 解析
+                    _ => { // 其他 subtype
                         self.parse_long_field(tx, "quantityQNT")
                             .or_else(|| self.parse_long_field(tx, "quantity"))
                             .unwrap_or(tx.amount as i64)
@@ -3249,6 +3236,16 @@ impl DatabaseTransactionProcessor {
                 match tx.subtype {
                     0 => { // ASSET_ISSUANCE: issuer gets assets
                         let asset_balance_after = self.get_asset_balance(sender_id, asset_id).await.unwrap_or(0);
+                        
+                        tracing::debug!(
+                            tx_id = tx.id,
+                            sender = sender_id,
+                            asset_id = asset_id,
+                            quantity = quantity,
+                            asset_balance_after = asset_balance_after,
+                            "Creating ASSET_ISSUANCE ledger entry"
+                        );
+                        
                         let entry = AccountLedgerModel {
                             db_id: 0,
                             account_id: sender_id,
@@ -3317,19 +3314,6 @@ impl DatabaseTransactionProcessor {
                         // 对齐 NRCS：change=-Q 时，balance = 原余额 - Q
                         let sender_asset_balance_after = sender_asset_balance_before - quantity;
 
-                        debug!(
-                            tx_id = tx.id,
-                            sequence = 4,
-                            account = sender_id,
-                            asset = asset_id,
-                            event_type = ledger_event::ASSET_ASK_ORDER_PLACEMENT,
-                            holding_id = asset_id,
-                            change = -quantity,
-                            balance_before = sender_asset_balance_before,
-                            balance_after = sender_asset_balance_after,
-                            "Inserting LEDGER: ASK_ORDER_PLACEMENT (asset)"
-                        );
-
                         let entry = AccountLedgerModel {
                             db_id: 0,
                             account_id: sender_id,
@@ -3349,44 +3333,67 @@ impl DatabaseTransactionProcessor {
                 }
             }
             TransactionType::MonetarySystem => {
-                // Currency transfer with CURRENCY_BALANCE(6)
-                let currency_id = tx.id as i64;
+                // Currency operations with CURRENCY_BALANCE(6)
+                let currency_id = self.parse_long_field(tx, "currency").unwrap_or(tx.id as i64);
                 let units = tx.amount as i64;
 
-                if units != 0 && tx.subtype == 3 { // CURRENCY_TRANSFER
-                    // Sender: decrease currency units
-                    let entry = AccountLedgerModel {
-                        db_id: 0,
-                        account_id: sender_id,
-                        event_type: ledger_event::CURRENCY_TRANSFER,
-                        event_id: tx.id as i64,
-                        holding_type: ledger_holding::CURRENCY_BALANCE,
-                        holding_id: Some(currency_id),
-                        change: -units,
-                        balance: 0, // Would need to query actual currency balance
-                        block_id: current_block_id,
-                        height: current_height,
-                        timestamp: current_timestamp,
-                    };
-                    self.ledger_repo.insert(&entry).await?;
+                match tx.subtype {
+                    3 => { // CURRENCY_TRANSFER
+                        if units != 0 {
+                            // Sender: decrease currency units
+                            let entry = AccountLedgerModel {
+                                db_id: 0,
+                                account_id: sender_id,
+                                event_type: ledger_event::CURRENCY_TRANSFER,
+                                event_id: tx.id as i64,
+                                holding_type: ledger_holding::CURRENCY_BALANCE,
+                                holding_id: Some(currency_id),
+                                change: -units,
+                                balance: 0,
+                                block_id: current_block_id,
+                                height: current_height,
+                                timestamp: current_timestamp,
+                            };
+                            self.ledger_repo.insert(&entry).await?;
 
-                    // Receiver: increase currency units
-                    if recipient_id != 0 {
-                        let entry = AccountLedgerModel {
-                            db_id: 0,
-                            account_id: recipient_id as i64,
-                            event_type: ledger_event::CURRENCY_TRANSFER,
-                            event_id: tx.id as i64,
-                            holding_type: ledger_holding::CURRENCY_BALANCE,
-                            holding_id: Some(currency_id),
-                            change: units,
-                            balance: 0,
-                            block_id: current_block_id,
-                            height: current_height,
-                            timestamp: current_timestamp,
-                        };
-                        self.ledger_repo.insert(&entry).await?;
+                            // Receiver: increase currency units
+                            if recipient_id != 0 {
+                                let entry = AccountLedgerModel {
+                                    db_id: 0,
+                                    account_id: recipient_id as i64,
+                                    event_type: ledger_event::CURRENCY_TRANSFER,
+                                    event_id: tx.id as i64,
+                                    holding_type: ledger_holding::CURRENCY_BALANCE,
+                                    holding_id: Some(currency_id),
+                                    change: units,
+                                    balance: 0,
+                                    block_id: current_block_id,
+                                    height: current_height,
+                                    timestamp: current_timestamp,
+                                };
+                                self.ledger_repo.insert(&entry).await?;
+                            }
+                        }
                     }
+                    7 => { // CURRENCY_MINTING
+                        if units > 0 {
+                            let entry = AccountLedgerModel {
+                                db_id: 0,
+                                account_id: sender_id,
+                                event_type: ledger_event::CURRENCY_ISSUANCE, // ✅ 修复：NRCS 使用 38
+                                event_id: tx.id as i64,
+                                holding_type: ledger_holding::CURRENCY_BALANCE,
+                                holding_id: Some(currency_id),
+                                change: units,
+                                balance: units,
+                                block_id: current_block_id,
+                                height: current_height,
+                                timestamp: current_timestamp,
+                            };
+                            self.ledger_repo.insert(&entry).await?;
+                        }
+                    }
+                    _ => {}
                 }
             }
             _ => {}

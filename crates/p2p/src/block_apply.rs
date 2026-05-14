@@ -11,7 +11,7 @@ use std::sync::Arc;
 use blockchain_types::prelude::{Block, AccountId, Transaction, TransactionType};
 use orm::{AccountRepository, BlockRepository, PublicKeyRepository, AccountLedgerRepository, AccountGuaranteedBalanceRepository};
 use orm::models::AccountLedgerModel;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Block reward applicator (corresponds to Java's Block.apply())
 pub struct BlockRewardApplicator {
