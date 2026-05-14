@@ -1,97 +1,52 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title"><el-icon><UserFilled /></el-icon> 账户设置</h2>
-      <el-button type="primary" size="small" @click="refreshData">
-        <el-icon><Refresh /></el-icon> {{ t('common.refresh') }}
-      </el-button>
+      <h2 class="page-title"><el-icon><UserFilled /></el-icon> {{ t('settings.accountSettings') }}</h2>
     </div>
-    <el-card shadow="hover" v-loading="isLoading">
-      <el-table :data="items" style="width: 100%" :empty-text="t('common.noData')">
-        <el-table-column type="index" width="60" label="#" />
-        <el-table-column prop="id" label="ID" min-width="120" />
-        <el-table-column prop="name" :label="t('common.name')" min-width="150" v-if="hasName" />
-        <el-table-column :label="t('dashboard.date')" width="160">
-          <template #default="{ row }">
-            {{ formatDate(row.timestamp) }}
-          </template>
-        </el-table-column>
-      </el-table>
-      <div class="pagination-container" v-if="total > pageSize">
-        <el-pagination
-          v-model:current-page="currentPage"
-          :page-size="pageSize"
-          :total="total"
-          layout="prev, pager, next"
-          @current-change="handlePageChange"
-        />
-      </div>
+    <el-card shadow="hover">
+      <el-form :model="form" label-width="140px" style="max-width:600px">
+        <el-form-item :label="t('common.name')">
+          <el-input v-model="form.name" maxlength="100" show-word-limit />
+        </el-form-item>
+        <el-form-item :label="t('common.description')">
+          <el-input v-model="form.description" type="textarea" :rows="3" maxlength="1000" show-word-limit />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="saveSettings">{{ t('common.save') }}</el-button>
+        </el-form-item>
+      </el-form>
     </el-card>
+    <SetAccountInfoModal v-model:visible="showInfo" @success="loadAccount" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import SetAccountInfoModal from '@/components/modals/SetAccountInfoModal.vue'
 
 const { t } = useI18n()
-const isLoading = ref(false)
-const items = ref<any[]>([])
-const total = ref(0)
-const currentPage = ref(1)
-const pageSize = ref(20)
-const hasName = computed(() => items.value.some(item => 'name' in item))
+const form = ref({ name: '', description: '' })
+const showInfo = ref(false)
 
-onMounted(() => {
-  refreshData()
-})
+onMounted(() => loadAccount())
 
-async function refreshData() {
-  isLoading.value = true
+async function loadAccount() {
   try {
-    items.value = []; total.value = 0;
-  } catch (error) {
-    console.error('Failed to load data:', error)
-  } finally {
-    isLoading.value = false
-  }
+    const accountId = localStorage.getItem('nrcs_account_id') || ''
+    if (!accountId) return
+    const result = await nrcsApi.getAccount(accountId)
+    const acct = result as any
+    form.value.name = acct.name || ''
+    form.value.description = acct.description || ''
+  } catch {}
 }
 
-function formatDate(timestamp?: number): string {
-  if (!timestamp) return ''
-  const epochStart = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  return new Date(epochStart.getTime() + timestamp * 1000).toLocaleString()
-}
-
-function handlePageChange(page: number) {
-  currentPage.value = page
-  refreshData()
-}
+function saveSettings() { showInfo.value = true }
 </script>
-
 <style scoped lang="scss">
-.page-container {
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0;
-    }
-  }
-
-  .pagination-container {
-    display: flex;
-    justify-content: center;
-    margin-top: 16px;
-  }
-}
+@use '@/assets/styles/variables' as *;
+.page-container { .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin: 0; } .header-actions { display: flex; gap: 8px; } } }
 </style>

@@ -167,9 +167,15 @@ const sidebarMenus = computed<MenuItem[]>(() => [
     { path: '/datacloud/upload', title: t('menu.fileUpload'), icon: 'Upload', isButton: true }
   ]},
   { path: '/messages', title: t('menu.messages'), icon: 'ChatDotRound', children: [
-    { path: '/messages', title: t('menu.chat'), icon: 'ChatLineRound' }
+    { path: '/messages', title: t('menu.chat'), icon: 'ChatLineRound' },
+    { path: '/messages/my', title: t('menu.myMessages'), icon: 'List' }
   ]},
-  { path: '/aliases', title: t('menu.aliases'), icon: 'Bookmark' }
+  { path: '/aliases', title: t('menu.aliases'), icon: 'Bookmark' },
+  { path: '/shuffling', title: t('menu.shuffling'), icon: 'Switch', children: [
+    { path: '/shuffling/active', title: t('menu.activeShufflings'), icon: 'DataLine' },
+    { path: '/shuffling/my', title: t('menu.myShufflings'), icon: 'User' },
+    { path: '/shuffling/create', title: t('menu.createShuffling'), icon: 'Plus', isButton: true }
+  ]}
 ])
 
 function handleMenuClick(item: MenuItem) { router.push(item.path) }

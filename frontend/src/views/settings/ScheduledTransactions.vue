@@ -1,27 +1,72 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title"><el-icon><AlarmClock /></el-icon> 计划交易</h2>
+      <h2 class="page-title"><el-icon><AlarmClock /></el-icon> {{ t('settings.scheduledTransactions') }}</h2>
       <el-button type="primary" size="small" @click="refreshData">
         <el-icon><Refresh /></el-icon> {{ t('common.refresh') }}
       </el-button>
     </div>
+
     <el-card shadow="hover" v-loading="isLoading">
-      <el-table :data="items" style="width: 100%" :empty-text="t('common.noData')">
-        <el-table-column type="index" width="60" label="#" />
-        <el-table-column prop="id" label="ID" min-width="120" />
-        <el-table-column prop="name" :label="t('common.name')" min-width="150" v-if="hasName" />
-        <el-table-column :label="t('dashboard.date')" width="160">
+      <el-table :data="scheduledTxs" style="width: 100%" :empty-text="t('common.noData')">
+        <el-table-column label="Transaction ID" min-width="200">
           <template #default="{ row }">
-            {{ formatDate(row.timestamp) }}
+            <el-tooltip :content="row.transaction" placement="top">
+              <span class="mono-text">{{ truncate(row.transaction, 16) }}</span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column label="Type" width="100">
+          <template #default="{ row }">
+            {{ row.type }}.{{ row.subtype }}
+          </template>
+        </el-table-column>
+        <el-table-column label="Sender" min-width="180">
+          <template #default="{ row }">
+            <span class="mono-text">{{ truncate(row.senderRS || row.sender, 14) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Recipient" min-width="180">
+          <template #default="{ row }">
+            <span class="mono-text">{{ truncate(row.recipientRS || row.recipient, 14) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Amount (NRC)" width="120" align="right">
+          <template #default="{ row }">
+            {{ formatNrcsAmount(row.amountNQT) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="Fee (NRC)" width="110" align="right">
+          <template #default="{ row }">
+            {{ formatNrcsAmount(row.feeNQT) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="Height" width="90" align="right">
+          <template #default="{ row }">
+            {{ row.height || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="Timestamp" width="170">
+          <template #default="{ row }">
+            {{ formatNrcsTime(row.timestamp) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="Actions" width="100" fixed="right">
+          <template #default="{ row }">
+            <el-popconfirm title="Delete this scheduled transaction?" @confirm="deleteTx(row)">
+              <template #reference>
+                <el-button size="small" type="danger" link>Delete</el-button>
+              </template>
+            </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination-container" v-if="total > pageSize">
+
+      <div class="pagination-container" v-if="totalTxs > pageSize">
         <el-pagination
           v-model:current-page="currentPage"
           :page-size="pageSize"
-          :total="total"
+          :total="totalTxs"
           layout="prev, pager, next"
           @current-change="handlePageChange"
         />
@@ -31,42 +76,70 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import type { NrcsTransaction } from '@/api/modules/nrcs.api'
 
 const { t } = useI18n()
+
 const isLoading = ref(false)
-const items = ref<any[]>([])
-const total = ref(0)
+const scheduledTxs = ref<NrcsTransaction[]>([])
+const totalTxs = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
-const hasName = computed(() => items.value.some(item => 'name' in item))
 
-onMounted(() => {
-  refreshData()
-})
+onMounted(() => { refreshData() })
 
 async function refreshData() {
   isLoading.value = true
   try {
-    const account = localStorage.getItem('nrcs_account_rs'); if (account) { const result = await nrcsApi.getScheduledTransactions(account, (currentPage.value-1)*20, currentPage.value*20-1); items.value = (result.transactions || []).map((tx: any) => ({ id: tx.transaction, timestamp: tx.timestamp })); total.value = items.value.length; }
+    const account = localStorage.getItem('nrcs_account_rs') || ''
+    const firstIndex = (currentPage.value - 1) * pageSize.value
+    const lastIndex = firstIndex + pageSize.value - 1
+    const result = await nrcsApi.getScheduledTransactions(account, firstIndex, lastIndex)
+    scheduledTxs.value = result.transactions || []
+    totalTxs.value = scheduledTxs.value.length >= pageSize.value ? (currentPage.value + 1) * pageSize.value : scheduledTxs.value.length
   } catch (error) {
-    console.error('Failed to load data:', error)
+    console.error('Failed to load scheduled transactions:', error)
   } finally {
     isLoading.value = false
   }
 }
 
-function formatDate(timestamp?: number): string {
-  if (!timestamp) return ''
-  const epochStart = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  return new Date(epochStart.getTime() + timestamp * 1000).toLocaleString()
+async function deleteTx(tx: NrcsTransaction) {
+  try {
+    if (tx.transaction) {
+      await nrcsApi.deleteScheduledTransaction(tx.transaction)
+    }
+    ElMessage.success('Deleted successfully')
+    await refreshData()
+  } catch (e: any) {
+    ElMessage.error(e?.description || 'Failed to delete scheduled transaction')
+  }
 }
 
 function handlePageChange(page: number) {
   currentPage.value = page
   refreshData()
+}
+
+function formatNrcsTime(timestamp?: number): string {
+  if (!timestamp) return ''
+  const epoch = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
+  return new Date(epoch.getTime() + timestamp * 1000).toLocaleString()
+}
+
+function formatNrcsAmount(nqt?: string): string {
+  if (!nqt) return '0.00'
+  return (Number(BigInt(nqt)) / 100000000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function truncate(text: string | undefined, len: number): string {
+  if (!text) return '-'
+  if (text.length <= len + 4) return text
+  return text.slice(0, len) + '...' + text.slice(-4)
 }
 </script>
 
@@ -77,7 +150,6 @@ function handlePageChange(page: number) {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 16px;
-
     .page-title {
       font-size: 18px;
       font-weight: 600;
@@ -87,11 +159,15 @@ function handlePageChange(page: number) {
       margin: 0;
     }
   }
-
   .pagination-container {
     display: flex;
     justify-content: center;
     margin-top: 16px;
   }
+}
+.mono-text {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 13px;
+  color: #606266;
 }
 </style>

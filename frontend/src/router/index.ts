@@ -465,6 +465,16 @@ const routes: AppRouteRecordRaw[] = [
               icon: 'ChatLineRound',
               requireAuth: true
             }
+          },
+          {
+            path: 'my',
+            name: 'MyMessages',
+            component: () => import('@/views/message/Messages.vue'),
+            meta: {
+              title: '我的信息',
+              icon: 'List',
+              requireAuth: true
+            }
           }
         ]
       },
@@ -479,6 +489,18 @@ const routes: AppRouteRecordRaw[] = [
           icon: 'Bookmark',
           requireAuth: true
         }
+      },
+
+      // Shuffling (混币)
+      {
+        path: 'shuffling',
+        name: 'ShufflingParent',
+        meta: { title: '混币', icon: 'Switch', requireAuth: true },
+        children: [
+          { path: 'active', name: 'ActiveShufflings', component: () => import('@/views/shuffling/ActiveShufflings.vue'), meta: { title: '活跃混币', icon: 'DataLine' } },
+          { path: 'my', name: 'MyShufflings', component: () => import('@/views/shuffling/MyShufflings.vue'), meta: { title: '我的混币', icon: 'User' } },
+          { path: 'create', name: 'CreateShuffling', component: () => import('@/views/shuffling/CreateShuffling.vue'), meta: { title: '创建混币', icon: 'Plus', isButton: true } }
+        ]
       },
 
       // Settings pages (from header Settings dropdown)

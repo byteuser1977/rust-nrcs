@@ -1,97 +1,76 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title"><el-icon><Operation /></el-icon> 交易操作</h2>
-      <el-button type="primary" size="small" @click="refreshData">
-        <el-icon><Refresh /></el-icon> {{ t('common.refresh') }}
-      </el-button>
+      <h2 class="page-title"><el-icon><Operation /></el-icon> {{ t('settings.transactionOperations') }}</h2>
     </div>
-    <el-card shadow="hover" v-loading="isLoading">
-      <el-table :data="items" style="width: 100%" :empty-text="t('common.noData')">
-        <el-table-column type="index" width="60" label="#" />
-        <el-table-column prop="id" label="ID" min-width="120" />
-        <el-table-column prop="name" :label="t('common.name')" min-width="150" v-if="hasName" />
-        <el-table-column :label="t('dashboard.date')" width="160">
-          <template #default="{ row }">
-            {{ formatDate(row.timestamp) }}
-          </template>
-        </el-table-column>
-      </el-table>
-      <div class="pagination-container" v-if="total > pageSize">
-        <el-pagination
-          v-model:current-page="currentPage"
-          :page-size="pageSize"
-          :total="total"
-          layout="prev, pager, next"
-          @current-change="handlePageChange"
-        />
-      </div>
+    <el-card shadow="hover">
+      <el-tabs v-model="mode">
+        <el-tab-pane :label="t('settings.parseTransaction')" name="parse">
+          <el-form label-width="140px">
+            <el-form-item :label="t('settings.transactionBytes')">
+              <el-input v-model="txBytes" type="textarea" :rows="4" placeholder="Hex transaction bytes" />
+            </el-form-item>
+            <el-form-item :label="t('settings.transactionJSON')">
+              <el-input v-model="txJson" type="textarea" :rows="4" placeholder="Or paste transaction JSON" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="parseTx">{{ t('settings.parse') }}</el-button>
+            </el-form-item>
+          </el-form>
+          <el-descriptions v-if="parsed" :column="2" border style="margin-top:16px">
+            <el-descriptions-item :label="t('common.transaction')" :span="2">{{ parsed.transaction }}</el-descriptions-item>
+            <el-descriptions-item :label="t('common.type')">{{ parsed.type }}.{{ parsed.subtype }}</el-descriptions-item>
+            <el-descriptions-item :label="t('common.amount')">{{ formatNQT(parsed.amountNQT) }} NRC</el-descriptions-item>
+            <el-descriptions-item :label="t('common.fee')">{{ formatNQT(parsed.feeNQT) }} NRC</el-descriptions-item>
+            <el-descriptions-item :label="t('common.sender')">{{ parsed.senderRS }}</el-descriptions-item>
+            <el-descriptions-item :label="t('common.recipient')" :span="2">{{ parsed.recipientRS }}</el-descriptions-item>
+          </el-descriptions>
+        </el-tab-pane>
+        <el-tab-pane :label="t('settings.broadcastTransaction')" name="broadcast">
+          <el-form label-width="140px">
+            <el-form-item :label="t('settings.transactionBytes')">
+              <el-input v-model="broadcastBytes" type="textarea" :rows="4" placeholder="Signed transaction bytes to broadcast" />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="broadcastTx">{{ t('settings.broadcast') }}</el-button>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 
 const { t } = useI18n()
-const isLoading = ref(false)
-const items = ref<any[]>([])
-const total = ref(0)
-const currentPage = ref(1)
-const pageSize = ref(20)
-const hasName = computed(() => items.value.some(item => 'name' in item))
+const mode = ref('parse')
+const txBytes = ref('')
+const txJson = ref('')
+const parsed = ref<any>(null)
+const broadcastBytes = ref('')
 
-onMounted(() => {
-  refreshData()
-})
+function formatNQT(nqt: string) { return (Number(nqt || '0') / 1e8).toFixed(2) }
 
-async function refreshData() {
-  isLoading.value = true
+async function parseTx() {
   try {
-    items.value = []; total.value = 0;
-  } catch (error) {
-    console.error('Failed to load data:', error)
-  } finally {
-    isLoading.value = false
-  }
+    parsed.value = await nrcsApi.parseTransaction(txBytes.value || undefined, txJson.value || undefined)
+  } catch (e: any) { ElMessage.error(e?.message || 'Failed to parse transaction') }
 }
 
-function formatDate(timestamp?: number): string {
-  if (!timestamp) return ''
-  const epochStart = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  return new Date(epochStart.getTime() + timestamp * 1000).toLocaleString()
-}
-
-function handlePageChange(page: number) {
-  currentPage.value = page
-  refreshData()
+async function broadcastTx() {
+  if (!broadcastBytes.value) return
+  try {
+    const result = await nrcsApi.broadcastTransaction(broadcastBytes.value)
+    ElMessage.success(`Broadcast: ${(result as any).transaction || 'OK'}`)
+  } catch (e: any) { ElMessage.error(e?.message || 'Failed to broadcast') }
 }
 </script>
-
 <style scoped lang="scss">
-.page-container {
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0;
-    }
-  }
-
-  .pagination-container {
-    display: flex;
-    justify-content: center;
-    margin-top: 16px;
-  }
-}
+@use '@/assets/styles/variables' as *;
+.page-container { .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin: 0; } } }
 </style>

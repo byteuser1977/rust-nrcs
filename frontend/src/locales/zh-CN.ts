@@ -65,7 +65,12 @@ export default {
     fileUpload: '文件上传',
     messages: '信息',
     chat: '聊天',
-    aliases: '别名'
+    myMessages: '我的信息',
+    aliases: '别名',
+    shuffling: '混币',
+    activeShufflings: '活跃混币',
+    myShufflings: '我的混币',
+    createShuffling: '创建混币'
   },
 
   sidebar: {

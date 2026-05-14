@@ -1,97 +1,64 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title"><el-icon><Star /></el-icon> 关注的投票</h2>
-      <el-button type="primary" size="small" @click="refreshData">
-        <el-icon><Refresh /></el-icon> {{ t('common.refresh') }}
-      </el-button>
+      <h2 class="page-title"><el-icon><Star /></el-icon> {{ t('voting.followedPolls') }}</h2>
+      <div class="header-actions">
+        <el-button size="small" @click="refreshData"><el-icon><Refresh /></el-icon> {{ t('common.refresh') }}</el-button>
+      </div>
     </div>
-    <el-card shadow="hover" v-loading="isLoading">
-      <el-table :data="items" style="width: 100%" :empty-text="t('common.noData')">
-        <el-table-column type="index" width="60" label="#" />
-        <el-table-column prop="id" label="ID" min-width="120" />
-        <el-table-column prop="name" :label="t('common.name')" min-width="150" v-if="hasName" />
-        <el-table-column :label="t('dashboard.date')" width="160">
+    <el-card shadow="hover" v-loading="loading">
+      <el-table :data="items" stripe style="width:100%" :empty-text="t('common.noData')">
+        <el-table-column prop="name" :label="t('voting.name')" min-width="180" />
+        <el-table-column prop="description" :label="t('voting.description')" min-width="220" show-overflow-tooltip />
+        <el-table-column :label="t('voting.finishHeight')" width="120" align="right">
+          <template #default="{ row }">{{ row.finishHeight }}</template>
+        </el-table-column>
+        <el-table-column :label="t('common.actions')" width="180" fixed="right">
           <template #default="{ row }">
-            {{ formatDate(row.timestamp) }}
+            <el-button size="small" text type="primary" @click="openVote(row)">{{ t('voting.vote') }}</el-button>
+            <el-button size="small" text type="success" @click="openResults(row)">{{ t('voting.results') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination-container" v-if="total > pageSize">
-        <el-pagination
-          v-model:current-page="currentPage"
-          :page-size="pageSize"
-          :total="total"
-          layout="prev, pager, next"
-          @current-change="handlePageChange"
-        />
+      <div class="pagination-container" v-if="total > 20">
+        <el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="prev,pager,next" @current-change="refreshData" />
       </div>
     </el-card>
+    <CastVoteModal v-model:visible="showVote" :poll="selectedPoll" @success="refreshData" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import CastVoteModal from '@/components/modals/CastVoteModal.vue'
 
 const { t } = useI18n()
-const isLoading = ref(false)
+const loading = ref(false)
 const items = ref<any[]>([])
 const total = ref(0)
-const currentPage = ref(1)
-const pageSize = ref(20)
-const hasName = computed(() => items.value.some(item => 'name' in item))
+const page = ref(1)
+const showVote = ref(false)
+const selectedPoll = ref<any>(null)
 
-onMounted(() => {
-  refreshData()
-})
+onMounted(() => refreshData())
 
 async function refreshData() {
-  isLoading.value = true
+  loading.value = true
   try {
-    const result = await nrcsApi.getPolls((currentPage.value-1)*20, currentPage.value*20-1); items.value = (result.polls || []).map((p: any) => ({ id: p.poll, name: p.name, timestamp: p.timestamp })); total.value = items.value.length;
-  } catch (error) {
-    console.error('Failed to load data:', error)
-  } finally {
-    isLoading.value = false
-  }
+    const result = await nrcsApi.getPolls((page.value - 1) * 20, page.value * 20 - 1)
+    items.value = (result as any).polls || []
+    total.value = items.value.length
+  } catch (e: any) { ElMessage.error(e?.message || t('common.loadError')) }
+  finally { loading.value = false }
 }
 
-function formatDate(timestamp?: number): string {
-  if (!timestamp) return ''
-  const epochStart = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  return new Date(epochStart.getTime() + timestamp * 1000).toLocaleString()
-}
-
-function handlePageChange(page: number) {
-  currentPage.value = page
-  refreshData()
-}
+function openVote(row: any) { selectedPoll.value = row; showVote.value = true }
+function openResults(row: any) { ElMessage.info(`Poll: ${row.name}`) }
 </script>
-
 <style scoped lang="scss">
-.page-container {
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0;
-    }
-  }
-
-  .pagination-container {
-    display: flex;
-    justify-content: center;
-    margin-top: 16px;
-  }
-}
+@use '@/assets/styles/variables' as *;
+.page-container { .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin: 0; } .header-actions { display: flex; gap: 8px; } } .pagination-container { display: flex; justify-content: center; margin-top: 16px; } }
 </style>

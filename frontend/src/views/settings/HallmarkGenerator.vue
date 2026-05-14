@@ -1,97 +1,45 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title"><el-icon><Stamp /></el-icon> 生成标记</h2>
-      <el-button type="primary" size="small" @click="refreshData">
-        <el-icon><Refresh /></el-icon> {{ t('common.refresh') }}
-      </el-button>
+      <h2 class="page-title"><el-icon><Stamp /></el-icon> {{ t('settings.hallmarkGenerator') }}</h2>
     </div>
-    <el-card shadow="hover" v-loading="isLoading">
-      <el-table :data="items" style="width: 100%" :empty-text="t('common.noData')">
-        <el-table-column type="index" width="60" label="#" />
-        <el-table-column prop="id" label="ID" min-width="120" />
-        <el-table-column prop="name" :label="t('common.name')" min-width="150" v-if="hasName" />
-        <el-table-column :label="t('dashboard.date')" width="160">
-          <template #default="{ row }">
-            {{ formatDate(row.timestamp) }}
-          </template>
-        </el-table-column>
-      </el-table>
-      <div class="pagination-container" v-if="total > pageSize">
-        <el-pagination
-          v-model:current-page="currentPage"
-          :page-size="pageSize"
-          :total="total"
-          layout="prev, pager, next"
-          @current-change="handlePageChange"
-        />
-      </div>
+    <el-card shadow="hover">
+      <el-form label-width="140px" style="max-width:600px">
+        <el-form-item :label="t('settings.hallmark')">
+          <el-input v-model="hallmark" placeholder="Enter hallmark string" clearable />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="decode">{{ t('settings.decode') }}</el-button>
+        </el-form-item>
+      </el-form>
+      <el-descriptions v-if="result" :column="2" border style="margin-top:16px">
+        <el-descriptions-item :label="t('common.host')">{{ result.host }}</el-descriptions-item>
+        <el-descriptions-item :label="t('common.weight')">{{ result.weight }}</el-descriptions-item>
+        <el-descriptions-item :label="t('common.date')">{{ result.date }}</el-descriptions-item>
+        <el-descriptions-item :label="'Valid'">{{ result.valid ? 'Yes' : 'No' }}</el-descriptions-item>
+      </el-descriptions>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 
 const { t } = useI18n()
-const isLoading = ref(false)
-const items = ref<any[]>([])
-const total = ref(0)
-const currentPage = ref(1)
-const pageSize = ref(20)
-const hasName = computed(() => items.value.some(item => 'name' in item))
+const hallmark = ref('')
+const result = ref<any>(null)
 
-onMounted(() => {
-  refreshData()
-})
-
-async function refreshData() {
-  isLoading.value = true
+async function decode() {
+  if (!hallmark.value.trim()) return
   try {
-    items.value = []; total.value = 0;
-  } catch (error) {
-    console.error('Failed to load data:', error)
-  } finally {
-    isLoading.value = false
-  }
-}
-
-function formatDate(timestamp?: number): string {
-  if (!timestamp) return ''
-  const epochStart = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  return new Date(epochStart.getTime() + timestamp * 1000).toLocaleString()
-}
-
-function handlePageChange(page: number) {
-  currentPage.value = page
-  refreshData()
+    result.value = await nrcsApi.decodeHallmark(hallmark.value.trim())
+  } catch (e: any) { ElMessage.error(e?.message || 'Failed to decode hallmark') }
 }
 </script>
-
 <style scoped lang="scss">
-.page-container {
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-
-    .page-title {
-      font-size: 18px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 0;
-    }
-  }
-
-  .pagination-container {
-    display: flex;
-    justify-content: center;
-    margin-top: 16px;
-  }
-}
+@use '@/assets/styles/variables' as *;
+.page-container { .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin: 0; } } }
 </style>

@@ -65,7 +65,12 @@ export default {
     fileUpload: 'File Upload',
     messages: 'Messages',
     chat: 'Chat',
-    aliases: 'Aliases'
+    myMessages: 'My Messages',
+    aliases: 'Aliases',
+    shuffling: 'Shuffling',
+    activeShufflings: 'Active Shufflings',
+    myShufflings: 'My Shufflings',
+    createShuffling: 'Create Shuffling'
   },
 
   sidebar: {

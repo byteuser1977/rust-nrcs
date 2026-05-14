@@ -1,72 +1,82 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title"><el-icon><Opportunity /></el-icon> 插件</h2>
+      <h2 class="page-title"><el-icon><Opportunity /></el-icon> {{ t('settings.plugins') }}</h2>
       <el-button type="primary" size="small" @click="refreshData">
         <el-icon><Refresh /></el-icon> {{ t('common.refresh') }}
       </el-button>
     </div>
+
     <el-card shadow="hover" v-loading="isLoading">
-      <el-table :data="items" style="width: 100%" :empty-text="t('common.noData')">
-        <el-table-column type="index" width="60" label="#" />
-        <el-table-column prop="id" label="ID" min-width="120" />
-        <el-table-column prop="name" :label="t('common.name')" min-width="150" v-if="hasName" />
-        <el-table-column :label="t('dashboard.date')" width="160">
+      <el-table :data="plugins" style="width: 100%" :empty-text="t('common.noData')">
+        <el-table-column label="Name" min-width="180">
           <template #default="{ row }">
-            {{ formatDate(row.timestamp) }}
+            <span class="plugin-name">{{ row.name || row.plugin }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Version" width="100">
+          <template #default="{ row }">
+            <el-tag size="small">{{ row.version || '-' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="Website" min-width="180">
+          <template #default="{ row }">
+            <a v-if="row.website" :href="row.website" target="_blank" class="link">{{ row.website }}</a>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Validation" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.validation === 'VALID' ? 'success' : 'danger'" size="small">
+              {{ row.validation || 'Unknown' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="Compatibility" width="130">
+          <template #default="{ row }">
+            <el-tag :type="row.compatibility === 'COMPATIBLE' ? 'success' : 'warning'" size="small">
+              {{ row.compatibility || 'Unknown' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="Status" width="120">
+          <template #default="{ row }">
+            <el-tag :type="row.launched ? 'success' : 'info'" size="small">
+              {{ row.launched ? 'Launched' : 'Not launched' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="Description" min-width="200">
+          <template #default="{ row }">
+            <span class="text-muted">{{ row.description || '-' }}</span>
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination-container" v-if="total > pageSize">
-        <el-pagination
-          v-model:current-page="currentPage"
-          :page-size="pageSize"
-          :total="total"
-          layout="prev, pager, next"
-          @current-change="handlePageChange"
-        />
-      </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 
 const { t } = useI18n()
 const isLoading = ref(false)
-const items = ref<any[]>([])
-const total = ref(0)
-const currentPage = ref(1)
-const pageSize = ref(20)
-const hasName = computed(() => items.value.some(item => 'name' in item))
+const plugins = ref<any[]>([])
 
-onMounted(() => {
-  refreshData()
-})
+onMounted(() => { refreshData() })
 
 async function refreshData() {
   isLoading.value = true
   try {
-    const result = await nrcsApi.getPlugins(); items.value = (result.plugins || []).map((p: any) => ({ id: p.id, name: p.name })); total.value = items.value.length;
+    const result = await nrcsApi.getPlugins()
+    plugins.value = result.plugins || []
   } catch (error) {
-    console.error('Failed to load data:', error)
+    console.error('Failed to load plugins:', error)
   } finally {
     isLoading.value = false
   }
-}
-
-function formatDate(timestamp?: number): string {
-  if (!timestamp) return ''
-  const epochStart = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  return new Date(epochStart.getTime() + timestamp * 1000).toLocaleString()
-}
-
-function handlePageChange(page: number) {
-  currentPage.value = page
-  refreshData()
 }
 </script>
 
@@ -77,7 +87,6 @@ function handlePageChange(page: number) {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 16px;
-
     .page-title {
       font-size: 18px;
       font-weight: 600;
@@ -87,11 +96,17 @@ function handlePageChange(page: number) {
       margin: 0;
     }
   }
-
-  .pagination-container {
-    display: flex;
-    justify-content: center;
-    margin-top: 16px;
-  }
+}
+.plugin-name {
+  font-weight: 500;
+}
+.link {
+  color: #409eff;
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
+}
+.text-muted {
+  color: #909399;
+  font-size: 13px;
 }
 </style>

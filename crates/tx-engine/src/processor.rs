@@ -3229,17 +3229,21 @@ impl DatabaseTransactionProcessor {
                  * - change = 0 (当 tx.amount != 实际资产数量时)
                  * - 与 NRCS 数据库不一致
                  */
-                let asset_id = tx.id as i64;
+                let asset_id = self.parse_long_field(tx, "asset").unwrap_or(tx.id as i64);
 
                 // 根据 subtype 选择不同的 quantity 来源
-                let quantity = if tx.subtype == 0 {
-                    // ASSET_ISSUANCE: 从 attachment JSON 解析（对齐 apply_asset_issuance()）
-                    self.parse_long_field(tx, "quantityQNT")
-                        .or_else(|| self.parse_long_field(tx, "quantity"))
-                        .unwrap_or(1)  // singleton 默认为 1
-                } else {
-                    // 其他 subtype: 从 tx.amount 获取
-                    tx.amount as i64
+                // 对齐 apply_asset_transfer() 和 apply_ask_order_placement() 的解析逻辑
+                let quantity = match tx.subtype {
+                    0 => { // ASSET_ISSUANCE: 从 attachment JSON 解析
+                        self.parse_long_field(tx, "quantityQNT")
+                            .or_else(|| self.parse_long_field(tx, "quantity"))
+                            .unwrap_or(1)  // singleton 默认为 1
+                    }
+                    _ => { // 其他 subtype (ASSET_TRANSFER=1, ASK_ORDER_PLACEMENT=2 等): 从 attachment 解析
+                        self.parse_long_field(tx, "quantityQNT")
+                            .or_else(|| self.parse_long_field(tx, "quantity"))
+                            .unwrap_or(tx.amount as i64)
+                    }
                 };
 
                 match tx.subtype {
@@ -5242,58 +5246,7 @@ impl DatabaseTransactionProcessor {
                             "Retrieved account asset state"
                         );
 
-                        // ✅ 修复：自动同步 unconfirmed_quantity 到 quantity
-                        // Java NRCS 语义：已确认的资产应该立即可用于未确认交易
-                        // 如果出现 quantity > unconfirmed_quantity，说明数据不一致（可能是历史数据或 P2P 同步问题）
-                        // 解决方案：将 unconfirmed_quantity 同步到 quantity，确保一致性
-                        if aa.unconfirmed_quantity < aa.quantity && aa.quantity >= quantity {
-                            tracing::warn!(
-                                account = sender_id,
-                                asset = asset_id,
-                                confirmed_qty = aa.quantity,
-                                current_unconfirmed = aa.unconfirmed_quantity,
-                                needed = quantity,
-                                tx_id = tx.id,
-                                "Detected unconfirmed_quantity < quantity, auto-syncing to ensure consistency"
-                            );
-
-                            // 将 unconfirmed_quantity 同步到 quantity
-                            let sync_delta = aa.quantity - aa.unconfirmed_quantity;
-                            self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, sync_delta).await?;
-
-                            tracing::info!(
-                                account = sender_id,
-                                asset = asset_id,
-                                sync_delta = sync_delta,
-                                new_unconfirmed = aa.quantity,
-                                "Successfully synced unconfirmed_quantity to quantity"
-                            );
-
-                            // 更新本地变量以反映同步后的值
-                            let synced_unconfirmed = aa.quantity;
-                            if synced_unconfirmed < quantity {
-                                tracing::warn!(
-                                    account = sender_id,
-                                    asset = asset_id,
-                                    have = synced_unconfirmed,
-                                    need = quantity,
-                                    confirmed_qty = aa.quantity,
-                                    tx_id = tx.id,
-                                    tx_type = format!("{:?}", tx.type_id),
-                                    tx_subtype = tx.subtype,
-                                    "Insufficient unconfirmed asset balance detected (after sync)"
-                                );
-
-                                tracing::debug!(
-                                    account = sender_id,
-                                    asset = asset_id,
-                                    account_asset_record = format!("{:?}", aa),
-                                    "Full account_asset state for debugging"
-                                );
-
-                                return Ok(false);
-                            }
-                        } else if aa.unconfirmed_quantity < quantity {
+                                                if aa.unconfirmed_quantity < quantity {
                             tracing::warn!(
                                 account = sender_id,
                                 asset = asset_id,
@@ -5355,17 +5308,6 @@ impl DatabaseTransactionProcessor {
 
                 match self.account_asset_repo.find_by_account_and_asset(sender_id, asset_id).await? {
                     Some(aa) => {
-                        // ✅ 修复：应用与 subtype=1 相同的自动同步逻辑
-                        if aa.unconfirmed_quantity < aa.quantity && aa.quantity >= quantity {
-                            tracing::warn!(
-                                "Detected unconfirmed_quantity < quantity for ask order, auto-syncing: account={}, asset={}, confirmed={}, unconfirmed={}",
-                                sender_id, asset_id, aa.quantity, aa.unconfirmed_quantity
-                            );
-
-                            let sync_delta = aa.quantity - aa.unconfirmed_quantity;
-                            self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, sync_delta).await?;
-                        }
-
                         if aa.unconfirmed_quantity < quantity {
                             tracing::warn!(
                                 "Insufficient unconfirmed asset for ask order: account={}, asset={}, have={}, need={}",
@@ -5419,17 +5361,6 @@ impl DatabaseTransactionProcessor {
 
                 match self.account_asset_repo.find_by_account_and_asset(sender_id, asset_id).await? {
                     Some(aa) => {
-                        // ✅ 修复：应用与 subtype=1 相同的自动同步逻辑
-                        if aa.unconfirmed_quantity < aa.quantity && aa.quantity >= quantity {
-                            tracing::warn!(
-                                "Detected unconfirmed_quantity < quantity for asset delete, auto-syncing: account={}, asset={}, confirmed={}, unconfirmed={}",
-                                sender_id, asset_id, aa.quantity, aa.unconfirmed_quantity
-                            );
-
-                            let sync_delta = aa.quantity - aa.unconfirmed_quantity;
-                            self.account_asset_repo.add_to_unconfirmed_quantity(sender_id, asset_id, sync_delta).await?;
-                        }
-
                         if aa.unconfirmed_quantity < quantity {
                             tracing::warn!(
                                 "Insufficient unconfirmed asset for delete: account={}, asset={}, have={}, need={}",

@@ -349,6 +349,18 @@ export const nrcsApi = {
     return nrcsPost<any>('setAlias', data)
   },
 
+  sellAlias(data: { secretPhrase: string; aliasName: string; priceNQT: string; buyer?: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('sellAlias', data)
+  },
+
+  buyAlias(data: { secretPhrase: string; aliasName: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('buyAlias', data)
+  },
+
+  deleteAlias(data: { secretPhrase: string; aliasName: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('deleteAlias', data)
+  },
+
   getAsset(asset: string) {
     return nrcsGet<NrcsAsset>('getAsset', { asset })
   },
@@ -449,8 +461,8 @@ export const nrcsApi = {
     return nrcsGet<{ offers: any[] }>('getBuyOffers', { currency, firstIndex, lastIndex })
   },
 
-  getExchanges(currency?: string, firstIndex?: number, lastIndex?: number) {
-    return nrcsGet<{ exchanges: any[] }>('getExchanges', { currency, firstIndex, lastIndex })
+  getExchanges(currency?: string, account?: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ exchanges: any[] }>('getExchanges', { currency, account, firstIndex, lastIndex })
   },
 
   getCurrencyTransfers(currency?: string, account?: string, firstIndex?: number, lastIndex?: number) {
@@ -545,16 +557,8 @@ export const nrcsApi = {
     return nrcsPost<any>('dgsPurchase', data)
   },
 
-  dgsDelivery(data: { secretPhrase: string; purchase: string; goods: string; feeNQT: string; deadline: number }) {
-    return nrcsPost<any>('dgsDelivery', data)
-  },
-
-  dgsFeedback(data: { secretPhrase: string; purchase: string; message: string; feeNQT: string; deadline: number }) {
-    return nrcsPost<any>('dgsFeedback', data)
-  },
-
-  dgsRefund(data: { secretPhrase: string; purchase: string; refundNQT: string; feeNQT: string; deadline: number }) {
-    return nrcsPost<any>('dgsRefund', data)
+  addFollowedPoll(data: { poll: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('addFollowedPoll', data)
   },
 
   searchTaggedData(query: string, firstIndex?: number, lastIndex?: number) {
@@ -569,12 +573,56 @@ export const nrcsApi = {
     return nrcsPost<any>('uploadTaggedData', data)
   },
 
+  extendTaggedData(data: { secretPhrase: string; transaction: string; data: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('extendTaggedData', data)
+  },
+
+  getAllTaggedData(firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ data: any[] }>('getAllTaggedData', { firstIndex, lastIndex })
+  },
+
+  getAccountTaggedData(account: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ data: any[] }>('getAccountTaggedData', { account, firstIndex, lastIndex })
+  },
+
+  getDataTags(firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ tags: string[] }>('getDataTags', { firstIndex, lastIndex })
+  },
+
+  getDataTagCount() {
+    return nrcsGet<{ numberOfDataTags: number }>('getDataTagCount')
+  },
+
+  downloadTaggedData(transaction: string) {
+    return nrcsGet<any>('downloadTaggedData', { transaction })
+  },
+
   getAccountMessages(account: string, firstIndex?: number, lastIndex?: number) {
     return nrcsGet<{ messages: NrcsMessage[] }>('getAccountMessages', { account, firstIndex, lastIndex })
   },
 
   readMessage(transaction: string, secretPhrase?: string) {
     return nrcsGet<any>('readMessage', { transaction, secretPhrase })
+  },
+
+  decryptMessages(data: { secretPhrase: string; transaction: string }) {
+    return nrcsPost<any>('decryptMessages', data)
+  },
+
+  getPrunableMessage(transaction: string) {
+    return nrcsGet<any>('getPrunableMessage', { transaction })
+  },
+
+  getPrunableMessages(account: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ prunableMessages: any[] }>('getPrunableMessages', { account, firstIndex, lastIndex })
+  },
+
+  getAllPrunableMessages(firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ prunableMessages: any[] }>('getAllPrunableMessages', { firstIndex, lastIndex })
+  },
+
+  verifyPrunableMessage(transaction: string) {
+    return nrcsGet<any>('verifyPrunableMessage', { transaction })
   },
 
   generateToken(data: { secretPhrase: string; website: string }) {
@@ -631,5 +679,114 @@ export const nrcsApi = {
 
   approveTransaction(data: { secretPhrase: string; transaction: string; feeNQT: string; deadline: number }) {
     return nrcsPost<any>('approveTransaction', data)
+  },
+
+  signTransaction(unsignedTransactionBytes?: string, unsignedTransactionJSON?: string, secretPhrase?: string) {
+    return nrcsPost<any>('signTransaction', { unsignedTransactionBytes, unsignedTransactionJSON, secretPhrase })
+  },
+
+  calculateFullHash(unsignedTransactionBytes?: string, unsignedTransactionJSON?: string, signatureHash?: string) {
+    return nrcsGet<any>('calculateFullHash', { unsignedTransactionBytes, unsignedTransactionJSON, signatureHash })
+  },
+
+  blacklistPeer(peer: string) {
+    return nrcsPost<any>('blacklistPeer', { peer })
+  },
+
+  deleteScheduledTransaction(transaction: string) {
+    return nrcsPost<any>('deleteScheduledTransaction', { transaction })
+  },
+
+  markHost(secretPhrase: string, host: string, weight: number, date: string) {
+    return nrcsPost<any>('markHost', { secretPhrase, host, weight, date })
+  },
+
+  decodeHallmark(hallmark: string) {
+    return nrcsGet<any>('decodeHallmark', { hallmark })
+  },
+
+  getBlockId(block: string) {
+    return nrcsGet<{ block: string }>('getBlockId', { block })
+  },
+
+  getECBlock(timestamp: number) {
+    return nrcsGet<any>('getECBlock', { timestamp })
+  },
+
+  leaseBalance(secretPhrase: string, recipient: string, period: number, feeNQT: string, deadline: number) {
+    return nrcsPost<any>('leaseBalance', { secretPhrase, recipient, period, feeNQT, deadline })
+  },
+
+  // Shuffling (混币)
+  shufflingCreate(data: { secretPhrase: string; amount: string; participantCount: number; registrationPeriod: number; holdingType: number; holding: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('shufflingCreate', data)
+  },
+
+  shufflingRegister(data: { secretPhrase: string; shuffling: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('shufflingRegister', data)
+  },
+
+  shufflingProcess(data: { secretPhrase: string; shuffling: string; recipientSecretPhrase?: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('shufflingProcess', data)
+  },
+
+  shufflingVerify(data: { secretPhrase: string; shuffling: string; shufflingStateHash: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('shufflingVerify', data)
+  },
+
+  shufflingCancel(data: { secretPhrase: string; shuffling: string; cancellingAccount: string; shufflingStateHash: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('shufflingCancel', data)
+  },
+
+  getAllShufflings(firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ shufflings: any[] }>('getAllShufflings', { firstIndex, lastIndex })
+  },
+
+  getAccountShufflings(account: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ shufflings: any[] }>('getAccountShufflings', { account, firstIndex, lastIndex })
+  },
+
+  getShuffling(shuffling: string) {
+    return nrcsGet<any>('getShuffling', { shuffling })
+  },
+
+  getShufflingParticipants(shuffling: string) {
+    return nrcsGet<{ participants: any[] }>('getShufflingParticipants', { shuffling })
+  },
+
+  getPollResult(poll: string, votingModel?: number, holding?: string, minBalance?: string, minBalanceModel?: number) {
+    return nrcsGet<{ poll: string; results: { option: string; weight: string; result: string }[] }>('getPollResult', { poll, votingModel, holding, minBalance, minBalanceModel })
+  },
+
+  getPollVotes(poll: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ votes: { voter: string; voterRS: string; votes: string[]; transaction: string; timestamp: number }[] }>('getPollVotes', { poll, firstIndex, lastIndex })
+  },
+
+  getPollVote(poll: string, account: string) {
+    return nrcsGet<{ voter: string; voterRS: string; votes: string[] }>('getPollVote', { poll, account })
+  },
+
+  getDGSTags(inStockOnly?: boolean, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ tags: string[] }>('getDGSTags', { inStockOnly, firstIndex, lastIndex })
+  },
+
+  getDGSTagCount(inStockOnly?: boolean) {
+    return nrcsGet<{ numberOfTags: number }>('getDGSTagCount', { inStockOnly })
+  },
+
+  getDGSExpiredPurchases(seller?: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ purchases: NrcsDGSPurchase[] }>('getDGSExpiredPurchases', { seller, firstIndex, lastIndex })
+  },
+
+  getShufflers(account?: string, adminPassword?: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ shufflers: { account: string; accountRS: string; shuffling: string }[] }>('getShufflers', { account, adminPassword, firstIndex, lastIndex })
+  },
+
+  startShuffler(data: { secretPhrase: string; shufflingFullHash: string; recipientPublicKey?: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('startShuffler', data)
+  },
+
+  stopShuffler(data: { secretPhrase: string; shufflingFullHash: string; processing?: boolean; adminPassword?: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('stopShuffler', data)
   }
 }

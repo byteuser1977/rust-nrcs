@@ -1,183 +1,199 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { User, LoginCredentials, RegisterCredentials } from '@/types/business'
-import { accountApi } from '@/api/modules'
-import type { ApiResponse } from '@/types'
-import { useUiStore } from '@/stores/modules/ui.store'
+import { nrcsApi } from '@/api/modules'
+import type { NrcsAccount } from '@/api/modules'
+
+const STORAGE_KEY_ACCOUNT_RS = 'nrcs-accountRS'
+const STORAGE_KEY_ACCOUNT_ID = 'nrcs-accountId'
+const STORAGE_KEY_PUBLIC_KEY = 'nrcs-publicKey'
+const STORAGE_KEY_SECRET_PHRASE = 'nrcs-secretPhrase'
 
 export const useAccountStore = defineStore('account', () => {
-  // 用户信息
-  const userInfo = ref<User | null>(null)
-  const walletAddress = ref('')
-  const accessToken = ref<string>('')
-  const refreshToken = ref<string>('')
+  // --- State ---
+  const accountRS = ref<string>('')
+  const accountId = ref<string>('')
+  const publicKey = ref<string>('')
+  const balanceNQT = ref<string>('0')
+  const effectiveBalance = ref<number>(0)
+  const unconfirmedBalanceNQT = ref<string>('0')
+  const forgedBalanceNQT = ref<string>('0')
+  const guaranteedBalanceNQT = ref<string>('0')
+  const name = ref<string>('')
+  const description = ref<string>('')
 
-  // 钱包连接状态
-  const isWalletConnected = computed(() => !!walletAddress.value)
+  // Secret phrase stored ONLY when user opts in (for forging, sending, etc.)
+  const secretPhrase = ref<string>('')
 
-  // 计算属性
-  const isLoggedIn = computed(() => !!accessToken.value)
-  const userRole = computed(() => userInfo.value?.role || 'guest')
-  const isAdmin = computed(() => userRole.value === 'admin')
-  const displayName = computed(() => userInfo.value?.name || 'Unknown')
+  // --- Getters ---
+  const isLoggedIn = computed(() => !!accountRS.value)
+  const balanceFormatted = computed(() => {
+    const nqt = BigInt(balanceNQT.value || '0')
+    return Number(nqt) / 100000000
+  })
 
-  // 方法
+  // --- Actions ---
+
   /**
-   * 用户登录
+   * Login with a secret phrase (passphrase).
+   * Derives the account ID, RS address, and public key from the passphrase,
+   * then fetches the full account info including balance.
    */
-  async function login(credentials: LoginCredentials): Promise<void> {
+  async function login(password: string): Promise<void> {
+    // Step 1: Derive account from secret phrase
+    const derived = await nrcsApi.getAccountId(password)
+    if (!derived || !derived.accountRS) {
+      throw new Error('Failed to derive account from secret phrase')
+    }
+
+    accountRS.value = derived.accountRS
+    accountId.value = derived.account
+    publicKey.value = derived.publicKey || ''
+    secretPhrase.value = password
+
+    // Step 2: Fetch full account info including balance
     try {
-      const response: ApiResponse<User> = await accountApi.login(credentials)
-      const { user, access_token, refresh_token } = response
-
-      userInfo.value = user
-      accessToken.value = access_token
-      refreshToken.value = refresh_token
-
-      // 持久化 token
-      localStorage.setItem('access_token', access_token)
-      localStorage.setItem('refresh_token', refresh_token)
-    } catch (error: any) {
-      throw error
+      const accountInfo: NrcsAccount = await nrcsApi.getAccount(derived.accountRS)
+      balanceNQT.value = accountInfo.balanceNQT || '0'
+      unconfirmedBalanceNQT.value = accountInfo.unconfirmedBalanceNQT || '0'
+      forgedBalanceNQT.value = accountInfo.forgedBalanceNQT || '0'
+      guaranteedBalanceNQT.value = accountInfo.guaranteedBalanceNQT || '0'
+      effectiveBalance.value = accountInfo.effectiveBalanceNRCS || 0
+      name.value = accountInfo.name || ''
+      description.value = accountInfo.description || ''
+    } catch {
+      // Account may not exist yet — that's fine, just derive and move on
+      balanceNQT.value = '0'
+      effectiveBalance.value = 0
     }
+
+    persistToStorage()
   }
 
   /**
-   * 用户注册
+   * Login by account RS address only (read-only / watch-only).
+   * Does NOT store a secret phrase.
    */
-  async function register(data: RegisterCredentials): Promise<void> {
+  async function loginByAccount(accountRs: string): Promise<void> {
+    const accountInfo: NrcsAccount = await nrcsApi.getAccount(accountRs)
+    if (!accountInfo || !accountInfo.accountRS) {
+      throw new Error('Account not found')
+    }
+
+    accountRS.value = accountInfo.accountRS
+    accountId.value = accountInfo.account
+    publicKey.value = accountInfo.publicKey || ''
+    balanceNQT.value = accountInfo.balanceNQT || '0'
+    unconfirmedBalanceNQT.value = accountInfo.unconfirmedBalanceNQT || '0'
+    forgedBalanceNQT.value = accountInfo.forgedBalanceNQT || '0'
+    guaranteedBalanceNQT.value = accountInfo.guaranteedBalanceNQT || '0'
+    effectiveBalance.value = accountInfo.effectiveBalanceNRCS || 0
+    name.value = accountInfo.name || ''
+    description.value = accountInfo.description || ''
+    secretPhrase.value = ''
+
+    persistToStorage()
+  }
+
+  /**
+   * Refresh account data from the blockchain.
+   */
+  async function refreshAccount(): Promise<void> {
+    if (!accountRS.value) return
     try {
-      const response: ApiResponse<User> = await accountApi.register(data)
-      const { user, access_token, refresh_token } = response
-
-      userInfo.value = user
-      accessToken.value = access_token
-      refreshToken.value = refresh_token
-
-      localStorage.setItem('access_token', access_token)
-      localStorage.setItem('refresh_token', refresh_token)
-    } catch (error: any) {
-      throw error
+      const accountInfo: NrcsAccount = await nrcsApi.getAccount(accountRS.value)
+      balanceNQT.value = accountInfo.balanceNQT || '0'
+      unconfirmedBalanceNQT.value = accountInfo.unconfirmedBalanceNQT || '0'
+      forgedBalanceNQT.value = accountInfo.forgedBalanceNQT || '0'
+      guaranteedBalanceNQT.value = accountInfo.guaranteedBalanceNQT || '0'
+      effectiveBalance.value = accountInfo.effectiveBalanceNRCS || 0
+      name.value = accountInfo.name || ''
+      description.value = accountInfo.description || ''
+    } catch (e) {
+      console.error('Failed to refresh account:', e)
     }
   }
 
   /**
-   * 获取当前用户信息
+   * Logout — clears all state and localStorage.
    */
-  async function fetchUserInfo(): Promise<void> {
-    try {
-      const response: ApiResponse<User> = await accountApi.getUserInfo()
-      userInfo.value = response
+  function logout(): void {
+    accountRS.value = ''
+    accountId.value = ''
+    publicKey.value = ''
+    balanceNQT.value = '0'
+    effectiveBalance.value = 0
+    unconfirmedBalanceNQT.value = '0'
+    forgedBalanceNQT.value = '0'
+    guaranteedBalanceNQT.value = '0'
+    name.value = ''
+    description.value = ''
+    secretPhrase.value = ''
 
-      // 如果之前未保存，保存钱包地址
-      if (!walletAddress.value && response.wallet_address) {
-        walletAddress.value = response.wallet_address
-      }
-    } catch (error: any) {
-      throw error
+    clearStorage()
+  }
+
+  // --- Persistence ---
+
+  function persistToStorage(): void {
+    localStorage.setItem(STORAGE_KEY_ACCOUNT_RS, accountRS.value)
+    localStorage.setItem(STORAGE_KEY_ACCOUNT_ID, accountId.value)
+    localStorage.setItem(STORAGE_KEY_PUBLIC_KEY, publicKey.value)
+    if (secretPhrase.value) {
+      localStorage.setItem(STORAGE_KEY_SECRET_PHRASE, secretPhrase.value)
     }
+  }
+
+  function clearStorage(): void {
+    localStorage.removeItem(STORAGE_KEY_ACCOUNT_RS)
+    localStorage.removeItem(STORAGE_KEY_ACCOUNT_ID)
+    localStorage.removeItem(STORAGE_KEY_PUBLIC_KEY)
+    localStorage.removeItem(STORAGE_KEY_SECRET_PHRASE)
   }
 
   /**
-   * 登出
+   * Restore session from localStorage on app start.
    */
-  async function logout(): Promise<void> {
-    try {
-      await accountApi.logout()
-    } catch (error: any) {
-      console.warn('Logout request failed, clearing local state anyway', error)
-    } finally {
-      // 清除本地状态
-      userInfo.value = null
-      walletAddress.value = ''
-      accessToken.value = ''
-      refreshToken.value = ''
+  function initFromStorage(): void {
+    const savedRS = localStorage.getItem(STORAGE_KEY_ACCOUNT_RS)
+    const savedId = localStorage.getItem(STORAGE_KEY_ACCOUNT_ID)
+    const savedPK = localStorage.getItem(STORAGE_KEY_PUBLIC_KEY)
+    const savedPhrase = localStorage.getItem(STORAGE_KEY_SECRET_PHRASE)
 
-      // 清除持久化数据
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
+    if (savedRS) accountRS.value = savedRS
+    if (savedId) accountId.value = savedId
+    if (savedPK) publicKey.value = savedPK
+    if (savedPhrase) secretPhrase.value = savedPhrase
+
+    // If we have a stored session, try to refresh balance
+    if (savedRS) {
+      refreshAccount()
     }
   }
 
-  /**
-   * 刷新 token
-   */
-  async function refreshAccessToken(): Promise<boolean> {
-    const refresh = refreshToken.value || localStorage.getItem('refresh_token')
-    if (!refresh) {
-      return false
-    }
-
-    try {
-      const response: ApiResponse<{ access_token: string; refresh_token?: string }> =
-        await accountApi.refreshToken(refresh)
-
-      accessToken.value = response.data.access_token
-      localStorage.setItem('access_token', response.data.access_token)
-
-      if (response.data.refresh_token) {
-        refreshToken.value = response.data.refresh_token
-        localStorage.setItem('refresh_token', response.data.refresh_token)
-      }
-
-      return true
-    } catch (error: any) {
-      console.error('Refresh token failed', error)
-      await logout()
-      return false
-    }
-  }
-
-  /**
-   * 设置钱包地址（连接钱包后调用）
-   */
-  function setWalletAddress(address: string) {
-    walletAddress.value = address
-    // 可选：将钱包地址保存到 localStorage
-    localStorage.setItem('wallet_address', address)
-  }
-
-  /**
-   * 初始化（从本地存储恢复登录状态）
-   */
-  function initFromStorage() {
-    const token = localStorage.getItem('access_token')
-    const refresh = localStorage.getItem('refresh_token')
-    const savedWallet = localStorage.getItem('wallet_address') as string | null
-
-    if (token) {
-      accessToken.value = token
-    }
-    if (refresh) {
-      refreshToken.value = refresh
-    }
-    if (savedWallet) {
-      walletAddress.value = savedWallet
-    }
-  }
-
-  // 从存储初始化
+  // Auto-init from storage
   initFromStorage()
 
   return {
     // state
-    userInfo,
-    walletAddress,
-    accessToken,
-    refreshToken,
+    accountRS,
+    accountId,
+    publicKey,
+    balanceNQT,
+    effectiveBalance,
+    unconfirmedBalanceNQT,
+    forgedBalanceNQT,
+    guaranteedBalanceNQT,
+    name,
+    description,
+    secretPhrase,
     // getters
     isLoggedIn,
-    isWalletConnected,
-    userRole,
-    isAdmin,
-    displayName,
+    balanceFormatted,
     // actions
     login,
-    register,
-    fetchUserInfo,
+    loginByAccount,
+    refreshAccount,
     logout,
-    refreshAccessToken,
-    setWalletAddress,
     initFromStorage
   }
 })
