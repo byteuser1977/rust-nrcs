@@ -34,32 +34,32 @@
             <el-tag :type="peerStateTag(row.state)" size="small">{{ peerStateText(row.state) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Announced Address" min-width="180">
+        <el-table-column :label="t('settings.announcedAddress')" min-width="180">
           <template #default="{ row }">
             <span class="mono-text">{{ row.announcedAddress || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Software" min-width="120">
+        <el-table-column :label="t('common.software')" min-width="120">
           <template #default="{ row }">
             {{ row.application || row.software || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="Version" min-width="100">
+        <el-table-column :label="t('common.version')" min-width="100">
           <template #default="{ row }">
             {{ row.version || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="Platform" min-width="100">
+        <el-table-column :label="t('common.platform')" min-width="100">
           <template #default="{ row }">
             {{ row.platform || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="Last Updated" width="170">
+        <el-table-column :label="t('settings.lastUpdated')" width="170">
           <template #default="{ row }">
             {{ row.lastUpdated ? formatNrcsTime(row.lastUpdated) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="200" fixed="right">
+        <el-table-column :label="t('common.actions')" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="primary" link @click="showPeerDetail(row)">Details</el-button>
             <el-button size="small" type="warning" link @click="connectPeer(row)">Connect</el-button>
@@ -70,12 +70,12 @@
     </el-card>
 
     <!-- Add Peer Dialog -->
-    <el-dialog v-model="addDialogVisible" title="Add Peer" width="450px" destroy-on-close>
+    <el-dialog v-model="addDialogVisible" :title="t('settings.addPeer')" width="450px" destroy-on-close>
       <el-form :model="addForm" label-width="120px">
-        <el-form-item label="Peer Address">
+        <el-form-item :label="t('settings.peerAddress')">
           <el-input v-model="addForm.peer" placeholder="e.g. 192.168.1.1:7874" />
         </el-form-item>
-        <el-form-item label="Admin Password">
+        <el-form-item :label="t('settings.adminPassword')">
           <el-input v-model="addForm.adminPassword" type="password" placeholder="Optional" show-password />
         </el-form-item>
       </el-form>
@@ -86,18 +86,18 @@
     </el-dialog>
 
     <!-- Peer Detail Dialog -->
-    <el-dialog v-model="detailDialogVisible" title="Peer Detail" width="600px" destroy-on-close>
+    <el-dialog v-model="detailDialogVisible" :title="t('settings.peerDetail')" width="600px" destroy-on-close>
       <template v-if="detailPeer">
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="Address">{{ detailPeer.address }}</el-descriptions-item>
           <el-descriptions-item label="Port">{{ detailPeer.port }}</el-descriptions-item>
           <el-descriptions-item label="State">{{ peerStateText(detailPeer.state) }}</el-descriptions-item>
-          <el-descriptions-item label="Share Address">{{ detailPeer.shareAddress ? 'Yes' : 'No' }}</el-descriptions-item>
-          <el-descriptions-item label="Announced">{{ detailPeer.announcedAddress || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Software">{{ detailPeer.software || detailPeer.application || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Version">{{ detailPeer.version || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Platform">{{ detailPeer.platform || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Last Updated" :span="2">
+          <el-descriptions-item :label="t('settings.shareAddress')">{{ detailPeer.shareAddress ? 'Yes' : 'No' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.announced')">{{ detailPeer.announcedAddress || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('common.software')">{{ detailPeer.software || detailPeer.application || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('common.version')">{{ detailPeer.version || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('common.platform')">{{ detailPeer.platform || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.lastUpdated')" :span="2">
             {{ detailPeer.lastUpdated ? formatNrcsTime(detailPeer.lastUpdated) : '-' }}
           </el-descriptions-item>
         </el-descriptions>
