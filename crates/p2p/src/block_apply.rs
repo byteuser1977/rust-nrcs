@@ -125,16 +125,6 @@ impl BlockRewardApplicator {
 
                 ledger.insert(&entry).await
                     .map_err(|e| anyhow::anyhow!("failed to insert BLOCK_GENERATED ledger: {}", e))?;
-
-                warn!(
-                    height = block.height,
-                    generator = generator_id,
-                    event_type = 1,
-                    holding_id = 0,
-                    change = net_fee,
-                    balance = balance_after,
-                    ">>> INSERT LEDGER: BLOCK_GENERATED (from block_apply)"
-                );
             }
         }
 

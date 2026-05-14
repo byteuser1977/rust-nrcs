@@ -3138,19 +3138,6 @@ impl DatabaseTransactionProcessor {
         let current_height = self.get_current_height();
         let current_timestamp = self.get_current_timestamp();
 
-        warn!(
-            tx_id = tx.id,
-            type_id = format!("{:?}", tx.type_id),
-            subtype = tx.subtype,
-            sender = sender_id,
-            recipient = recipient_id,
-            amount = amount_nqt,
-            fee = fee_nqt,
-            event = event,
-            height = current_height,
-            "========== START log_ledger_entry =========="
-        );
-
         // Sender balance AFTER deduction (balance already includes -(amountNQT + feeNQT))
         let sender_balance_after = self.get_account_balance(sender_id).await.unwrap_or(0);
 
@@ -3174,16 +3161,6 @@ impl DatabaseTransactionProcessor {
                 height: current_height,
                 timestamp: current_timestamp,
             };
-            warn!(
-                tx_id = tx.id,
-                sequence = 1,
-                account = sender_id,
-                event_type = ledger_event::TRANSACTION_FEE,
-                holding_id = 0,
-                change = -fee_nqt,
-                balance = sender_balance_after + amount_nqt,
-                ">>> INSERT LEDGER: SENDER FEE"
-            );
             self.ledger_repo.insert(&entry).await?;
         }
 
@@ -3202,24 +3179,19 @@ impl DatabaseTransactionProcessor {
                 height: current_height,
                 timestamp: current_timestamp,
             };
-            warn!(
-                tx_id = tx.id,
-                sequence = 2,
-                account = sender_id,
-                event_type = event,
-                holding_id = 0,
-                change = -amount_nqt,
-                balance = sender_balance_after,
-                ">>> INSERT LEDGER: SENDER AMOUNT"
-            );
             self.ledger_repo.insert(&entry).await?;
         }
 
         // === RECIPIENT entries (from addToBalanceAndUnconfirmedBalance) ===
         // Reference: Java line 1118-1123:
         //   if (amountNQT != 0) logEntry(event, ..., amountNQT, balance)
+        //
+        // ✅ 特殊处理：如果 sender == recipient，跳过 recipient 记录（避免重复）
+        // NRCS 数据显示：自我转账时只记录 change=0 或完全不记录 recipient entry
 
-        if amount_nqt > 0 {
+        let is_self_transfer = (sender_id == recipient_id as i64);
+
+        if amount_nqt > 0 && !is_self_transfer {
             let recipient_balance_after = self.get_account_balance(recipient_id as i64).await.unwrap_or(0);
 
             let entry = AccountLedgerModel {
@@ -3235,23 +3207,9 @@ impl DatabaseTransactionProcessor {
                 height: current_height,
                 timestamp: current_timestamp,
             };
-            warn!(
-                tx_id = tx.id,
-                sequence = 3,
-                account = recipient_id,
-                event_type = event,
-                holding_id = 0,
-                change = amount_nqt,
-                balance = recipient_balance_after,
-                ">>> INSERT LEDGER: RECIPIENT AMOUNT"
-            );
             self.ledger_repo.insert(&entry).await?;
         }
-
-        warn!(
-            tx_id = tx.id,
-            "========== END log_ledger_entry =========="
-        );
+        // Self-transfer: 不创建重复的 recipient 记录（NRCS 行为）
 
         // === ASSET/CURRENCY entries (from applyAttachment) ===
         // For ASSET_TRANSFER: write asset balance changes with ASSET_BALANCE(4) and assetId
