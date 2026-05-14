@@ -23,13 +23,13 @@
 
     <el-card shadow="hover" style="margin-top: 16px">
       <el-table :data="peers" style="width: 100%" v-loading="isLoading" :empty-text="t('common.noData')">
-        <el-table-column label="Address" min-width="160">
+        <el-table-column :label="t('common.address')" min-width="160">
           <template #default="{ row }">
             <span class="mono-text">{{ row.address }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="port" label="Port" width="70" />
-        <el-table-column label="State" width="100">
+        <el-table-column prop="port" :label="t('settings.port')" width="70" />
+        <el-table-column :label="t('common.state')" width="100">
           <template #default="{ row }">
             <el-tag :type="peerStateTag(row.state)" size="small">{{ peerStateText(row.state) }}</el-tag>
           </template>

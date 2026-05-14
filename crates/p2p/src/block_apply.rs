@@ -11,7 +11,7 @@ use std::sync::Arc;
 use blockchain_types::prelude::{Block, AccountId, Transaction, TransactionType};
 use orm::{AccountRepository, BlockRepository, PublicKeyRepository, AccountLedgerRepository, AccountGuaranteedBalanceRepository};
 use orm::models::AccountLedgerModel;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Block reward applicator (corresponds to Java's Block.apply())
 pub struct BlockRewardApplicator {
@@ -115,7 +115,7 @@ impl BlockRewardApplicator {
                     event_type: 1, // BLOCK_GENERATED
                     event_id: block.id.unwrap_or(0) as i64,
                     holding_type: 1, // UNCONFIRMED_NRCS_BALANCE (区块奖励先进入未确认余额)
-                    holding_id: None,
+                    holding_id: Some(0), // ✅ 修复：对齐 NRCS，holding_id=0（不是 NULL）
                     change: net_fee,
                     balance: balance_after,
                     block_id: block.id.unwrap_or(0) as i64,
@@ -126,8 +126,15 @@ impl BlockRewardApplicator {
                 ledger.insert(&entry).await
                     .map_err(|e| anyhow::anyhow!("failed to insert BLOCK_GENERATED ledger: {}", e))?;
 
-                debug!("Recorded BLOCK_GENERATED ledger: generator={}, amount={}, balance={}",
-                      generator_id, net_fee, balance_after);
+                warn!(
+                    height = block.height,
+                    generator = generator_id,
+                    event_type = 1,
+                    holding_id = 0,
+                    change = net_fee,
+                    balance = balance_after,
+                    ">>> INSERT LEDGER: BLOCK_GENERATED (from block_apply)"
+                );
             }
         }
 

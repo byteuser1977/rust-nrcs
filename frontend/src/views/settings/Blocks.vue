@@ -18,33 +18,33 @@
 
     <el-card shadow="hover" style="margin-top: 16px">
       <el-table :data="blocks" style="width: 100%" v-loading="isLoading" :empty-text="t('common.noData')">
-        <el-table-column prop="height" label="Height" width="100" sortable />
-        <el-table-column label="Block ID" min-width="180">
+        <el-table-column prop="height" :label="t('dashboard.height')" width="100" sortable />
+        <el-table-column :label="t('settings.blockId')" min-width="180">
           <template #default="{ row }">
             <el-tooltip :content="row.block" placement="top">
               <span class="mono-text clickable" @click="showBlockDetail(row)">{{ truncate(row.block, 12) }}</span>
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="Generator" min-width="180">
+        <el-table-column :label="t('settings.generator')" min-width="180">
           <template #default="{ row }">
             <el-tooltip :content="row.generatorRS" placement="top">
               <span class="mono-text">{{ truncate(row.generatorRS, 16) }}</span>
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="Timestamp" width="180">
+        <el-table-column :label="t('common.timestamp')" width="180">
           <template #default="{ row }">
             {{ formatNrcsTime(row.timestamp) }}
           </template>
         </el-table-column>
-        <el-table-column prop="numberOfTransactions" label="# Tx" width="80" sortable />
-        <el-table-column label="Total Amount" width="140" align="right">
+        <el-table-column prop="numberOfTransactions" :label="t('settings.numberOfTransactions')" width="80" sortable />
+        <el-table-column :label="t('settings.totalAmount')" width="140" align="right">
           <template #default="{ row }">
             {{ formatNrcsAmount(row.totalAmountNQT) }}
           </template>
         </el-table-column>
-        <el-table-column label="Total Fee" width="120" align="right">
+        <el-table-column :label="t('settings.totalFee')" width="120" align="right">
           <template #default="{ row }">
             {{ formatNrcsAmount(row.totalFeeNQT) }}
           </template>
@@ -62,64 +62,64 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="detailVisible" title="Block Detail" width="800px" destroy-on-close>
+    <el-dialog v-model="detailVisible" :title="t('settings.blockDetail')" width="800px" destroy-on-close>
       <template v-if="selectedBlock">
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="Block">{{ selectedBlock.block }}</el-descriptions-item>
-          <el-descriptions-item label="Height">{{ selectedBlock.height }}</el-descriptions-item>
-          <el-descriptions-item label="Generator">{{ selectedBlock.generatorRS }}</el-descriptions-item>
-          <el-descriptions-item label="Generator ID">{{ truncate(selectedBlock.generator, 16) }}</el-descriptions-item>
-          <el-descriptions-item label="Timestamp">{{ formatNrcsTime(selectedBlock.timestamp) }}</el-descriptions-item>
-          <el-descriptions-item label="Transactions">{{ selectedBlock.numberOfTransactions }}</el-descriptions-item>
-          <el-descriptions-item label="Total Amount">{{ formatNrcsAmount(selectedBlock.totalAmountNQT) }}</el-descriptions-item>
-          <el-descriptions-item label="Total Fee">{{ formatNrcsAmount(selectedBlock.totalFeeNQT) }}</el-descriptions-item>
-          <el-descriptions-item label="Payload Length">{{ selectedBlock.payloadLength }}</el-descriptions-item>
-          <el-descriptions-item label="Version">{{ selectedBlock.version }}</el-descriptions-item>
-          <el-descriptions-item label="Base Target">{{ selectedBlock.baseTarget }}</el-descriptions-item>
-          <el-descriptions-item label="Cumulative Difficulty">{{ selectedBlock.cumulativeDifficulty }}</el-descriptions-item>
-          <el-descriptions-item label="Previous Block" :span="2">
+          <el-descriptions-item :label="t('settings.block')">{{ selectedBlock.block }}</el-descriptions-item>
+          <el-descriptions-item :label="t('dashboard.height')">{{ selectedBlock.height }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.generator')">{{ selectedBlock.generatorRS }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.generatorId')">{{ truncate(selectedBlock.generator, 16) }}</el-descriptions-item>
+          <el-descriptions-item :label="t('common.timestamp')">{{ formatNrcsTime(selectedBlock.timestamp) }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.numberOfTransactions')">{{ selectedBlock.numberOfTransactions }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.totalAmount')">{{ formatNrcsAmount(selectedBlock.totalAmountNQT) }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.totalFee')">{{ formatNrcsAmount(selectedBlock.totalFeeNQT) }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.payloadLength')">{{ selectedBlock.payloadLength }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.version')">{{ selectedBlock.version }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.baseTarget')">{{ selectedBlock.baseTarget }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.cumulativeDifficulty')">{{ selectedBlock.cumulativeDifficulty }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.previousBlock')" :span="2">
             <span class="mono-text">{{ selectedBlock.previousBlock || '-' }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="Next Block" :span="2">
+          <el-descriptions-item :label="t('settings.nextBlock')" :span="2">
             <span class="mono-text">{{ selectedBlock.nextBlock || '-' }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="Payload Hash" :span="2">
+          <el-descriptions-item :label="t('settings.payloadHash')" :span="2">
             <span class="mono-text">{{ selectedBlock.payloadHash }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="Generation Signature" :span="2">
+          <el-descriptions-item :label="t('settings.generationSignature')" :span="2">
             <span class="mono-text">{{ selectedBlock.generationSignature }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="Block Signature" :span="2">
+          <el-descriptions-item :label="t('settings.blockSignature')" :span="2">
             <span class="mono-text">{{ selectedBlock.blockSignature }}</span>
           </el-descriptions-item>
-          <el-descriptions-item label="Previous Block Hash" :span="2">
+          <el-descriptions-item :label="t('settings.previousBlockHash')" :span="2">
             <span class="mono-text">{{ selectedBlock.previousBlockHash }}</span>
           </el-descriptions-item>
         </el-descriptions>
 
-        <h4 style="margin-top: 16px; margin-bottom: 8px">Transactions</h4>
+        <h4 style="margin-top: 16px; margin-bottom: 8px">{{ t('common.transaction') }}</h4>
         <el-table :data="selectedBlock.transactions || []" size="small" max-height="300" :empty-text="t('common.noData')">
-          <el-table-column prop="type" label="Type" width="80">
+          <el-table-column prop="type" :label="t('common.type')" width="80">
             <template #default="{ row }">
               <span>{{ row.type }}.{{ row.subtype }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="Sender" min-width="160">
+          <el-table-column :label="t('common.sender')" min-width="160">
             <template #default="{ row }">
               <span class="mono-text">{{ truncate(row.senderRS || row.sender, 14) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="Recipient" min-width="160">
+          <el-table-column :label="t('common.recipient')" min-width="160">
             <template #default="{ row }">
               <span class="mono-text">{{ truncate(row.recipientRS || row.recipient, 14) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="Amount" width="120" align="right">
+          <el-table-column :label="t('common.amount')" width="120" align="right">
             <template #default="{ row }">
               {{ formatNrcsAmount(row.amountNQT) }}
             </template>
           </el-table-column>
-          <el-table-column label="Fee" width="100" align="right">
+          <el-table-column :label="t('common.fee')" width="100" align="right">
             <template #default="{ row }">
               {{ formatNrcsAmount(row.feeNQT) }}
             </template>
@@ -164,12 +164,12 @@ const stats = computed(() => {
   }
   const generators = new Set(list.map(b => b.generatorRS))
   return [
-    { label: 'Avg Amount (NRC)', value: avgAmount.toFixed(2) },
-    { label: 'Avg Fee (NRC)', value: avgFee.toFixed(4) },
-    { label: 'Tx / Block', value: (totalTx / list.length).toFixed(1) },
-    { label: 'Block Time (s)', value: avgBlockTime.toFixed(0) },
-    { label: 'Forged Blocks', value: list.length.toString() },
-    { label: 'Unique Generators', value: generators.size.toString() },
+    { label: t('settings.avgAmount'), value: avgAmount.toFixed(2) },
+    { label: t('settings.avgFee'), value: avgFee.toFixed(4) },
+    { label: t('settings.txPerBlock'), value: (totalTx / list.length).toFixed(1) },
+    { label: t('settings.blockTime'), value: avgBlockTime.toFixed(0) },
+    { label: t('settings.forgedBlocks'), value: list.length.toString() },
+    { label: t('settings.uniqueGenerators'), value: generators.size.toString() },
   ]
 })
 

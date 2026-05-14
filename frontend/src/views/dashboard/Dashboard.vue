@@ -10,10 +10,10 @@
         <div class="dash-header-right">
           <div class="network-status" :class="{ online: isConnected }">
             <span class="status-dot"></span>
-            {{ isConnected ? 'Online' : 'Offline' }}
+            {{ isConnected ? t('dashboard.online') : t('dashboard.offline') }}
           </div>
           <div class="block-info" v-if="blockHeight > 0">
-            <span class="block-label">Height</span>
+            <span class="block-label">{{ t('sidebar.height') }}</span>
             <span class="block-value">#{{ blockHeight.toLocaleString() }}</span>
           </div>
         </div>
@@ -29,7 +29,7 @@
             </svg>
           </div>
           <div class="stat-tile__body">
-            <span class="stat-tile__label">Balance</span>
+            <span class="stat-tile__label">{{ t('dashboard.accountBalance') }}</span>
             <span class="stat-tile__value text-mono">{{ accountBalance }}</span>
             <span class="stat-tile__unit">NRC</span>
           </div>
@@ -44,9 +44,9 @@
             </svg>
           </div>
           <div class="stat-tile__body">
-            <span class="stat-tile__label">Assets</span>
+            <span class="stat-tile__label">{{ t('menu.assets') }}</span>
             <span class="stat-tile__value text-mono">{{ assetsCount }}</span>
-            <span class="stat-tile__unit">owned</span>
+            <span class="stat-tile__unit">{{ t('dashboard.owned') }}</span>
           </div>
         </el-card>
 
@@ -58,9 +58,9 @@
             </svg>
           </div>
           <div class="stat-tile__body">
-            <span class="stat-tile__label">Currencies</span>
+            <span class="stat-tile__label">{{ t('menu.currencies') }}</span>
             <span class="stat-tile__value text-mono">{{ currenciesCount }}</span>
-            <span class="stat-tile__unit">owned</span>
+            <span class="stat-tile__unit">{{ t('dashboard.owned') }}</span>
           </div>
         </el-card>
 
@@ -71,9 +71,9 @@
             </svg>
           </div>
           <div class="stat-tile__body">
-            <span class="stat-tile__label">Messages</span>
+            <span class="stat-tile__label">{{ t('dashboard.messages') }}</span>
             <span class="stat-tile__value text-mono">{{ messageCount }}</span>
-            <span class="stat-tile__unit">total</span>
+            <span class="stat-tile__unit">{{ t('dashboard.total') }}</span>
           </div>
         </el-card>
       </div>
@@ -86,9 +86,9 @@
             </svg>
           </div>
           <div class="stat-tile__body">
-            <span class="stat-tile__label">Aliases</span>
+            <span class="stat-tile__label">{{ t('dashboard.aliases') }}</span>
             <span class="stat-tile__value text-mono">{{ aliasCount }}</span>
-            <span class="stat-tile__unit">registered</span>
+            <span class="stat-tile__unit">{{ t('dashboard.registered') }}</span>
           </div>
         </el-card>
 
@@ -101,7 +101,7 @@
             </svg>
           </div>
           <div class="stat-tile__body">
-            <span class="stat-tile__label">Block Height</span>
+            <span class="stat-tile__label">{{ t('sidebar.height') }}</span>
             <span class="stat-tile__value text-mono">{{ blockHeight.toLocaleString() }}</span>
             <span class="stat-tile__unit">{{ lastBlockTime }}</span>
           </div>
@@ -116,9 +116,24 @@
             </svg>
           </div>
           <div class="stat-tile__body">
-            <span class="stat-tile__label">Peers</span>
+            <span class="stat-tile__label">{{ t('settings.peers') }}</span>
             <span class="stat-tile__value text-mono">{{ peerCount }}</span>
-            <span class="stat-tile__unit">connected</span>
+            <span class="stat-tile__unit">{{ t('dashboard.connected') }}</span>
+          </div>
+        </el-card>
+
+        <el-card class="stat-tile stat-tile--polls" shadow="hover" @click="$router.push('/voting/active-polls')">
+          <div class="stat-tile__icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="7" width="18" height="13" rx="2" stroke="#ec4899" stroke-width="1.8"/>
+              <line x1="8" y1="12" x2="16" y2="12" stroke="#ec4899" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="8" y1="16" x2="13" y2="16" stroke="#ec4899" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="stat-tile__body">
+            <span class="stat-tile__label">{{ t('dashboard.activePolls') }}</span>
+            <span class="stat-tile__value text-mono">{{ pollCount }}</span>
+            <span class="stat-tile__unit">{{ t('dashboard.active') }}</span>
           </div>
         </el-card>
       </div>
@@ -127,7 +142,7 @@
       <div v-if="blockchainStatus.isDownloading" class="download-progress glass-panel">
         <div class="download-progress__header">
           <el-icon class="is-loading"><Loading /></el-icon>
-          <span>Blockchain Download in Progress</span>
+          <span>{{ t('dashboard.downloadInProgress') }}</span>
         </div>
         <el-progress
           :percentage="downloadProgress"
@@ -135,8 +150,8 @@
           :show-text="true"
         />
         <span class="download-progress__feeder" v-if="blockchainStatus.lastBlockchainFeederHeight">
-          Peer height: {{ blockchainStatus.lastBlockchainFeederHeight.toLocaleString() }} |
-          Local height: {{ (blockchainStatus.lastBlockHeight || 0).toLocaleString() }}
+          {{ t('dashboard.peerHeight') }}: {{ blockchainStatus.lastBlockchainFeederHeight.toLocaleString() }} |
+          {{ t('dashboard.localHeight') }}: {{ (blockchainStatus.lastBlockHeight || 0).toLocaleString() }}
         </span>
       </div>
 
@@ -157,44 +172,44 @@
             :row-class-name="txRowClassName"
             @row-click="showTransactionDetail"
           >
-            <el-table-column label="Date" width="170">
+            <el-table-column :label="t('common.date')" width="170">
               <template #default="{ row }">
                 <span class="text-muted text-sm">{{ formatTimestamp(row.timestamp) }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="Type" width="110">
+            <el-table-column :label="t('common.type')" width="110">
               <template #default="{ row }">
                 <span class="tx-type-badge" :class="typeColorClass(row.type)">
                   {{ getTxTypeLabel(row.type, row.subtype) }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="Amount" width="150" align="right">
+            <el-table-column :label="t('common.amount')" width="150" align="right">
               <template #default="{ row }">
                 <span class="tx-amount" :class="getAmountClass(row)">
                   {{ formatAmount(row.amountNQT) }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="Fee" width="120" align="right">
+            <el-table-column :label="t('common.fee')" width="120" align="right">
               <template #default="{ row }">
                 <span class="text-muted text-sm text-mono">{{ formatAmount(row.feeNQT) }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="Account" min-width="200">
+            <el-table-column :label="t('common.account')" min-width="200">
               <template #default="{ row }">
                 <span class="tx-account text-mono text-accent">
                   {{ getCounterparty(row) }}
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="Height" width="100" align="center">
+            <el-table-column :label="t('dashboard.height')" width="100" align="center">
               <template #default="{ row }">
                 <span class="text-muted text-sm text-mono" v-if="row.height">#{{ row.height }}</span>
-                <el-tag type="warning" size="small" v-else>Pending</el-tag>
+                <el-tag type="warning" size="small" v-else>{{ t('dashboard.pending') }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="Confirmations" width="120" align="center">
+            <el-table-column :label="t('dashboard.confirmations')" width="120" align="center">
               <template #default="{ row }">
                 <span
                   v-if="row.confirmations !== undefined && row.confirmations >= 0"
@@ -203,7 +218,7 @@
                 >
                   {{ row.confirmations }}
                 </span>
-                <span v-else class="conf-tag conf-tag--unconfirmed">Unconf.</span>
+                <span v-else class="conf-tag conf-tag--unconfirmed">{{ t('dashboard.unconfirmed') }}</span>
               </template>
             </el-table-column>
           </el-table>
@@ -211,11 +226,11 @@
 
         <div class="tx-footer">
           <el-button type="primary" link size="large" @click="$router.push('/dashboard/transactions')">
-            View All Transactions
+            {{ t('dashboard.viewAllTransactions') }}
           </el-button>
           <el-divider direction="vertical" />
           <el-button type="primary" link size="large" @click="$router.push('/dashboard/ledger')">
-            Account Ledger
+            {{ t('dashboard.accountLedger') }}
           </el-button>
         </div>
       </section>
@@ -223,7 +238,7 @@
       <!-- Recent Blocks -->
       <section class="blocks-section el-card" v-if="recentBlocks.length > 0">
         <div class="tx-section-header">
-          <h2 class="tx-section-title">Recent Blocks</h2>
+          <h2 class="tx-section-title">{{ t('dashboard.recentBlocks') }}</h2>
         </div>
         <div class="blocks-list">
           <div
@@ -244,12 +259,12 @@
     <!-- Transaction Detail Dialog -->
     <el-dialog
       v-model="txDetailVisible"
-      title="Transaction Details"
+      :title="t('dashboard.transactionDetails')"
       width="700px"
       destroy-on-close
     >
       <TransactionDetailPanel v-if="selectedTransaction" :transaction="selectedTransaction" />
-      <el-empty v-else description="No transaction selected" />
+      <el-empty v-else :description="t('dashboard.noTransactionSelected')" />
     </el-dialog>
   </div>
 </template>
@@ -282,6 +297,7 @@ const currenciesCount = ref(0)
 const messageCount = ref(0)
 const aliasCount = ref(0)
 const peerCount = ref(0)
+const pollCount = ref(0)
 const blockHeight = ref(0)
 const lastBlockTime = ref('')
 const blockchainStatus = ref<Partial<NrcsBlockchainStatus>>({})
@@ -406,12 +422,13 @@ async function loadCounts() {
   if (!account) { isLoadingCounts.value = false; return }
 
   try {
-    const [assetsRes, currenciesRes, messagesRes, aliasesRes, peersRes] = await Promise.allSettled([
+    const [assetsRes, currenciesRes, messagesRes, aliasesRes, peersRes, pollsRes] = await Promise.allSettled([
       nrcsApi.getAccountAssets(account),
       nrcsApi.getAccountCurrencies(account),
       nrcsApi.getAccountMessages(account, 0, 0),
       nrcsApi.getAliases(account, 0, 0),
-      nrcsApi.getPeers('CONNECTED', false, true)
+      nrcsApi.getPeers('CONNECTED', false, true),
+      nrcsApi.getPolls(0, 99)
     ])
 
     if (assetsRes.status === 'fulfilled') {
@@ -428,6 +445,11 @@ async function loadCounts() {
     }
     if (peersRes.status === 'fulfilled') {
       peerCount.value = (peersRes.value?.peers || []).length
+    }
+    if (pollsRes.status === 'fulfilled') {
+      const now = await nrcsApi.getBlockchainStatus().catch(() => ({} as any))
+      const currentHeight = now?.numberOfBlocks || 0
+      pollCount.value = ((pollsRes.value as any)?.polls || []).filter((p: any) => p.finishHeight > currentHeight).length
     }
   } catch (error) {
     console.error('Failed to load counts:', error)
@@ -470,20 +492,22 @@ function formatAmount(nqt?: string): string {
 }
 
 function getTxTypeLabel(type?: number, subtype?: number): string {
-  if (type === undefined || type === null) return 'Unknown'
-  const typeMap: Record<number, Record<number, string>> = {
-    0: { 0: 'Payment' },
-    1: { 0: 'Message', 1: 'Alias Assignment', 2: 'Poll Creation', 3: 'Vote', 4: 'Account Info', 5: 'Asset Issue', 6: 'Asset Transfer', 7: 'Asset Ask Order', 8: 'Asset Bid Order' },
-    2: { 0: 'Asset Issuance', 1: 'Asset Transfer', 2: 'Ask Order', 3: 'Bid Order', 4: 'Ask Cancel', 5: 'Bid Cancel' },
-    3: { 0: 'Market Listing', 1: 'Market Delisting', 2: 'Price Change', 3: 'Qty Change', 4: 'Market Purchase', 5: 'Market Delivery', 6: 'Market Feedback', 7: 'Market Refund' },
-    4: { 0: 'Account Info', 1: 'Alias Assignment', 2: 'Alias Sell', 3: 'Alias Buy' },
-    5: { 0: 'Account Property', 1: 'Property Delete' },
-    6: { 0: 'Currency Issuance', 1: 'Reserve Increase', 2: 'Reserve Claim', 3: 'Currency Transfer', 4: 'Publish Offer', 5: 'Exchange Buy', 6: 'Exchange Sell', 7: 'Currency Mint', 8: 'Currency Delete' },
-    7: { 0: 'Poll Creation', 1: 'Vote' },
-    8: { 0: 'Phasing Vote' },
-    20: { 0: 'Tagged Data' }
+  if (type === undefined || type === null) return t('txType.unknown')
+  const keyMap: Record<number, Record<number, string>> = {
+    0: { 0: 'txType.payment' },
+    1: { 0: 'txType.messaging', 1: 'txType.aliasAssignment', 2: 'txType.pollCreation', 3: 'txType.voteCasting', 4: 'txType.accountInfo', 5: 'txType.assetIssue', 6: 'txType.assetTransfer', 7: 'txType.assetAskOrder', 8: 'txType.assetBidOrder' },
+    2: { 0: 'txType.assetIssuance', 1: 'txType.assetTransfer', 2: 'txType.askOrder', 3: 'txType.bidOrder', 4: 'txType.assetAskCancel', 5: 'txType.assetBidCancel' },
+    3: { 0: 'txType.marketListing', 1: 'txType.marketDelisting', 2: 'txType.marketPriceChange', 3: 'txType.marketQtyChange', 4: 'txType.marketPurchase', 5: 'txType.marketDelivery', 6: 'txType.marketFeedback', 7: 'txType.marketRefund' },
+    4: { 0: 'txType.accountInfo', 1: 'txType.aliasAssignment', 2: 'txType.aliasSell', 3: 'txType.aliasBuy' },
+    5: { 0: 'txType.accountProperty', 1: 'txType.accountPropertyDelete' },
+    6: { 0: 'txType.currencyIssuance', 1: 'txType.reserveIncrease', 2: 'txType.reserveClaim', 3: 'txType.currencyTransfer', 4: 'txType.publishOffer', 5: 'txType.exchangeBuy', 6: 'txType.exchangeSell', 7: 'txType.currencyMint', 8: 'txType.currencyDelete' },
+    7: { 0: 'txType.pollCreation', 1: 'txType.voteCasting' },
+    8: { 0: 'txType.phasingVote' },
+    20: { 0: 'txType.taggedData' }
   }
-  return typeMap[type]?.[subtype ?? 0] || `Type ${type}.${subtype ?? 0}`
+  const key = keyMap[type]?.[subtype ?? 0]
+  if (key) return t(key as any)
+  return `${t('txType.type')} ${type}.${subtype ?? 0}`
 }
 
 function typeColorClass(type?: number): string {

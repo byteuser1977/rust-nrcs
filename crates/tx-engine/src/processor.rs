@@ -3138,6 +3138,19 @@ impl DatabaseTransactionProcessor {
         let current_height = self.get_current_height();
         let current_timestamp = self.get_current_timestamp();
 
+        warn!(
+            tx_id = tx.id,
+            type_id = format!("{:?}", tx.type_id),
+            subtype = tx.subtype,
+            sender = sender_id,
+            recipient = recipient_id,
+            amount = amount_nqt,
+            fee = fee_nqt,
+            event = event,
+            height = current_height,
+            "========== START log_ledger_entry =========="
+        );
+
         // Sender balance AFTER deduction (balance already includes -(amountNQT + feeNQT))
         let sender_balance_after = self.get_account_balance(sender_id).await.unwrap_or(0);
 
@@ -3154,13 +3167,23 @@ impl DatabaseTransactionProcessor {
                 event_type: ledger_event::TRANSACTION_FEE,
                 event_id: tx.id as i64,
                 holding_type: ledger_holding::NRCS_BALANCE,
-                holding_id: Some(0),  // ✅ 修复：NRCS 数据库中 NRCS 余额的 holding_id=0
+                holding_id: Some(0),
                 change: -fee_nqt,
                 balance: sender_balance_after + amount_nqt,
                 block_id: current_block_id,
                 height: current_height,
                 timestamp: current_timestamp,
             };
+            warn!(
+                tx_id = tx.id,
+                sequence = 1,
+                account = sender_id,
+                event_type = ledger_event::TRANSACTION_FEE,
+                holding_id = 0,
+                change = -fee_nqt,
+                balance = sender_balance_after + amount_nqt,
+                ">>> INSERT LEDGER: SENDER FEE"
+            );
             self.ledger_repo.insert(&entry).await?;
         }
 
@@ -3172,25 +3195,29 @@ impl DatabaseTransactionProcessor {
                 event_type: event,
                 event_id: tx.id as i64,
                 holding_type: ledger_holding::NRCS_BALANCE,
-                holding_id: Some(0),  // ✅ 修复：NRCS 数据库中 NRCS 余额的 holding_id=0
+                holding_id: Some(0),
                 change: -amount_nqt,
                 balance: sender_balance_after,
                 block_id: current_block_id,
                 height: current_height,
                 timestamp: current_timestamp,
             };
+            warn!(
+                tx_id = tx.id,
+                sequence = 2,
+                account = sender_id,
+                event_type = event,
+                holding_id = 0,
+                change = -amount_nqt,
+                balance = sender_balance_after,
+                ">>> INSERT LEDGER: SENDER AMOUNT"
+            );
             self.ledger_repo.insert(&entry).await?;
         }
 
         // === RECIPIENT entries (from addToBalanceAndUnconfirmedBalance) ===
         // Reference: Java line 1118-1123:
         //   if (amountNQT != 0) logEntry(event, ..., amountNQT, balance)
-        //
-        // ✅ 修复：移除 recipient_id != 0 的限制
-        // NRCS 会记录所有收到金额的交易，包括：
-        // - 发送到 Genesis 账户（recipient_id == 0）
-        // - 所有正数金额的接收方
-        // 这对于账本完整性至关重要
 
         if amount_nqt > 0 {
             let recipient_balance_after = self.get_account_balance(recipient_id as i64).await.unwrap_or(0);
@@ -3200,16 +3227,31 @@ impl DatabaseTransactionProcessor {
                 account_id: recipient_id as i64,
                 event_type: event,
                 event_id: tx.id as i64,
-                holding_type: ledger_holding::NRCS_BALANCE,  // ✅ 已修正为 1
-                holding_id: Some(0),  // ✅ 修复：NRCS 数据库中 NRCS 余额的 holding_id=0
+                holding_type: ledger_holding::NRCS_BALANCE,
+                holding_id: Some(0),
                 change: amount_nqt,
                 balance: recipient_balance_after,
                 block_id: current_block_id,
                 height: current_height,
                 timestamp: current_timestamp,
             };
+            warn!(
+                tx_id = tx.id,
+                sequence = 3,
+                account = recipient_id,
+                event_type = event,
+                holding_id = 0,
+                change = amount_nqt,
+                balance = recipient_balance_after,
+                ">>> INSERT LEDGER: RECIPIENT AMOUNT"
+            );
             self.ledger_repo.insert(&entry).await?;
         }
+
+        warn!(
+            tx_id = tx.id,
+            "========== END log_ledger_entry =========="
+        );
 
         // === ASSET/CURRENCY entries (from applyAttachment) ===
         // For ASSET_TRANSFER: write asset balance changes with ASSET_BALANCE(4) and assetId
@@ -3301,18 +3343,34 @@ impl DatabaseTransactionProcessor {
                             self.ledger_repo.insert(&entry).await?;
                         }
                     }
-                    2 => { // ✅ 新增：ASK_ORDER_PLACEMENT - 挂卖单资产余额变动
-                        // Java NRCS: applyUnconfirmed() 中调用 addToUnconfirmedAssetBalanceQNT(-Q)
+                    2 => { // ASK_ORDER_PLACEMENT - 挂卖单资产余额变动
+                        // Java NRCS: applyAttachment() 中调用 addToAssetBalanceQNT(-Q)
                         // 需要记录资产余额的减少到 account_ledger
                         //
-                        // NRCS 数据示例 (DB_ID=58):
+                        // NRCS 数据示例 (DB_ID=58, height=239):
                         //   event_type=15 (ASSET_ASK_ORDER_PLACEMENT)
                         //   holding_type=3 (ASSET_BALANCE)
                         //   holding_id=assetId
                         //   change=-Q (预扣的数量，负数表示减少)
-                        //   balance=当前余额
+                        //   balance=扣减后的余额
 
-                        let sender_asset_balance = self.get_asset_balance(sender_id, asset_id).await.unwrap_or(0);
+                        let sender_asset_balance_before = self.get_asset_balance(sender_id, asset_id).await.unwrap_or(0);
+                        // ✅ 修复：balance 应该是扣减后的余额
+                        // 对齐 NRCS：change=-Q 时，balance = 原余额 - Q
+                        let sender_asset_balance_after = sender_asset_balance_before - quantity;
+
+                        debug!(
+                            tx_id = tx.id,
+                            sequence = 4,
+                            account = sender_id,
+                            asset = asset_id,
+                            event_type = ledger_event::ASSET_ASK_ORDER_PLACEMENT,
+                            holding_id = asset_id,
+                            change = -quantity,
+                            balance_before = sender_asset_balance_before,
+                            balance_after = sender_asset_balance_after,
+                            "Inserting LEDGER: ASK_ORDER_PLACEMENT (asset)"
+                        );
 
                         let entry = AccountLedgerModel {
                             db_id: 0,
@@ -3321,8 +3379,8 @@ impl DatabaseTransactionProcessor {
                             event_id: tx.id as i64,
                             holding_type: ledger_holding::ASSET_BALANCE,
                             holding_id: Some(asset_id),
-                            change: -quantity,  // 负数：挂单时预扣资产
-                            balance: sender_asset_balance,
+                            change: -quantity,
+                            balance: sender_asset_balance_after,
                             block_id: current_block_id,
                             height: current_height,
                             timestamp: current_timestamp,
