@@ -3236,16 +3236,7 @@ impl DatabaseTransactionProcessor {
                 match tx.subtype {
                     0 => { // ASSET_ISSUANCE: issuer gets assets
                         let asset_balance_after = self.get_asset_balance(sender_id, asset_id).await.unwrap_or(0);
-                        
-                        tracing::debug!(
-                            tx_id = tx.id,
-                            sender = sender_id,
-                            asset_id = asset_id,
-                            quantity = quantity,
-                            asset_balance_after = asset_balance_after,
-                            "Creating ASSET_ISSUANCE ledger entry"
-                        );
-                        
+
                         let entry = AccountLedgerModel {
                             db_id: 0,
                             account_id: sender_id,
@@ -3335,7 +3326,18 @@ impl DatabaseTransactionProcessor {
             TransactionType::MonetarySystem => {
                 // Currency operations with CURRENCY_BALANCE(6)
                 let currency_id = self.parse_long_field(tx, "currency").unwrap_or(tx.id as i64);
-                let units = tx.amount as i64;
+
+                // ✅ 修复：从 attachment 解析 units，而不是使用 tx.amount
+                // 对于 CURRENCY_TRANSFER/CURRENCY_MINTING，tx.amount 通常 = 0
+                // 实际的 currency units 在 attachment 的 "units" 字段中
+                let units = match tx.subtype {
+                    3 | 7 => { // CURRENCY_TRANSFER 或 CURRENCY_MINTING
+                        self.parse_long_field(tx, "units")
+                            .or_else(|| self.parse_long_field(tx, "amount"))
+                            .unwrap_or(tx.amount as i64)
+                    }
+                    _ => tx.amount as i64
+                };
 
                 match tx.subtype {
                     3 => { // CURRENCY_TRANSFER

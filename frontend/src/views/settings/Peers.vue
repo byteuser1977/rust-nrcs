@@ -61,9 +61,9 @@
         </el-table-column>
         <el-table-column :label="t('common.actions')" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" link @click="showPeerDetail(row)">Details</el-button>
-            <el-button size="small" type="warning" link @click="connectPeer(row)">Connect</el-button>
-            <el-button size="small" type="danger" link @click="blacklistPeerAction(row)">Blacklist</el-button>
+            <el-button size="small" type="primary" link @click="showPeerDetail(row)">{{ t('settings.details') }}</el-button>
+            <el-button size="small" type="warning" link @click="connectPeer(row)">{{ t('settings.connect') }}</el-button>
+            <el-button size="small" type="danger" link @click="blacklistPeerAction(row)">{{ t('settings.blacklist') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -89,10 +89,10 @@
     <el-dialog v-model="detailDialogVisible" :title="t('settings.peerDetail')" width="600px" destroy-on-close>
       <template v-if="detailPeer">
         <el-descriptions :column="2" border size="small">
-          <el-descriptions-item label="Address">{{ detailPeer.address }}</el-descriptions-item>
-          <el-descriptions-item label="Port">{{ detailPeer.port }}</el-descriptions-item>
-          <el-descriptions-item label="State">{{ peerStateText(detailPeer.state) }}</el-descriptions-item>
-          <el-descriptions-item :label="t('settings.shareAddress')">{{ detailPeer.shareAddress ? 'Yes' : 'No' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('common.address')">{{ detailPeer.address }}</el-descriptions-item>
+          <el-descriptions-item :label="t('common.port')">{{ detailPeer.port }}</el-descriptions-item>
+          <el-descriptions-item :label="t('common.state')">{{ peerStateText(detailPeer.state) }}</el-descriptions-item>
+          <el-descriptions-item :label="t('settings.shareAddress')">{{ detailPeer.shareAddress ? t('common.confirm') : t('common.cancel') }}</el-descriptions-item>
           <el-descriptions-item :label="t('settings.announced')">{{ detailPeer.announcedAddress || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('common.software')">{{ detailPeer.software || detailPeer.application || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('common.version')">{{ detailPeer.version || '-' }}</el-descriptions-item>
@@ -128,10 +128,10 @@ const peerStats = computed(() => {
   const connected = list.filter(p => p.state === 1).length
   const blacklisted = list.filter(p => p.state === 2).length
   return [
-    { label: 'Total Known', value: list.length },
-    { label: 'Connected', value: connected },
-    { label: 'Blacklisted', value: blacklisted },
-    { label: 'Active', value: connected },
+    { label: t('settings.totalKnown'), value: list.length },
+    { label: t('dashboard.connected'), value: connected },
+    { label: t('settings.blacklisted'), value: blacklisted },
+    { label: t('dashboard.active'), value: connected },
   ]
 })
 
@@ -150,8 +150,8 @@ async function refreshData() {
 }
 
 function peerStateText(state: number): string {
-  const map: Record<number, string> = { 1: 'Connected', 2: 'Blacklisted', 0: 'Disconnected' }
-  return map[state] || 'Unknown'
+  const map: Record<number, string> = { 1: t('dashboard.connected'), 2: t('settings.blacklisted'), 0: t('sidebar.disconnected') }
+  return map[state] || t('common.unknownError')
 }
 
 function peerStateTag(state: number): 'success' | 'danger' | 'info' | 'warning' {
@@ -172,25 +172,25 @@ async function showPeerDetail(peer: NrcsPeer) {
 async function connectPeer(peer: NrcsPeer) {
   try {
     await nrcsApi.addPeer(peer.announcedAddress || `${peer.address}:${peer.port}`)
-    ElMessage.success('Peer added successfully')
+    ElMessage.success(t('common.operationSuccess'))
     refreshData()
   } catch (e: any) {
-    ElMessage.error(e?.description || 'Failed to add peer')
+    ElMessage.error(e?.description || t('common.operationFailed'))
   }
 }
 
 async function blacklistPeerAction(peer: NrcsPeer) {
   try {
-    await ElMessageBox.confirm(`Blacklist peer ${peer.address}?`, 'Confirm', { type: 'warning' })
+    await ElMessageBox.confirm(`Blacklist peer ${peer.address}?``Blacklist peer ${peer.address}?`, t('common.confirm'), { type: 'warning' })
     await nrcsApi.blacklistPeer(peer.address)
-    ElMessage.success('Peer blacklisted')
+    ElMessage.success(t('common.operationSuccess'))
     refreshData()
   } catch { /* cancelled */ }
 }
 
 async function submitAddPeer() {
   if (!addForm.value.peer) {
-    ElMessage.warning('Please enter a peer address')
+    ElMessage.warning(t('validation.required'))
     return
   }
   isAdding.value = true
@@ -198,12 +198,12 @@ async function submitAddPeer() {
     const params: any = { peer: addForm.value.peer }
     if (addForm.value.adminPassword) params.adminPassword = addForm.value.adminPassword
     await nrcsApi.addPeer(params.peer)
-    ElMessage.success('Peer added')
+    ElMessage.success(t('common.operationSuccess'))
     addDialogVisible.value = false
     addForm.value = { peer: '', adminPassword: '' }
     refreshData()
   } catch (e: any) {
-    ElMessage.error(e?.description || 'Failed to add peer')
+    ElMessage.error(e?.description || t('common.operationFailed'))
   } finally {
     isAdding.value = false
   }
