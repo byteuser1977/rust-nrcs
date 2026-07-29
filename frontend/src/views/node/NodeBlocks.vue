@@ -1,203 +1,192 @@
 <template>
   <div class="node-blocks-page">
-    <el-card>
+    <el-card shadow="never">
       <template #header>
         <div class="card-header">
           <div class="header-left">
-            <el-icon><Grid /></el-icon>
-            <span>区块浏览</span>
+            <span>{{ t('node.recentBlocks') }}</span>
           </div>
           <div class="header-right">
-            <el-button type="primary" @click="fetchBlocks(1)">
+            <el-select
+              v-model="blockLimit"
+              style="width: 120px; margin-right: 8px;"
+              size="small"
+              @change="fetchBlocks"
+            >
+              <el-option :value="10" label="10" />
+              <el-option :value="20" label="20" />
+              <el-option :value="50" label="50" />
+            </el-select>
+            <el-button
+              size="small"
+              text
+              type="primary"
+              @click="refreshNow"
+            >
               <el-icon><Refresh /></el-icon>
-              刷新
+              {{ t('common.refresh') }}
             </el-button>
           </div>
         </div>
       </template>
 
-      <!-- 筛选工具栏 -->
-      <div class="filter-bar">
-        <el-form :model="filters" inline>
-          <el-form-item label="区块高度">
-            <el-input
-              v-model="filters.blockNumber"
-              placeholder="输入区块高度"
-              style="width: 160px"
-              @keyup.enter="fetchBlocks(1)"
-            />
-          </el-form-item>
-          <el-form-item label="矿工地址">
-            <el-input
-              v-model="filters.miner"
-              placeholder="矿工地址"
-              style="width: 200px"
-              @keyup.enter="fetchBlocks(1)"
-            />
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="fetchBlocks(1)">
-              <el-icon><Search /></el-icon>
-              查询
-            </el-button>
-            <el-button @click="resetFilters">
-              <el-icon><Refresh /></el-icon>
-              重置
-            </el-button>
-          </el-form-item>
-        </el-form>
-      </div>
+      <el-table
+        :data="blocks"
+        style="width: 100%"
+        v-loading="loading"
+        @expand-change="handleExpand"
+        row-key="block"
+      >
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="block-expand-detail">
+              <h4>{{ t('node.blockTransactions') }} ({{ row.numberOfTransactions || 0 }})</h4>
+              <el-table
+                v-if="expandedBlock === row.block && row._transactions"
+                :data="row._transactions"
+                style="width: 100%"
+                size="small"
+              >
+                <el-table-column label="ID" width="160">
+                  <template #default="{ row: tx }">
+                    <span class="mono-text">{{ truncateHash(tx.transaction, 8) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('transaction.type')" width="120">
+                  <template #default="{ row: tx }">
+                    <el-tag size="small" type="info">{{ getTypeName(tx.type) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('transaction.sender')" width="160">
+                  <template #default="{ row: tx }">
+                    <span class="mono-text">{{ truncateHash(tx.senderRS || tx.sender, 8) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('transaction.recipient')" width="160">
+                  <template #default="{ row: tx }">
+                    <span class="mono-text">{{ tx.recipientRS ? truncateHash(tx.recipientRS, 8) : '-' }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('transaction.amount')" width="140" align="right">
+                  <template #default="{ row: tx }">
+                    {{ formatNrc(tx.amountNQT) }} NRC
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('transaction.fee')" width="100" align="right">
+                  <template #default="{ row: tx }">
+                    {{ formatNrc(tx.feeNQT) }}
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div v-else-if="expandedBlock === row.block && expandedLoading" class="loading-expand">
+                <el-icon class="is-loading"><Loading /></el-icon>
+                {{ t('common.loading') }}
+              </div>
+              <span v-else-if="row.numberOfTransactions === 0" class="no-tx">{{ t('common.noData') }}</span>
+            </div>
+          </template>
+        </el-table-column>
 
-      <!-- 区块列表 -->
-      <el-table :data="blocks" style="width: 100%" v-loading="loading">
-        <el-table-column prop="number" label="高度" width="100" sortable>
+        <el-table-column :label="t('node.height')" width="100" prop="height">
           <template #default="{ row }">
-            <el-link
-              type="primary"
-              :underline="false"
-              @click="viewBlockDetail(row.number)"
-            >
-              {{ row.number.toLocaleString() }}
-            </el-link>
+            <span class="mono-text">{{ row.height?.toLocaleString() }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="hash" label="区块哈希" min-width="200">
+
+        <el-table-column :label="t('node.timestamp')" width="180" prop="timestamp">
           <template #default="{ row }">
-            <el-tooltip :content="row.hash" placement="top">
-              <span class="hash-text">{{ formatHash(row.hash) }}</span>
+            {{ formatBlockTime(row.timestamp) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="t('node.generator')" width="180">
+          <template #default="{ row }">
+            <el-tooltip :content="row.generatorRS || row.generator" placement="top">
+              <span class="mono-text">{{ truncateHash(row.generatorRS || row.generator, 8) }}</span>
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column prop="miner" label="矿工" min-width="180">
+
+        <el-table-column :label="t('node.txCount')" width="80" prop="numberOfTransactions" align="center" />
+
+        <el-table-column :label="t('node.totalAmount')" width="140" align="right">
           <template #default="{ row }">
-            <el-tooltip :content="row.miner" placement="top">
-              <span class="address-text">{{ formatAddress(row.miner) }}</span>
-            </el-tooltip>
+            {{ formatNrc(row.totalAmountNQT) }} NRC
           </template>
         </el-table-column>
-        <el-table-column prop="transaction_count" label="交易数" width="100" />
-        <el-table-column prop="gas_used" label="Gas消耗" width="120">
+
+        <el-table-column :label="t('node.totalFee')" width="120" align="right">
           <template #default="{ row }">
-            {{ row.gas_used.toLocaleString() }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="timestamp" label="时间" width="180">
-          <template #default="{ row }">
-            {{ formatTime(row.timestamp) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
-          <template #default="{ row }">
-            <el-button
-              size="small"
-              type="primary"
-              link
-              @click="viewBlockDetail(row.number)"
-            >
-              详情
-            </el-button>
+            {{ formatNrc(row.totalFeeNQT) }} NRC
           </template>
         </el-table-column>
       </el-table>
-
-      <!-- 分页 -->
-      <div class="pagination-wrapper" v-if="total > 0">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @current-change="fetchBlocks"
-          @size-change="handleSizeChange"
-        />
-      </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Grid, Refresh, Search } from '@element-plus/icons-vue'
-import { nodeApi } from '@/api/modules'
-import type { BlockInfo } from '@/types/business'
-import { formatAddress, formatTime } from '@/utils/format'
+import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { Refresh, Loading } from '@element-plus/icons-vue'
+import { nrcsApi } from '@/api/modules/nrcs.api'
+import type { NrcsBlock, NrcsTransaction } from '@/api/modules/nrcs.api'
+import { usePolling } from '@/composables/usePolling'
+import { truncateHash, formatNrc, formatTimestamp } from '@/utils/format'
+import { getTypeName } from '@/constants/transaction-types'
 
-const router = useRouter()
+const { t } = useI18n()
 
-const blocks = ref<BlockInfo[]>([])
+const POLL_INTERVAL = 30000
+
+const blocks = ref<(NrcsBlock & { _transactions?: NrcsTransaction[] })[]>([])
 const loading = ref(false)
-const currentPage = ref(1)
-const pageSize = ref(20)
-const total = ref(0)
+const blockLimit = ref(20)
+const expandedBlock = ref<string>('')
+const expandedLoading = ref(false)
 
-const filters = reactive({
-  blockNumber: '',
-  miner: ''
-})
-
-const fetchBlocks = async (page: number) => {
+async function fetchBlocks() {
   try {
     loading.value = true
-    currentPage.value = page
-
-    const params: any = {
-      page,
-      size: pageSize.value
-    }
-
-    if (filters.blockNumber) {
-      params.fromNumber = parseInt(filters.blockNumber)
-      params.toNumber = parseInt(filters.blockNumber)
-    }
-    if (filters.miner) {
-      params.miner = filters.miner
-    }
-
-    const response = await nodeApi.getBlocks(params)
-    blocks.value = response.data.items || response.data.list || []
-    total.value = response.data.total || 0
-  } catch (error: any) {
-    console.error('Failed to fetch blocks:', error)
-    ElMessage.error('获取区块列表失败')
+    const res = await nrcsApi.getBlocks(0, blockLimit.value - 1, false)
+    blocks.value = res.blocks || []
+  } catch (err) {
+    console.error('[NodeBlocks] Failed to fetch blocks:', err)
   } finally {
     loading.value = false
   }
 }
 
-const handleSizeChange = (size: number) => {
-  pageSize.value = size
-  fetchBlocks(1)
+async function handleExpand(row: NrcsBlock & { _transactions?: NrcsTransaction[] }, expandedRows: any[]) {
+  const isExpanded = expandedRows.some((r: any) => r.block === row.block)
+  if (!isExpanded) {
+    expandedBlock.value = ''
+    return
+  }
+
+  if (row._transactions) {
+    expandedBlock.value = row.block
+    return
+  }
+
+  try {
+    expandedLoading.value = true
+    expandedBlock.value = row.block
+    const blockDetail = await nrcsApi.getBlock(row.block, undefined, undefined, true)
+    row._transactions = blockDetail.transactions || []
+  } catch (err) {
+    console.error('[NodeBlocks] Failed to fetch block transactions:', err)
+    row._transactions = []
+  } finally {
+    expandedLoading.value = false
+  }
 }
 
-const resetFilters = () => {
-  filters.blockNumber = ''
-  filters.miner = ''
-  fetchBlocks(1)
+function formatBlockTime(ts: number): string {
+  return formatTimestamp(ts)
 }
 
-const viewBlockDetail = (blockNumber: number) => {
-  // TODO: 实现区块详情页面
-  ElMessage.info(`查看区块 ${blockNumber} 详情（待实现）`)
-}
-
-const formatHash = (hash: string): string => {
-  return `${hash.slice(0, 12)}...${hash.slice(-8)}`
-}
-
-const formatAddress = (addr: string): string => {
-  return formatAddress(addr, 8)
-}
-
-const formatTime = (timestamp: number): string => {
-  return formatTime(new Date(timestamp * 1000).toISOString())
-}
-
-onMounted(() => {
-  fetchBlocks(1)
-})
+const { isPolling, lastPollTime, refreshNow } = usePolling(fetchBlocks, POLL_INTERVAL, true)
 </script>
 
 <style scoped lang="scss">
@@ -208,39 +197,43 @@ onMounted(() => {
     align-items: center;
 
     .header-left {
-      display: flex;
-      align-items: center;
-      gap: 8px;
       font-size: 16px;
       font-weight: 600;
     }
-  }
 
-  .filter-bar {
-    margin-bottom: 16px;
-    padding: 16px;
-    background: #fff;
-    border-radius: 4px;
-
-    .el-form-item {
-      margin-bottom: 12px;
+    .header-right {
+      display: flex;
+      align-items: center;
     }
   }
 
-  .hash-text {
+  .mono-text {
     font-family: 'Roboto Mono', monospace;
-    color: #409eff;
+    font-size: 13px;
   }
 
-  .address-text {
-    font-family: 'Roboto Mono', monospace;
-    color: #606266;
-  }
+  .block-expand-detail {
+    padding: 16px 24px;
+    background: #fafafa;
 
-  .pagination-wrapper {
-    margin-top: 24px;
-    display: flex;
-    justify-content: flex-end;
+    h4 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      color: #303133;
+    }
+
+    .loading-expand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #909399;
+      font-size: 13px;
+    }
+
+    .no-tx {
+      color: #909399;
+      font-size: 13px;
+    }
   }
 }
 </style>

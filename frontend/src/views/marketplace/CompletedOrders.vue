@@ -31,6 +31,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import { formatNrc, formatTimestamp } from '@/utils/format'
 
 const { t } = useI18n()
 const loading = ref(false)
@@ -38,8 +39,8 @@ const items = ref<any[]>([])
 const total = ref(0)
 const page = ref(1)
 
-function formatNQT(nqt: string) { return (Number(nqt || '0') / 1e8).toFixed(2) }
-function formatDate(ts?: number) { if (!ts) return ''; return new Date(new Date(Date.UTC(2013, 10, 24, 12, 0, 0)).getTime() + ts * 1000).toLocaleString() }
+function formatNQT(nqt: string) { return formatNrc(nqt) }
+function formatDate(ts?: number) { return ts ? formatTimestamp(ts) : '' }
 
 onMounted(() => refreshData())
 

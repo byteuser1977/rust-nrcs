@@ -9,44 +9,44 @@
 
     <el-card shadow="hover" v-loading="isLoading">
       <el-table :data="plugins" style="width: 100%" :empty-text="t('common.noData')">
-        <el-table-column label="Name" min-width="180">
+        <el-table-column :label="t('common.name')" min-width="180">
           <template #default="{ row }">
             <span class="plugin-name">{{ row.name || row.plugin }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Version" width="100">
+        <el-table-column :label="t('common.version')" width="110">
           <template #default="{ row }">
             <el-tag size="small">{{ row.version || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Website" min-width="180">
+        <el-table-column :label="t('settings.validationStatus')" width="130">
           <template #default="{ row }">
-            <a v-if="row.website" :href="row.website" target="_blank" class="link">{{ row.website }}</a>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Validation" width="110">
-          <template #default="{ row }">
-            <el-tag :type="row.validation === 'VALID' ? 'success' : 'danger'" size="small">
-              {{ row.validation || 'Unknown' }}
+            <el-tag
+              :type="row.validation === 'VALID' ? 'success' : 'danger'"
+              size="small"
+            >
+              {{ row.validation || t('common.unknown') }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Compatibility" width="130">
+        <el-table-column :label="t('settings.compatibility')" width="140">
           <template #default="{ row }">
-            <el-tag :type="row.compatibility === 'COMPATIBLE' ? 'success' : 'warning'" size="small">
-              {{ row.compatibility || 'Unknown' }}
+            <el-tag
+              :type="row.compatibility === 'COMPATIBLE' ? 'success' : 'warning'"
+              size="small"
+            >
+              {{ row.compatibility || t('common.unknown') }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Status" width="120">
+        <el-table-column :label="t('settings.launchStatus')" width="130">
           <template #default="{ row }">
             <el-tag :type="row.launched ? 'success' : 'info'" size="small">
-              {{ row.launched ? 'Launched' : 'Not launched' }}
+              {{ row.launched ? t('settings.launched') : t('settings.notLaunched') }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Description" min-width="200">
+        <el-table-column :label="t('common.description')" min-width="220">
           <template #default="{ row }">
             <span class="text-muted">{{ row.description || '-' }}</span>
           </template>
@@ -65,7 +65,9 @@ const { t } = useI18n()
 const isLoading = ref(false)
 const plugins = ref<any[]>([])
 
-onMounted(() => { refreshData() })
+onMounted(() => {
+  refreshData()
+})
 
 async function refreshData() {
   isLoading.value = true
@@ -99,11 +101,6 @@ async function refreshData() {
 }
 .plugin-name {
   font-weight: 500;
-}
-.link {
-  color: #409eff;
-  text-decoration: none;
-  &:hover { text-decoration: underline; }
 }
 .text-muted {
   color: #909399;

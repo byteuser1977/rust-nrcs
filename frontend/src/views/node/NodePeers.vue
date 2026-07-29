@@ -1,105 +1,94 @@
 <template>
   <div class="node-peers-page">
-    <el-card>
+    <el-card shadow="never">
       <template #header>
         <div class="card-header">
           <div class="header-left">
             <el-icon><Connection /></el-icon>
-            <span>P2P 节点</span>
+            <span>{{ t('node.peers') }}</span>
           </div>
           <div class="header-right">
-            <el-button type="primary" @click="fetchPeers">
+            <el-button
+              size="small"
+              text
+              type="primary"
+              @click="refreshNow"
+            >
               <el-icon><Refresh /></el-icon>
-              刷新
+              {{ t('common.refresh') }}
             </el-button>
           </div>
         </div>
       </template>
 
-      <!-- 统计信息 -->
+      <!-- Stats -->
       <el-row :gutter="20" style="margin-bottom: 20px;">
-        <el-col :xs="24" :sm="8" :md="4">
+        <el-col :xs="24" :sm="8" :md="6">
           <div class="stat-box">
             <div class="stat-value">{{ peers.length }}</div>
-            <div class="stat-label">连接节点</div>
+            <div class="stat-label">{{ t('node.totalPeers') }}</div>
           </div>
         </el-col>
-        <el-col :xs="24" :sm="8" :md="4">
+        <el-col :xs="24" :sm="8" :md="6">
           <div class="stat-box">
-            <div class="stat-value">{{ activePeersCount }}</div>
-            <div class="stat-label">活跃节点</div>
+            <div class="stat-value">{{ connectedCount }}</div>
+            <div class="stat-label">{{ t('node.connected') }}</div>
           </div>
         </el-col>
-        <el-col :xs="24" :sm="8" :md="4">
+        <el-col :xs="24" :sm="8" :md="6">
           <div class="stat-box">
-            <div class="stat-value">{{ averageLatency.toFixed(0) }}</div>
-            <div class="stat-label">平均延迟(ms)</div>
+            <div class="stat-value">{{ softwareCount }}</div>
+            <div class="stat-label">{{ t('node.uniqueSoftware') }}</div>
           </div>
         </el-col>
       </el-row>
 
-      <!-- 节点表格 -->
-      <el-table :data="peers" style="width: 100%" v-loading="loading">
-        <el-table-column prop="node_id" label="节点ID" min-width="120">
+      <!-- Peer Table -->
+      <el-table :data="peers" style="width: 100%" v-loading="loading" row-key="address">
+        <el-table-column :label="t('node.address')" min-width="220">
           <template #default="{ row }">
-            <el-tooltip :content="row.node_id" placement="top">
-              <span class="node-id">{{ formatNodeId(row.node_id) }}</span>
-            </el-tooltip>
+            <span class="mono-text">{{ row.announcedAddress || row.address || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="address" label="地址" min-width="160">
-          <template #default="{ row }">
-            <span class="address-text">{{ row.address }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="country" label="国家/地区" width="120">
-          <template #default="{ row }">
-            <el-tag size="small">{{ row.country || '未知' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="latency" label="延迟(ms)" width="120">
-          <template #default="{ row }">
-            <span :class="getLatencyClass(row.latency)">
-              {{ row.latency || '-' }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="sync_progress" label="同步进度" width="120">
-          <template #default="{ row }">
-            <el-progress
-              :percentage="row.sync_progress || 100"
-              :stroke-width="6"
-              :color="getProgressColor(row.sync_progress)"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column prop="connected_at" label="连接时间" width="180">
-          <template #default="{ row }">
-            {{ formatTime(row.connected_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100" fixed="right">
+
+        <el-table-column :label="t('node.state')" width="120">
           <template #default="{ row }">
             <el-tag
-              :type="row.active ? 'success' : 'info'"
+              :type="row.state === 1 ? 'success' : row.state === 2 ? 'info' : 'danger'"
               size="small"
-              effect="plain"
             >
-              {{ row.active ? '活跃' : '离线' }}
+              {{ peerStateText(row.state) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+
+        <el-table-column :label="t('node.announceAddress')" min-width="200">
           <template #default="{ row }">
-            <el-button
-              size="small"
-              type="danger"
-              link
-              @click="disconnectPeer(row.node_id)"
-              v-if="row.active"
-            >
-              断开
-            </el-button>
+            <span class="mono-text">{{ row.announcedAddress || row.address || '-' }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="t('node.software')" width="120">
+          <template #default="{ row }">
+            {{ row.application || row.software || '-' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="t('node.version')" width="100">
+          <template #default="{ row }">
+            <span class="mono-text">{{ row.version || '-' }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="t('node.platform')" width="120">
+          <template #default="{ row }">
+            {{ row.platform || '-' }}
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="t('node.lastUpdated')" width="180">
+          <template #default="{ row }">
+            {{ formatPeerTime(row.lastUpdated) }}
           </template>
         </el-table-column>
       </el-table>
@@ -108,83 +97,54 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Connection, Refresh } from '@element-plus/icons-vue'
-import { nodeApi } from '@/api/modules'
-import type { PeerInfo } from '@/types/business'
-import { formatTime } from '@/utils/format'
+import { nrcsApi } from '@/api/modules/nrcs.api'
+import type { NrcsPeer } from '@/api/modules/nrcs.api'
+import { usePolling } from '@/composables/usePolling'
+import { formatTimestamp } from '@/utils/format'
 
-const peers = ref<PeerInfo[]>([])
+const { t } = useI18n()
+
+const POLL_INTERVAL = 30000
+
+const peers = ref<NrcsPeer[]>([])
 const loading = ref(false)
 
-const activePeersCount = computed(() => peers.value.filter(p => p.active).length)
-const averageLatency = computed(() => {
-  const activePeers = peers.value.filter(p => p.active && p.latency)
-  if (activePeers.length === 0) return 0
-  const sum = activePeers.reduce((acc, p) => acc + (p.latency || 0), 0)
-  return sum / activePeers.length
-})
-
-const fetchPeers = async () => {
+async function fetchPeers() {
   try {
     loading.value = true
-    const response = await nodeApi.getPeers()
-    peers.value = response.data
-  } catch (error: any) {
-    console.error('Failed to fetch peers:', error)
-    ElMessage.error('获取节点列表失败')
+    const res = await nrcsApi.getPeers(undefined, undefined, true)
+    peers.value = res.peers || []
+  } catch (err) {
+    console.error('[NodePeers] Failed to fetch peers:', err)
   } finally {
     loading.value = false
   }
 }
 
-const disconnectPeer = async (nodeId: string) => {
-  try {
-    await ElMessageBox.confirm(
-      '确定要断开与该节点的连接吗？',
-      '警告',
-      {
-        confirmButtonText: '断开',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
+const connectedCount = computed(() => peers.value.filter(p => p.state === 1).length)
+const softwareCount = computed(() => {
+  const apps = new Set(peers.value.filter(p => p.application).map(p => p.application))
+  return apps.size
+})
 
-    await nodeApi.removePeer(nodeId)
-    ElMessage.success('已断开连接')
-    fetchPeers()
-  } catch (error) {
-    // 用户取消或操作失败
+function peerStateText(state: number): string {
+  switch (state) {
+    case 0: return t('node.peerState.nonConnected')
+    case 1: return t('node.peerState.connected')
+    case 2: return t('node.peerState.disconnected')
+    default: return `${state}`
   }
 }
 
-const formatNodeId = (nodeId: string): string => {
-  if (nodeId.length <= 16) return nodeId
-  return `${nodeId.slice(0, 8)}...${nodeId.slice(-8)}`
+function formatPeerTime(ts?: number): string {
+  if (!ts) return '-'
+  return formatTimestamp(ts)
 }
 
-const formatTime = (dateStr: string): string => {
-  return formatTime(dateStr, 'YYYY-MM-DD HH:mm:ss')
-}
-
-const getLatencyClass = (latency?: number): string => {
-  if (!latency) return 'text-muted'
-  if (latency < 100) return 'text-success'
-  if (latency < 300) return 'text-warning'
-  return 'text-danger'
-}
-
-const getProgressColor = (progress?: number): string => {
-  if (!progress) return '#67c23a'
-  if (progress < 30) return '#f56c6c'
-  if (progress < 80) return '#e6a23c'
-  return '#67c23a'
-}
-
-onMounted(() => {
-  fetchPeers()
-})
+const { isPolling, lastPollTime, refreshNow } = usePolling(fetchPeers, POLL_INTERVAL, true)
 </script>
 
 <style scoped lang="scss">
@@ -205,12 +165,12 @@ onMounted(() => {
 
   .stat-box {
     text-align: center;
-    padding: 20px;
+    padding: 16px;
     background: #f5f7fa;
     border-radius: 8px;
 
     .stat-value {
-      font-size: 28px;
+      font-size: 24px;
       font-weight: bold;
       color: #409eff;
       font-family: 'Roboto Mono', monospace;
@@ -223,30 +183,10 @@ onMounted(() => {
     }
   }
 
-  .node-id {
+  .mono-text {
     font-family: 'Roboto Mono', monospace;
-    color: #409eff;
-  }
-
-  .address-text {
-    font-family: 'Roboto Mono', monospace;
+    font-size: 13px;
     color: #606266;
-  }
-
-  .text-muted {
-    color: #909399;
-  }
-
-  .text-success {
-    color: #67c23a;
-  }
-
-  .text-warning {
-    color: #e6a23c;
-  }
-
-  .text-danger {
-    color: #f56c6c;
   }
 }
 </style>

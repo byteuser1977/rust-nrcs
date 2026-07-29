@@ -1,74 +1,178 @@
-<script setup lang="ts">
-import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useTransactionStore } from '@/stores/modules/transaction.store'
-import { ElCard, ElTable, ElTableColumn, ElTag } from 'element-plus'
-import { formatAddress, formatTime } from '@/utils/format'
-
-const { t } = useI18n()
-const transactionStore = useTransactionStore()
-
-const pendingTxs = computed(() => transactionStore.pendingTransactions)
-</script>
-
 <template>
-  <div class="pending-transactions">
-    <h1 class="page-title">{{ t('transaction.pending') }}</h1>
-
+  <div class="pending-tx-page">
     <el-card shadow="never">
-      <el-table :data="pendingTxs" style="width: 100%">
-        <el-table-column prop="hash" :label="t('transaction.hash')" width="180">
-          <template #default="{ row }">
-            {{ formatAddress(row.hash) }}
-          </template>
-        </el-table-column>
+      <template #header>
+        <div class="card-header">
+          <div class="header-left">
+            <el-icon><Clock /></el-icon>
+            <span>{{ t('transaction.myPending') }}</span>
+          </div>
+          <div class="header-right">
+            <el-button
+              size="small"
+              text
+              type="primary"
+              @click="refreshNow"
+            >
+              <el-icon><Refresh /></el-icon>
+              {{ t('common.refresh') }}
+            </el-button>
+          </div>
+        </div>
+      </template>
 
-        <el-table-column prop="from" :label="t('transaction.from')" width="180">
-          <template #default="{ row }">
-            {{ formatAddress(row.from) }}
-          </template>
-        </el-table-column>
+      <div v-if="!accountRS" class="empty-state">
+        <el-empty :description="t('transaction.pleaseLogin')" />
+      </div>
 
-        <el-table-column prop="to" :label="t('transaction.to')" width="180">
-          <template #default="{ row }">
-            {{ row.to ? formatAddress(row.to) : '-' }}
-          </template>
-        </el-table-column>
+      <template v-else>
+        <el-table :data="pendingTxs" style="width: 100%" v-loading="loading">
+          <el-table-column :label="t('transaction.id')" width="160">
+            <template #default="{ row }">
+              <el-tooltip :content="row.transaction" placement="top">
+                <span class="mono-text">{{ truncateHash(row.transaction, 8) }}</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
 
-        <el-table-column prop="value" :label="t('transaction.value')" width="120">
-          <template #default="{ row }">
-            {{ formatTime(row.created_at) }}
-          </template>
-        </el-table-column>
+          <el-table-column :label="t('transaction.date')" width="170">
+            <template #default="{ row }">
+              {{ formatBlockTime(row.timestamp) }}
+            </template>
+          </el-table-column>
 
-        <el-table-column prop="status" :label="t('transaction.status')" width="100">
-          <template #default="{ row }">
-            <el-tag type="info" size="small">
-              {{ t('transaction.status.pending') }}
-            </el-tag>
-          </template>
-        </el-table-column>
-      </el-table>
+          <el-table-column :label="t('transaction.type')" width="130">
+            <template #default="{ row }">
+              <el-tag size="small" type="info">
+                {{ getSubTypeName(row.type, row.subtype) }}
+              </el-tag>
+            </template>
+          </el-table-column>
 
-      <div v-if="pendingTxs.length === 0" class="empty-state">
-        {{ t('common.noData') }}
+          <el-table-column :label="t('transaction.amount')" width="160" align="right">
+            <template #default="{ row }">
+              <span class="amount-value">{{ formatNrc(row.amountNQT) }} NRC</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column :label="t('transaction.fee')" width="120" align="right">
+            <template #default="{ row }">
+              {{ formatNrc(row.feeNQT) }}
+            </template>
+          </el-table-column>
+
+          <el-table-column :label="t('transaction.sender')" width="180">
+            <template #default="{ row }">
+              <el-tooltip :content="row.senderRS || row.sender" placement="top">
+                <span class="mono-text">{{ truncateHash(row.senderRS || row.sender, 8) }}</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+
+          <el-table-column :label="t('transaction.recipient')" width="180">
+            <template #default="{ row }">
+              <el-tooltip v-if="row.recipientRS || row.recipient" :content="row.recipientRS || row.recipient" placement="top">
+                <span class="mono-text">{{ truncateHash(row.recipientRS || row.recipient, 8) }}</span>
+              </el-tooltip>
+              <span v-else class="text-muted">-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div v-if="pendingTxs.length === 0 && !loading" class="empty-state">
+          <el-empty :description="t('transaction.noPending')" />
+        </div>
+      </template>
+
+      <div class="polling-info" v-if="isPolling && accountRS">
+        {{ t('node.autoRefresh', { seconds: POLL_INTERVAL / 1000 }) }}
       </div>
     </el-card>
   </div>
 </template>
 
-<style lang="scss" scoped>
-.pending-transactions {
-  .page-title {
-    margin-bottom: 24px;
-    font-size: 24px;
-    font-weight: 600;
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { Clock, Refresh } from '@element-plus/icons-vue'
+import { nrcsApi } from '@/api/modules/nrcs.api'
+import type { NrcsUnconfirmedTransaction } from '@/api/modules/nrcs.api'
+import { useAccountStore } from '@/stores/modules/account.store'
+import { usePolling } from '@/composables/usePolling'
+import { truncateHash, formatNrc, formatTimestamp } from '@/utils/format'
+import { getSubTypeName } from '@/constants/transaction-types'
+
+const { t } = useI18n()
+const accountStore = useAccountStore()
+
+const POLL_INTERVAL = 15000
+
+const pendingTxs = ref<NrcsUnconfirmedTransaction[]>([])
+const loading = ref(false)
+
+const accountRS = computed(() => accountStore.accountRS)
+
+async function fetchPending() {
+  if (!accountRS.value) return
+  try {
+    loading.value = true
+    const res = await nrcsApi.getUnconfirmedTransactions(accountRS.value)
+    pendingTxs.value = res.unconfirmedTransactions || []
+  } catch (err) {
+    console.error('[Pending] Failed to fetch unconfirmed transactions:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
+function formatBlockTime(ts?: number): string {
+  if (!ts) return '-'
+  return formatTimestamp(ts)
+}
+
+const { isPolling, lastPollTime, refreshNow } = usePolling(fetchPending, POLL_INTERVAL, true)
+</script>
+
+<style scoped lang="scss">
+.pending-tx-page {
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+  }
+
+  .mono-text {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px;
+  }
+
+  .text-muted {
+    color: #c0c4cc;
+  }
+
+  .amount-value {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 13px;
+    color: #67c23a;
   }
 
   .empty-state {
-    text-align: center;
-    padding: 40px;
-    color: #909399;
+    padding: 40px 0;
+  }
+
+  .polling-info {
+    margin-top: 12px;
+    text-align: right;
+    font-size: 12px;
+    color: #c0c4cc;
   }
 }
 </style>

@@ -9,53 +9,46 @@
 
     <el-card shadow="hover" v-loading="isLoading">
       <el-table :data="scheduledTxs" style="width: 100%" :empty-text="t('common.noData')">
-        <el-table-column label="Transaction ID" min-width="200">
+        <el-table-column :label="t('common.transaction')" min-width="200">
           <template #default="{ row }">
             <el-tooltip :content="row.transaction" placement="top">
-              <span class="mono-text">{{ truncate(row.transaction, 16) }}</span>
+              <span class="mono-text">{{ truncateHash(row.transaction, 10) }}</span>
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="Type" width="100">
+        <el-table-column :label="t('common.date')" width="180">
           <template #default="{ row }">
-            {{ row.type }}.{{ row.subtype }}
+            {{ formatTimestamp(row.timestamp) }}
           </template>
         </el-table-column>
-        <el-table-column label="Sender" min-width="180">
+        <el-table-column :label="t('common.type')" width="100">
           <template #default="{ row }">
-            <span class="mono-text">{{ truncate(row.senderRS || row.sender, 14) }}</span>
+            <el-tag size="small" type="info">{{ row.type }}.{{ row.subtype }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Recipient" min-width="180">
+        <el-table-column :label="t('common.amount') + ' (NRC)'" width="130" align="right">
           <template #default="{ row }">
-            <span class="mono-text">{{ truncate(row.recipientRS || row.recipient, 14) }}</span>
+            {{ formatNrc(row.amountNQT) }}
           </template>
         </el-table-column>
-        <el-table-column label="Amount (NRC)" width="120" align="right">
+        <el-table-column :label="t('common.fee') + ' (NRC)'" width="110" align="right">
           <template #default="{ row }">
-            {{ formatNrcsAmount(row.amountNQT) }}
+            {{ formatNrc(row.feeNQT) }}
           </template>
         </el-table-column>
-        <el-table-column label="Fee (NRC)" width="110" align="right">
+        <el-table-column :label="t('common.recipient')" min-width="180">
           <template #default="{ row }">
-            {{ formatNrcsAmount(row.feeNQT) }}
+            <span class="mono-text">{{ truncateHash(row.recipientRS || row.recipient, 8) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Height" width="90" align="right">
+        <el-table-column :label="t('common.actions')" width="100" fixed="right">
           <template #default="{ row }">
-            {{ row.height || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="Timestamp" width="170">
-          <template #default="{ row }">
-            {{ formatNrcsTime(row.timestamp) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="Actions" width="100" fixed="right">
-          <template #default="{ row }">
-            <el-popconfirm title="Delete this scheduled transaction?" @confirm="deleteTx(row)">
+            <el-popconfirm
+              :title="t('settings.deleteScheduledConfirm')"
+              @confirm="deleteTx(row)"
+            >
               <template #reference>
-                <el-button size="small" type="danger" link>Delete</el-button>
+                <el-button size="small" type="danger" link>{{ t('common.delete') }}</el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -80,27 +73,42 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import { useAccountStore } from '@/stores/modules/account.store'
+import { usePagination } from '@/composables/usePagination'
+import { formatTimestamp, formatNrc, truncateHash } from '@/utils/format'
 import type { NrcsTransaction } from '@/api/modules/nrcs.api'
 
 const { t } = useI18n()
+const accountStore = useAccountStore()
 
 const isLoading = ref(false)
 const scheduledTxs = ref<NrcsTransaction[]>([])
-const totalTxs = ref(0)
-const currentPage = ref(1)
-const pageSize = ref(20)
 
-onMounted(() => { refreshData() })
+const {
+  currentPage,
+  pageSize,
+  total: totalTxs,
+  firstIndex,
+  lastIndex,
+  goToPage,
+  setTotal,
+} = usePagination(15)
+
+onMounted(() => {
+  refreshData()
+})
 
 async function refreshData() {
+  if (!accountStore.accountRS) return
   isLoading.value = true
   try {
-    const account = localStorage.getItem('nrcs_account_rs') || ''
-    const firstIndex = (currentPage.value - 1) * pageSize.value
-    const lastIndex = firstIndex + pageSize.value - 1
-    const result = await nrcsApi.getScheduledTransactions(account, firstIndex, lastIndex)
+    const result = await nrcsApi.getScheduledTransactions(accountStore.accountRS, firstIndex.value, lastIndex.value)
     scheduledTxs.value = result.transactions || []
-    totalTxs.value = scheduledTxs.value.length >= pageSize.value ? (currentPage.value + 1) * pageSize.value : scheduledTxs.value.length
+    if (result.transactions && result.transactions.length >= pageSize.value) {
+      setTotal((currentPage.value + 1) * pageSize.value)
+    } else {
+      setTotal(firstIndex.value + (result.transactions || []).length)
+    }
   } catch (error) {
     console.error('Failed to load scheduled transactions:', error)
   } finally {
@@ -113,33 +121,16 @@ async function deleteTx(tx: NrcsTransaction) {
     if (tx.transaction) {
       await nrcsApi.deleteScheduledTransaction(tx.transaction)
     }
-    ElMessage.success('Deleted successfully')
+    ElMessage.success(t('common.operationSuccess'))
     await refreshData()
   } catch (e: any) {
-    ElMessage.error(e?.description || 'Failed to delete scheduled transaction')
+    ElMessage.error(e?.description || t('common.operationFailed'))
   }
 }
 
 function handlePageChange(page: number) {
-  currentPage.value = page
+  goToPage(page)
   refreshData()
-}
-
-function formatNrcsTime(timestamp?: number): string {
-  if (!timestamp) return ''
-  const epoch = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  return new Date(epoch.getTime() + timestamp * 1000).toLocaleString()
-}
-
-function formatNrcsAmount(nqt?: string): string {
-  if (!nqt) return '0.00'
-  return (Number(BigInt(nqt)) / 100000000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-function truncate(text: string | undefined, len: number): string {
-  if (!text) return '-'
-  if (text.length <= len + 4) return text
-  return text.slice(0, len) + '...' + text.slice(-4)
 }
 </script>
 

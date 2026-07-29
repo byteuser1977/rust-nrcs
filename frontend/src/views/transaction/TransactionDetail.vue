@@ -51,6 +51,9 @@
               <el-descriptions-item label="状态">
                 <StatusBadge :value="transaction.status" />
               </el-descriptions-item>
+              <el-descriptions-item v-if="txTypeDisplay" label="类型">
+                <el-tag size="small" type="primary">{{ txTypeDisplay }}</el-tag>
+              </el-descriptions-item>
               <el-descriptions-item label="区块高度">
                 {{ transaction.block_number }}
                 <el-link
@@ -237,6 +240,7 @@ import { transactionApi } from '@/api/modules'
 import StatusBadge from '@/components/base/StatusBadge.vue'
 import type { Transaction } from '@/types/business'
 import { formatAddress, formatTime } from '@/utils/format'
+import { getTransactionTypeDef, getTypeName, getSubTypeName } from '@/constants/transaction-types'
 
 const router = useRoute()
 const transactionStore = useTransactionStore()
@@ -271,6 +275,15 @@ const gasUsagePercentage = computed(() => {
   if (!transaction.value) return 0
   const { gas_used, gas_limit } = transaction.value
   return Math.round((gas_used / gas_limit) * 100)
+})
+
+// Transaction type display (for NRCS transactions with type/subtype)
+const txTypeDisplay = computed(() => {
+  const tx = transaction.value as any
+  if (tx?.type !== undefined && tx?.subtype !== undefined) {
+    return getSubTypeName(tx.type, tx.subtype)
+  }
+  return null
 })
 
 // 解码的输入数据（模拟）

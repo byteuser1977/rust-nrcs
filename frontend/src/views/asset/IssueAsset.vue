@@ -1,60 +1,106 @@
 <template>
-  <div class="page-container">
+  <div class="issue-asset-page">
     <div class="page-header">
       <h2 class="page-title"><el-icon><Coin /></el-icon> {{ t('asset.issueAsset') }}</h2>
-      <div class="header-actions">
-        <el-button type="primary" size="small" @click="showIssue = true"><el-icon><Plus /></el-icon> {{ t('asset.issueAsset') }}</el-button>
-        <el-button size="small" @click="refreshData"><el-icon><Refresh /></el-icon> {{ t('common.refresh') }}</el-button>
-      </div>
     </div>
-    <el-card shadow="hover" v-loading="loading">
-      <el-table :data="items" stripe style="width:100%" :empty-text="t('common.noData')">
-        <el-table-column prop="name" :label="t('common.name')" min-width="160" />
-        <el-table-column prop="description" :label="t('common.description')" min-width="200" show-overflow-tooltip />
-        <el-table-column :label="t('asset.quantity')" width="130" align="right">
-          <template #default="{ row }">{{ formatQNT(row.quantityQNT, row.decimals) }}</template>
-        </el-table-column>
-        <el-table-column prop="decimals" :label="t('monetary.decimals')" width="80" align="center" />
-        <el-table-column prop="accountRS" :label="t('common.issuer')" width="200" show-overflow-tooltip />
-      </el-table>
-      <div class="pagination-container" v-if="total > 20">
-        <el-pagination v-model:current-page="page" :page-size="20" :total="total" layout="prev,pager,next" @current-change="refreshData" />
+
+    <!-- Introduction -->
+    <el-card shadow="hover" class="intro-card">
+      <div class="intro-content">
+        <el-icon class="intro-icon" :size="48" color="var(--el-color-primary)">
+          <Coin />
+        </el-icon>
+        <h3>{{ t('asset.issueAssetTitle') }}</h3>
+        <p class="intro-text">{{ t('asset.issueAssetDescription') }}</p>
+        <ul class="intro-list">
+          <li>{{ t('asset.issueAssetInfo1') }}</li>
+          <li>{{ t('asset.issueAssetInfo2') }}</li>
+          <li>{{ t('asset.issueAssetInfo3') }}</li>
+          <li>{{ t('asset.issueAssetInfo4') }}</li>
+        </ul>
+        <el-button type="primary" size="large" @click="showIssueModal = true">
+          <el-icon><Plus /></el-icon> {{ t('asset.issueAsset') }}
+        </el-button>
       </div>
     </el-card>
-    <IssueAssetModal v-model:visible="showIssue" @success="refreshData" />
+
+    <IssueAssetModal v-model:visible="showIssueModal" @success="onIssueSuccess" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { nrcsApi } from '@/api/modules/nrcs.api'
+import { Coin, Plus } from '@element-plus/icons-vue'
 import IssueAssetModal from '@/components/modals/IssueAssetModal.vue'
 
 const { t } = useI18n()
-const loading = ref(false)
-const items = ref<any[]>([])
-const total = ref(0)
-const page = ref(1)
-const showIssue = ref(false)
 
-function formatQNT(qnt: string, decimals: number) { return qnt ? (Number(qnt) / Math.pow(10, decimals || 0)).toLocaleString() : '0' }
+const showIssueModal = ref(false)
 
-onMounted(() => refreshData())
-
-async function refreshData() {
-  loading.value = true
-  try {
-    const accountId = localStorage.getItem('nrcs_account_id') || ''
-    const result = await nrcsApi.getAccountAssets(accountId)
-    items.value = (result as any).accountAssets || []
-    total.value = items.value.length
-  } catch (e: any) { ElMessage.error(e?.message || t('common.loadError')) }
-  finally { loading.value = false }
+function onIssueSuccess() {
+  ElMessage.success(t('asset.issueAssetSuccess'))
 }
 </script>
+
 <style scoped lang="scss">
 @use '@/assets/styles/variables' as *;
-.page-container { .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; .page-title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin: 0; } .header-actions { display: flex; gap: 8px; } } .pagination-container { display: flex; justify-content: center; margin-top: 16px; } }
+
+.issue-asset-page {
+  .page-header {
+    margin-bottom: 24px;
+    .page-title {
+      font-size: 20px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+    }
+  }
+
+  .intro-card {
+    max-width: 680px;
+    .intro-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 24px 16px;
+
+      .intro-icon {
+        margin-bottom: 16px;
+      }
+
+      h3 {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 12px 0;
+        color: $text-primary;
+      }
+
+      .intro-text {
+        font-size: 14px;
+        color: $text-secondary;
+        max-width: 480px;
+        line-height: 1.6;
+        margin: 0 0 20px 0;
+      }
+
+      .intro-list {
+        text-align: left;
+        margin: 0 0 24px 0;
+        padding: 0 20px;
+        color: $text-regular;
+
+        li {
+          margin-bottom: 6px;
+          font-size: 13px;
+          line-height: 1.5;
+        }
+      }
+    }
+  }
+}
 </style>

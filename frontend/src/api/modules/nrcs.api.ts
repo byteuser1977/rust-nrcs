@@ -445,6 +445,22 @@ export const nrcsApi = {
     return nrcsPost<any>('issueCurrency', data)
   },
 
+  mintCurrency(data: { secretPhrase: string; currency: string; nonce: string; unitsQNT: string; counter: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('currencyMint', data)
+  },
+
+  deleteCurrency(data: { secretPhrase: string; currency: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('deleteCurrency', data)
+  },
+
+  currencyReserveIncrease(data: { secretPhrase: string; currency: string; amountPerUnitNQT: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('currencyReserveIncrease', data)
+  },
+
+  currencyReserveClaim(data: { secretPhrase: string; currency: string; unitsQNT: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('currencyReserveClaim', data)
+  },
+
   orderCurrency(data: { secretPhrase: string; currency: string; unitsQNT: string; rateNQT: string; offerType: string; feeNQT: string; deadline: number }) {
     return nrcsPost<any>('exchangeCurrency', data)
   },
@@ -469,6 +485,10 @@ export const nrcsApi = {
     return nrcsGet<{ transfers: any[] }>('getCurrencyTransfers', { currency, account, firstIndex, lastIndex })
   },
 
+  publishExchangeOffer(data: { secretPhrase: string; currency: string; buyRateNQT: string; sellRateNQT: string; totalBuyLimit: string; totalSellLimit: string; expirationHeight: number; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('publishExchangeOffer', data)
+  },
+
   transferAsset(data: { secretPhrase: string; asset: string; quantityQNT: string; recipient: string; feeNQT: string; deadline: number }) {
     return nrcsPost<any>('transferAsset', data)
   },
@@ -479,6 +499,18 @@ export const nrcsApi = {
 
   getAssetTransfers(asset?: string, account?: string, firstIndex?: number, lastIndex?: number) {
     return nrcsGet<{ transfers: any[] }>('getAssetTransfers', { asset, account, firstIndex, lastIndex })
+  },
+
+  dividendPayment(data: { secretPhrase: string; asset: string; height: number; amountNQTPerShare: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('dividendPayment', data)
+  },
+
+  increaseAssetShares(data: { secretPhrase: string; asset: string; quantityQNT: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('increaseAssetShares', data)
+  },
+
+  deleteAssetShares(data: { secretPhrase: string; asset: string; quantityQNT: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('deleteAssetShares', data)
   },
 
   searchDGSGoods(query?: string, tag?: string, seller?: string, firstIndex?: number, lastIndex?: number) {
@@ -533,12 +565,20 @@ export const nrcsApi = {
     return nrcsGet<{ goods: NrcsDGSProduct[] }>('getDGSGoods', { seller, firstIndex, lastIndex, inStockOnly })
   },
 
+  getDGSGoodsCount() {
+    return nrcsGet<{ numberOfGoods: number }>('getDGSGoodsCount')
+  },
+
   getDGSPurchase(purchase: string) {
     return nrcsGet<NrcsDGSPurchase>('getDGSPurchase', { purchase })
   },
 
   getDGSPurchases(buyer?: string, seller?: string, firstIndex?: number, lastIndex?: number, completed?: boolean) {
     return nrcsGet<{ purchases: NrcsDGSPurchase[] }>('getDGSPurchases', { buyer, seller, firstIndex, lastIndex, completed })
+  },
+
+  getDGSGoodsPurchases(goods: string, firstIndex?: number, lastIndex?: number, withPublicFeedbacks?: boolean) {
+    return nrcsGet<{ purchases: NrcsDGSPurchase[] }>('getDGSGoodsPurchases', { goods, firstIndex, lastIndex, withPublicFeedbacks })
   },
 
   getDGSPendingPurchases(seller: string, firstIndex?: number, lastIndex?: number) {
@@ -679,6 +719,15 @@ export const nrcsApi = {
 
   approveTransaction(data: { secretPhrase: string; transaction: string; feeNQT: string; deadline: number }) {
     return nrcsPost<any>('approveTransaction', data)
+  },
+
+  setPhasingOnlyControl(data: {
+    secretPhrase: string; controlVotingModel: number; controlQuorum: number;
+    controlMinBalance: string; controlMinBalanceModel: number;
+    controlWhitelisted?: string[]; controlMaxFees: string;
+    controlMinDuration: number; controlMaxDuration: number; feeNQT: string; deadline: number;
+  }) {
+    return nrcsPost<any>('setPhasingOnlyControl', data)
   },
 
   signTransaction(unsignedTransactionBytes?: string, unsignedTransactionJSON?: string, secretPhrase?: string) {
