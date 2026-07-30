@@ -1,3 +1,19 @@
+/**
+ * @deprecated Ethereum 风格节点 Store（block_number / peer_count / tps / difficulty / gas）。
+ *
+ * 该 Store 基于 `nodeApi`（以太坊 RESTful），无任何视图引用（死代码）。
+ * NRCS 节点状态管理将在阶段 1.1 基于 `nrcsApi` 重写：
+ *   - getState 自适应轮询（10/15/30s 动态间隔）
+ *   - handleBlockchainStatus + updateBlockchainDownloadProgress
+ *   - checkIfOnAFork 分叉检测
+ *   - updateDashboardLastBlock
+ *
+ * 期间 NRCS 视图应直接使用 `nrcsApi.getBlockchainStatus` / `getState` / `getBlocks`。
+ * 新代码禁止使用本 Store。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi
+ * @see /Volumes/DATA/data/develop/git/nrcs/nrcs-main/html/www/ui/js/nrs.js（getState/handleBlockchainStatus）参考实现
+ */
 import { defineStore } from 'pinia'
 import { ref, computed, onUnmounted } from 'vue'
 import type { NodeInfo, NetworkStats, BlockInfo } from '@/types/business'

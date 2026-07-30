@@ -1,3 +1,16 @@
+/**
+ * @deprecated Ethereum 风格账户 Store（token / refreshToken / roles / permissions / userInfo）。
+ *
+ * ⚠️ 命名冲突：本文件导出的 `useAccountStore` 与 `@/stores/modules/account.store.ts`（NRCS 风格）同名。
+ * NRCS 前端应统一使用 `@/stores/modules/account.store.ts` 的 `useAccountStore`：
+ *   - secretPhrase 派生账户（nrcsApi.getAccountId）
+ *   - RS 地址（NRCS-XXXX-XXXX-XXXX-XXXXX）+ NQT 余额
+ *   - loginByAccount 只读登录
+ *
+ * 本文件仅为兼容以太坊占位视图保留，新代码禁止使用。
+ *
+ * @see @/stores/modules/account.store.ts NRCS 风格账户 Store（推荐）
+ */
 import { defineStore } from 'pinia'
 import type { UserInfo, UserRole } from '@/types'
 

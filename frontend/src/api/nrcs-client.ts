@@ -1,3 +1,15 @@
+/**
+ * NRCS 前端唯一推荐的 HTTP 客户端。
+ *
+ * 实现 NRCS（Nxt 风格）后端契约：
+ * - baseURL `/nrcs`，所有请求通过 `requestType` 参数区分接口
+ * - GET 查询、POST 写入（form-urlencoded）
+ * - 响应统一为 `{ errorCode, errorDescription, ...data }`，errorCode !== 0 视为业务错误
+ * - `isRequirePost` 按 requestType 与敏感字段（secretPhrase/doNotSign/adminPassword）判定是否必须 POST
+ *
+ * 对应参考实现：`/Volumes/DATA/data/develop/git/nrcs/nrcs-main/html/www/ui/js/nrs.server.js`。
+ * 所有业务调用应通过 `@/api/modules/nrcs.api.ts` 的 `nrcsApi` 对象，而非直接调用本文件。
+ */
 import axios, { type AxiosInstance } from 'axios'
 import { ElMessage } from 'element-plus'
 

@@ -1,3 +1,16 @@
+/**
+ * @deprecated Ethereum 风格交易 API（/transactions、gas、tx_hash、wei 金额）。
+ *
+ * NRCS 交易模型基于 requestType（sendMoney/sendMessage 等）+ NQT 金额 + 本地签名交易字节，
+ * 交易相关操作应使用 `nrcsApi.getBlockchainTransactions` / `nrcsApi.getUnconfirmedTransactions` /
+ * `nrcsApi.getTransaction` / `nrcsApi.sendMoney` 等，并通过 `useNrcsForm` 走本地签名三步流程。
+ *
+ * 保留该文件仅为兼容尚未重写的以太坊占位视图。新代码禁止使用。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi（推荐）
+ * @see @/composables/useNrcsForm.ts 表单提交管道
+ * @see /Volumes/DATA/data/develop/git/nrcs/nrcs-main/html/www/ui/js/nrs.transactions.js 参考实现
+ */
 import type { ApiResponse, Transaction, PageResult, SendTxParams, GasEstimate } from '@/types'
 import { get, post } from '../client'
 

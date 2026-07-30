@@ -1,3 +1,11 @@
+/**
+ * @deprecated Ethereum 风格智能合约 API（与 contract.api.ts 重复的一套实现）。
+ *
+ * 该模块为以太坊 /contracts 契约（deploy / call / transact / events / abi / storage）。
+ * NRCS 智能合约按工作区规则放在第二步实现。新代码禁止使用。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi（NRCS 业务 API）
+ */
 import apiClient from '../client'
 import type {
   ApiResponse,

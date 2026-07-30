@@ -1,3 +1,14 @@
+/**
+ * @deprecated Ethereum 风格节点 API（/node/info、/node/blocks、gas-stats、txpool 等）。
+ *
+ * NRCS 节点状态通过 `nrcsApi.getBlockchainStatus` / `nrcsApi.getState` / `nrcsApi.getPeers` /
+ * `nrcsApi.getBlocks` / `nrcsApi.getBlock` 获取，字段为 height / baseTarget / cumulativeDifficulty 等。
+ *
+ * 保留该文件仅为兼容尚未重写的以太坊占位视图。新代码禁止使用。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi（推荐）
+ * @see /Volumes/DATA/data/develop/git/nrcs/nrcs-main/html/www/ui/js/nrs.blocks.js / nrs.peers.js 参考实现
+ */
 import type { ApiResponse, NodeInfo, NetworkStats, BlockInfo } from '@/types'
 import { get } from '../client'
 

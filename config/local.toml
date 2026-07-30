@@ -4,7 +4,7 @@
 listen_addr = "/ip4/0.0.0.0/tcp/18975"
 external_addr = "/ip4/0.0.0.0/tcp/18975"
 bootstrap_nodes = [
-  "/ip4/192.168.2.164/tcp/17974",
+  "/ip4/192.168.110.214/tcp/17974",
 ]
 max_connections = 2000
 connection_ttl_secs = 600
@@ -17,8 +17,7 @@ cors_allowed_origins = ["*"]
 debug = true
 
 [database]
-url = "sqlite://./nrcs.db?mode=rwc"
-#url = "postgres://nrcs_user:password@localhost:5432/nrcs_db"
+url = "sqlite://nrcs.db?mode=rwc"
 pool_size = 10
 
 [mining]
@@ -31,4 +30,4 @@ algorithm = "pos"
 # 日志配置
 level = "debug"  # trace / debug / info / warn / error
 format = "json"  # json / text
-output = "file"  # stdout / file
+output = "stdout"  # stdout / file

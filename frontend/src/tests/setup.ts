@@ -6,8 +6,8 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import { createI18n } from 'vue-i18n'
-import en from '@/locales/en.ts'
-import zhCn from '@/locales/zh-cn.ts'
+import en from '@/locales/en-US'
+import zhCn from '@/locales/zh-CN'
 
 // Mock global fetch
 global.fetch = async () => {

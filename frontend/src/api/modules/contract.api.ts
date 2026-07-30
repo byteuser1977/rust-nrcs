@@ -1,3 +1,11 @@
+/**
+ * @deprecated Ethereum 风格智能合约 API（/contracts、deploy/call/send/events、abi/bytecode）。
+ *
+ * NRCS 智能合约采用不同的账户与调用模型，按工作区规则放在第二步实现。
+ * 在 NRCS 合约模型落地前，本文件仅作为以太坊占位保留，新代码禁止使用。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi（NRCS 业务 API）
+ */
 import type { ApiResponse, Contract, PageResult, DeployContractParams, CallContractParams, ContractEvent } from '@/types'
 import { get, post } from '../client'
 

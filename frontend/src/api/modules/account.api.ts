@@ -1,3 +1,14 @@
+/**
+ * @deprecated Ethereum 风格账户 API（/auth/login、/auth/register、/auth/userinfo 等）。
+ *
+ * NRCS 账户模型基于 secretPhrase + RS 地址（NRCS-XXXX-XXXX-XXXX-XXXXX），
+ * 账户相关操作应使用 `nrcsApi.getAccountId` / `nrcsApi.getAccount` / `nrcsApi.getAccountPublicKey` 等。
+ *
+ * 保留该文件仅为兼容尚未重写的以太坊占位视图。新代码禁止使用。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi（推荐）
+ * @see /Volumes/DATA/data/develop/git/nrcs/nrcs-main/html/www/ui/js/nrs.login.js 参考实现
+ */
 import type { ApiResponse, User, LoginCredentials, RegisterCredentials } from '@/types'
 import { post, get, put } from '../client'
 

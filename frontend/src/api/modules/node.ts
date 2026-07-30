@@ -1,3 +1,13 @@
+/**
+ * @deprecated Ethereum 风格节点 API（与 node.api.ts 重复的一套实现）。
+ *
+ * 该模块为以太坊 /node 契约（enode / gas-price / txpool / sync 等）。
+ * NRCS 节点状态应使用 `nrcsApi`（getBlockchainStatus / getState / getPeers / getBlocks 等）。
+ *
+ * 保留该文件仅为兼容尚未重写的以太坊占位视图。新代码禁止使用。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi（推荐）
+ */
 import apiClient from '../client'
 import type { ApiResponse, NodeStatus, PeerInfo, BlockInfo, NodeMetrics, ChainInfo } from '@/types'
 

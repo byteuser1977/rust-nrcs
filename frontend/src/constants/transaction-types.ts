@@ -6,6 +6,8 @@
  * display metadata (title, icon, i18n key, receiver page).
  */
 
+import type { ServerConstantsResponse, TransactionSubTypeServerInfo } from './server-constants'
+
 // ============================================================================
 // Interfaces
 // ============================================================================
@@ -20,6 +22,12 @@ export interface TransactionSubType {
   iconHTML?: string
   /** Target page name for linking (e.g., 'transactions', 'aliases') */
   receiverPage?: string
+  /**
+   * 服务端常量描述（由 `loadTransactionTypeConstants` 从 `getConstants` 响应注入）。
+   * 包含 isPhasable / mustHaveRecipient / canHaveRecipient / isPhasingSafe 等运行时属性。
+   * 加载前为 undefined。
+   */
+  serverConstants?: TransactionSubTypeServerInfo
 }
 
 /** Metadata for a transaction type (group of subtypes) */
@@ -775,4 +783,83 @@ export function getTypeName(type: number): string {
 export function getSubTypeName(type: number, subtype: number): string {
   const subTypeDef = getTransactionTypeDef(type, subtype)
   return subTypeDef ? subTypeDef.title : 'Unknown'
+}
+
+// ============================================================================
+// 动态常量加载（端口自 nrs.transactions.types.js:574 loadTransactionTypeConstants）
+// ============================================================================
+
+/** 未知类型的默认展示元数据（服务端返回了未注册的 type/subtype 时使用） */
+const UNKNOWN_TYPE_DEF: TransactionTypeDef = {
+  title: 'Unknown',
+  i18nKeyTitle: 'unknown',
+  iconHTML: '<i class="fa fa-question-circle"></i>',
+  chainType: 'child',
+  subTypes: {}
+}
+
+/** 未知子类型的默认展示元数据 */
+const UNKNOWN_SUBTYPE_DEF: TransactionSubType = {
+  title: 'Unknown',
+  i18nKeyTitle: 'unknown',
+  iconHTML: '<i class="fa fa-question-circle"></i>'
+}
+
+/**
+ * 将 `getConstants` 响应中的交易类型常量合并进静态 `TRANSACTION_TYPES`。
+ *
+ * 端口自 `nrs.transactions.types.js:574` 的 `NRS.loadTransactionTypeConstants`：
+ * - 不覆盖静态已有的 title / i18nKeyTitle / iconHTML / receiverPage（仅注入 `serverConstants`）
+ * - 服务端返回了静态表未注册的 type / subtype 时，补一条 "Unknown" 占位
+ * - 服务端子类型映射（`response.transactionSubTypes`，按名称索引）由调用方 Store 单独维护
+ *
+ * @param response - `getConstants` 响应
+ * @param baseTypes - 静态基础类型表（默认 `TRANSACTION_TYPES`）
+ * @returns 合并后的新类型表（不修改入参，保证 Vue 响应式）
+ */
+export function loadTransactionTypeConstants(
+  response: ServerConstantsResponse,
+  baseTypes: Record<number, TransactionTypeDef> = TRANSACTION_TYPES
+): Record<number, TransactionTypeDef> {
+  if (!response?.genesisAccountId || !response.transactionTypes) {
+    return baseTypes
+  }
+
+  // 深拷贝基础表，避免修改静态常量
+  const merged: Record<number, TransactionTypeDef> = {}
+  for (const key of Object.keys(baseTypes)) {
+    const numKey = Number(key)
+    const base = baseTypes[numKey]
+    merged[numKey] = {
+      ...base,
+      subTypes: { ...base.subTypes }
+    }
+  }
+
+  // 合并服务端 transactionTypes
+  for (const typeIndex of Object.keys(response.transactionTypes)) {
+    const numType = Number(typeIndex)
+    const serverType = response.transactionTypes[typeIndex]
+    if (!(numType in merged)) {
+      merged[numType] = {
+        ...UNKNOWN_TYPE_DEF,
+        subTypes: {}
+      }
+    }
+    const targetType = merged[numType]
+    for (const subTypeIndex of Object.keys(serverType.subtypes)) {
+      const numSub = Number(subTypeIndex)
+      const serverSub = serverType.subtypes[subTypeIndex]
+      if (!(numSub in targetType.subTypes)) {
+        targetType.subTypes[numSub] = { ...UNKNOWN_SUBTYPE_DEF }
+      }
+      // 仅注入服务端常量，不覆盖展示元数据
+      targetType.subTypes[numSub] = {
+        ...targetType.subTypes[numSub],
+        serverConstants: serverSub
+      }
+    }
+  }
+
+  return merged
 }

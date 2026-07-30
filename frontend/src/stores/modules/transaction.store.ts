@@ -1,3 +1,20 @@
+/**
+ * @deprecated Ethereum 风格交易 Store（tx_hash / gas / wei / from-to / pending）。
+ *
+ * 该 Store 基于 `transactionApi`（以太坊 RESTful），与 NRCS 交易模型冲突。
+ * NRCS 交易状态管理将在阶段 3.12 基于 `nrcsApi` 重写：
+ *   - handleIncomingTransactions（合并去重排序）
+ *   - 未确认交易与确认交易合并
+ *   - phased 交易专属展示
+ *   - 类型导航与批准请求
+ *
+ * 期间 NRCS 视图应直接使用 `nrcsApi.getBlockchainTransactions` / `getUnconfirmedTransactions`，
+ * 或通过 `useNrcsForm` 提交交易。新代码禁止使用本 Store。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi
+ * @see @/composables/useNrcsForm.ts 表单提交管道
+ * @see /Volumes/DATA/data/develop/git/nrcs/nrcs-main/html/www/ui/js/nrs.transactions.js 参考实现
+ */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Transaction, SendTxParams, PageResult } from '@/types/business'

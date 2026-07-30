@@ -1,3 +1,13 @@
+/**
+ * @deprecated Ethereum 风格账户 API（与 account.api.ts 重复的一套实现）。
+ *
+ * 该模块与 `account.api.ts` 功能重叠，均为以太坊 /auth /account 契约。
+ * NRCS 账户操作应使用 `nrcsApi`（getAccountId / getAccount / getAccountPublicKey 等）。
+ *
+ * 保留该文件仅为兼容尚未重写的以太坊占位视图。新代码禁止使用。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi（推荐）
+ */
 import apiClient from '../client'
 import type {
   ApiResponse,

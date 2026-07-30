@@ -1,3 +1,14 @@
+/**
+ * @deprecated Ethereum 风格交易 API（与 transaction.api.ts 重复的一套实现）。
+ *
+ * 该模块为以太坊 /transactions 契约（txHash / gas / nonce / receipt）。
+ * NRCS 交易操作应使用 `nrcsApi`（getBlockchainTransactions / sendMoney / broadcastTransaction 等），
+ * 并通过 `useNrcsForm` 走本地签名三步流程。
+ *
+ * 保留该文件仅为兼容尚未重写的以太坊占位视图。新代码禁止使用。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi（推荐）
+ */
 import apiClient from '../client'
 import type {
   ApiResponse,

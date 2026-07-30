@@ -13,6 +13,9 @@ import 'element-plus/dist/index.css'
 // 引入 i18n 和语言包
 import { i18n } from '@/locales'
 
+// 引入动态常量 Store（启动时拉取 getConstants）
+import { useConstantsStore } from '@/stores/modules'
+
 // 创建应用实例
 const app = createApp(App)
 
@@ -34,6 +37,14 @@ app.use(ElementPlus, {
 
 // 挂载应用
 app.mount('#app')
+
+// 5. 启动时拉取服务端动态常量（getConstants）。
+//    非阻塞：失败不阻断渲染，Store 内部记录 loadError 并保持 loaded=false，
+//    依赖常量的判定函数在未加载时会按参考语义隐式放行。
+//    对标参考 nrs.js 初始化阶段的 NRS.loadServerConstants() 调用。
+useConstantsStore().loadServerConstants().catch((err) => {
+  console.error('[bootstrap] loadServerConstants failed:', err)
+})
 
 // 开发环境日志
 if (import.meta.env.DEV) {

@@ -1,3 +1,18 @@
+/**
+ * @deprecated Ethereum RESTful 客户端（Bearer token + /auth /transactions /node /contracts 端点）。
+ *
+ * 该客户端实现的是以太坊风格的后端契约（tx_hash / gas / wei / block_number / abi / bytecode），
+ * 与 NRCS（Nxt 风格：requestType / NQT / RS 地址 / secretPhrase / transactionBytes）模型完全冲突。
+ *
+ * NRCS 前端的唯一推荐客户端是 `@/api/nrcs-client`（nrcsGet / nrcsPost / nrcsRequest），
+ * 所有业务 API 通过 `@/api/modules/nrcs.api.ts` 的 `nrcsApi` 对象调用。
+ *
+ * 保留该文件仅为兼容尚未重写的以太坊占位视图（阶段 3.x 将逐步替换为 NRCS 风格）。
+ * 新代码禁止使用本文件导出的 request/get/post/put/del。
+ *
+ * @see /Volumes/DATA/data/develop/git/nrcs/nrcs-main/html/www/ui/js/nrs.server.js 参考实现
+ * @see @/api/nrcs-client.ts 替代实现
+ */
 import axios, { type AxiosInstance, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import type { RequestConfig, ApiError } from '@/types'
 import { useAccountStore } from '@/stores/modules/account.store'

@@ -540,6 +540,38 @@ function numsize(x: number[], n: number): number {
   return n + 1;
 }
 
+/**
+ * 签名专用 divmod：使用浮点除法（z /= dt），不截断。
+ *
+ * 参考 curve25519.js divmod() 的原始实现：`z /= dt;`（浮点除法）。
+ * 浮点小数部分会影响 mulaSmall 中存储的字节值。
+ * 仅用于 signOperation 中的模约简，不影响 keygen/EGCD 路径。
+ */
+function divmodOpSign(
+  q: number[], r: number[], n: number,
+  d: number[], t: number,
+): void {
+  let rn = 0;
+  let dt = ((d[t - 1] & 0xff) << 8);
+  if (t > 1) {
+    dt |= (d[t - 2] & 0xff);
+  }
+
+  while (n-- >= t) {
+    let z = (rn << 16) | ((r[n] & 0xff) << 8);
+    if (n > 0) {
+      z |= (r[n - 1] & 0xff);
+    }
+    z = z / dt;
+    rn += mulaSmall(r, r, n - t + 1, d, t, -z);
+    q[n - t + 1] = (z + rn) & 0xff;
+    mulaSmall(r, r, n - t + 1, d, t, -rn);
+    rn = r[n] & 0xff;
+    r[n] = 0;
+  }
+  r[t - 1] = rn & 0xff;
+}
+
 function egcd32Op(
   x: number[], y: number[],
   a: number[], b: number[],
@@ -769,10 +801,10 @@ function signOperation(
     x1[i] = x[i];
   }
 
-  // Reduce modulo group order
+  // Reduce modulo group order（签名路径使用浮点除法的 divmodOpSign）
   const tmp3 = new Array(32).fill(0);
-  divmodOp(tmp3, h1, 32, CURVE_ORDER, 32);
-  divmodOp(tmp3, x1, 32, CURVE_ORDER, 32);
+  divmodOpSign(tmp3, h1, 32, CURVE_ORDER, 32);
+  divmodOpSign(tmp3, x1, 32, CURVE_ORDER, 32);
 
   // v = x1 - h1. If v is negative, add the group order.
   const v = new Array(32).fill(0);
@@ -783,7 +815,7 @@ function signOperation(
   const tmp1 = new Array(64).fill(0);
   mula32Op(tmp1, v, Array.from(s), 32, 1);
   const tmp2 = new Array(32).fill(0);
-  divmodOp(tmp2, tmp1, 64, CURVE_ORDER, 32);
+  divmodOpSign(tmp2, tmp1, 64, CURVE_ORDER, 32);
 
   let w = 0;
   for (let i = 0; i < 32; i++) {

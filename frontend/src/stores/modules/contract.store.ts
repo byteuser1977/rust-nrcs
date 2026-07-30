@@ -1,3 +1,13 @@
+/**
+ * @deprecated Ethereum 风格智能合约 Store（contract_address / abi / bytecode / deploy / call / events）。
+ *
+ * 该 Store 基于 `contractApi`（以太坊 RESTful），与 NRCS 合约模型冲突。
+ * NRCS 智能合约按工作区规则放在第二步实现，本 Store 届时将被重写。
+ *
+ * 新代码禁止使用本 Store。
+ *
+ * @see @/api/modules/nrcs.api.ts nrcsApi（NRCS 业务 API）
+ */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Contract, ContractABI, DeployContractParams, CallContractParams } from '@/types/business'
