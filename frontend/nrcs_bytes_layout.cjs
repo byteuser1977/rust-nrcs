@@ -1,0 +1,12 @@
+const hex = '001037b138053c002d37b522ee336ee1f97b6f2365dcecd10a128ea916b91e30ff4313553a931b2c5fe6cbd7bfb374290065cd1d0000000000e1f505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000007cb1400e278bbd91da7aae30163fc7d52fb0c3d2cd86b77a1a4f32b233735c3108a68d6a525909d4efe887dde';
+const bytes = Buffer.from(hex, 'hex');
+console.log('total length:', bytes.length, 'bytes');
+console.log('byte[0] (type):', bytes[0]);
+console.log('byte[1] (version|subtype):', '0x' + bytes[1].toString(16), 'version=', (bytes[1] & 0xf0) >> 4, 'subtype=', bytes[1] & 0x0f);
+console.log('byte[160-163] (flags LE):', bytes[160], bytes[161], bytes[162], bytes[163], '= flags', bytes[160] + bytes[161]*256 + bytes[162]*65536 + bytes[163]*16777216);
+console.log('byte[164-167] (ecBlockHeight):', bytes[164], bytes[165], bytes[166], bytes[167]);
+console.log('byte[168-175] (ecBlockId):', bytes.slice(168, 176).toString('hex'));
+console.log('byte[176] (attachmentVersion?):', bytes[176]);
+console.log('byte[176-208] (prunable message hash?):', bytes.slice(176, 208).toString('hex'));
+console.log('byte[208-240]:', bytes.slice(208, 240).toString('hex'));
+console.log('byte[240-end]:', bytes.slice(240).toString('hex'));

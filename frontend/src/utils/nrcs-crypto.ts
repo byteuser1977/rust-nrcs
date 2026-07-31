@@ -484,6 +484,13 @@ function mulaSmall(
   p: number[], q: number[], m: number,
   x: number[], n: number, z: number,
 ): number {
+  // Coerce to 32-bit signed integers — matches curve25519.js mula_small.
+  // CRITICAL: z = z | 0 truncates any floating-point z (e.g. from divmod's
+  // z /= dt) before multiplication, preventing float accumulation in v.
+  m = m | 0;
+  n = n | 0;
+  z = z | 0;
+
   let v = 0;
   for (let j = 0; j < n; ++j) {
     v += (q[j + m] & 0xff) + z * (x[j] & 0xff);
@@ -497,6 +504,10 @@ function mula32Op(
   p: number[], x: number[], y: number[],
   t: number, z: number,
 ): number {
+  // Coerce to 32-bit signed integers — matches curve25519.js mula32.
+  t = t | 0;
+  z = z | 0;
+
   const n = 31;
   let w = 0;
   let i = 0;
@@ -540,37 +551,10 @@ function numsize(x: number[], n: number): number {
   return n + 1;
 }
 
-/**
- * 签名专用 divmod：使用浮点除法（z /= dt），不截断。
- *
- * 参考 curve25519.js divmod() 的原始实现：`z /= dt;`（浮点除法）。
- * 浮点小数部分会影响 mulaSmall 中存储的字节值。
- * 仅用于 signOperation 中的模约简，不影响 keygen/EGCD 路径。
- */
-function divmodOpSign(
-  q: number[], r: number[], n: number,
-  d: number[], t: number,
-): void {
-  let rn = 0;
-  let dt = ((d[t - 1] & 0xff) << 8);
-  if (t > 1) {
-    dt |= (d[t - 2] & 0xff);
-  }
-
-  while (n-- >= t) {
-    let z = (rn << 16) | ((r[n] & 0xff) << 8);
-    if (n > 0) {
-      z |= (r[n - 1] & 0xff);
-    }
-    z = z / dt;
-    rn += mulaSmall(r, r, n - t + 1, d, t, -z);
-    q[n - t + 1] = (z + rn) & 0xff;
-    mulaSmall(r, r, n - t + 1, d, t, -rn);
-    rn = r[n] & 0xff;
-    r[n] = 0;
-  }
-  r[t - 1] = rn & 0xff;
-}
+// NOTE: divmodOpSign was removed — it used floating-point z /= dt, but since
+// mulaSmall now truncates z via `z = z | 0` (matching curve25519.js mula_small),
+// the float is discarded before multiplication anyway. divmodOp (Math.trunc)
+// produces identical results and is used for all sign/keygen/egcd paths.
 
 function egcd32Op(
   x: number[], y: number[],
@@ -801,10 +785,11 @@ function signOperation(
     x1[i] = x[i];
   }
 
-  // Reduce modulo group order（签名路径使用浮点除法的 divmodOpSign）
+  // Reduce modulo group order (mulaSmall truncates z via z|0, so divmodOp
+  // with Math.trunc matches curve25519.js divmod exactly)
   const tmp3 = new Array(32).fill(0);
-  divmodOpSign(tmp3, h1, 32, CURVE_ORDER, 32);
-  divmodOpSign(tmp3, x1, 32, CURVE_ORDER, 32);
+  divmodOp(tmp3, h1, 32, CURVE_ORDER, 32);
+  divmodOp(tmp3, x1, 32, CURVE_ORDER, 32);
 
   // v = x1 - h1. If v is negative, add the group order.
   const v = new Array(32).fill(0);
@@ -815,7 +800,7 @@ function signOperation(
   const tmp1 = new Array(64).fill(0);
   mula32Op(tmp1, v, Array.from(s), 32, 1);
   const tmp2 = new Array(32).fill(0);
-  divmodOpSign(tmp2, tmp1, 64, CURVE_ORDER, 32);
+  divmodOp(tmp2, tmp1, 64, CURVE_ORDER, 32);
 
   let w = 0;
   for (let i = 0; i < 32; i++) {
@@ -1179,12 +1164,17 @@ export function signBytes(message: string, secretPhrase: string): string {
 
   const x = simpleHash(m, s);
 
+  // curve25519Keygen 内部 clamp x（与参考 curve25519.keygen 行为一致）。
+  // 参考 curve25519.js 的 keygen 直接修改调用方传入的 k，导致后续 sign(h, x, s)
+  // 接收的是 clamp 后的 x。TS 的 curve25519Keygen 复制了 digest 不修改原 x，
+  // 因此必须显式使用返回的 k（clamp 后的 x）传给 signOperation，否则签名 v 错误。
   const yKeypair = curve25519Keygen(x);
   const Y = yKeypair.p;
+  const xClamped = yKeypair.k;
 
   const h = simpleHash(m, Y);
 
-  const v = signOperation(h, x, s);
+  const v = signOperation(h, xClamped, s);
 
   return byteArrayToHexString(concatBytes(v, h));
 }

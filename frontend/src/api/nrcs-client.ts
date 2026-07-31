@@ -78,9 +78,13 @@ const REQUIRE_POST_TYPES = new Set([
   'broadcastTransaction', 'signTransaction', 'approveTransaction',
   'addPeer', 'blacklistPeer', 'leaseBalance',
   'shufflingCreate', 'shufflingProcess', 'shufflingRegister',
+  'shufflingVerify', 'shufflingCancel',
+  'startShuffler', 'stopShuffler',
   'setPhasingOnlyControl', 'publishExchangeOffer',
   'startFundingMonitor', 'stopFundingMonitor',
-  'dividendPayment', 'increaseAssetShares', 'deleteAssetShares'
+  'dividendPayment', 'increaseAssetShares', 'deleteAssetShares',
+  'currencyReserveIncrease', 'currencyReserveClaim',
+  'deleteScheduledTransaction', 'markHost'
 ])
 
 export function isRequirePost(requestType: string, data?: Record<string, any>): boolean {

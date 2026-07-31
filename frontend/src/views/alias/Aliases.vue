@@ -84,7 +84,7 @@
         <el-table-column :label="t('alias.price')" width="130" align="right">
           <template #default="{ row }">
             <span v-if="isAliasForSale(row)" class="text-mono">
-              {{ formatNrcAmount(row.priceNQT) }}
+              {{ formatNrc(row.priceNQT) }}
             </span>
             <span v-else class="text-muted text-sm">-</span>
           </template>
@@ -166,7 +166,7 @@ import { ElMessage } from 'element-plus'
 import { Bookmark, Plus, Refresh, Search, User } from '@element-plus/icons-vue'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 import { usePagination } from '@/composables/usePagination'
-import { formatAmount } from '@/utils/format'
+import { formatNrc } from '@/utils/format'
 import { useAccountStore } from '@/stores/modules/account.store'
 import SetAliasModal from '@/components/modals/SetAliasModal.vue'
 import SellAliasModal from '@/components/modals/SellAliasModal.vue'
@@ -309,10 +309,6 @@ async function deleteAliasConfirm(row: any) {
   }
 }
 
-function formatNrcAmount(nqt?: string): string {
-  if (!nqt || nqt === '0') return '0'
-  return formatAmount(nqt)
-}
 </script>
 
 <style scoped lang="scss">

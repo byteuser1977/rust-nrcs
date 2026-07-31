@@ -32,6 +32,16 @@
         <span>{{ errorMessage }}</span>
       </div>
 
+      <!-- Password Strength Warning (对标 nrs.login.js:415-425 passwordNotice) -->
+      <div v-if="passwordWarning" class="login-warning">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <line x1="12" y1="9" x2="12" y2="13" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="12" cy="17" r="1" fill="#f59e0b"/>
+        </svg>
+        <span>{{ passwordWarning }}</span>
+      </div>
+
       <div class="login-card">
         <!-- Login Type Selector -->
         <div class="login-type-selector">
@@ -39,7 +49,7 @@
             class="type-btn"
             :class="{ 'is-active': loginType === 'account' }"
             @click="switchLoginType('account')"
-            title="账号登录"
+            title="账号登录（只读）"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -50,7 +60,7 @@
             class="type-btn"
             :class="{ 'is-active': loginType === 'password' }"
             @click="switchLoginType('password')"
-            title="密码登录"
+            title="密码短语登录（可签名）"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/>
@@ -59,14 +69,16 @@
           </button>
         </div>
 
-        <!-- Account Login Form -->
+        <!-- Account Login Form (只读模式) -->
         <form v-if="loginType === 'account'" @submit.prevent="handleAccountLogin" class="login-form">
           <div class="form-group">
+            <label class="form-label">账户地址（只读模式）</label>
+
             <!-- Saved Accounts Dropdown -->
-            <div v-if="savedAccounts.length > 0 && !showManualInput" class="input-wrapper">
+            <div v-if="accountStore.savedAccounts.length > 0 && !showManualInput" class="input-wrapper">
               <select v-model="selectedAccount" class="form-select" @change="onAccountSelect">
                 <option value="">选择已保存的账号</option>
-                <option v-for="(account, index) in savedAccounts" :key="index" :value="account">
+                <option v-for="(account, index) in accountStore.savedAccounts" :key="index" :value="account">
                   {{ account }}
                 </option>
                 <option value="__other__">手动输入</option>
@@ -74,7 +86,7 @@
             </div>
 
             <!-- Manual Account Input -->
-            <div v-if="showManualInput || savedAccounts.length === 0" class="input-wrapper">
+            <div v-if="showManualInput || accountStore.savedAccounts.length === 0" class="input-wrapper">
               <input
                 v-model="accountInput"
                 type="text"
@@ -93,13 +105,13 @@
             </div>
 
             <!-- Toggle Button for Saved Accounts -->
-            <div v-if="savedAccounts.length > 0 && !showManualInput" class="toggle-input-mode">
+            <div v-if="accountStore.savedAccounts.length > 0 && !showManualInput" class="toggle-input-mode">
               <button type="button" @click="showManualInput = true; selectedAccount = ''" class="toggle-link">
                 或手动输入地址 →
               </button>
             </div>
 
-            <div v-if="savedAccounts.length > 0 && showManualInput" class="toggle-input-mode">
+            <div v-if="accountStore.savedAccounts.length > 0 && showManualInput" class="toggle-input-mode">
               <button type="button" @click="showManualInput = false; accountInput = ''" class="toggle-link">
                 ← 返回已保存账号
               </button>
@@ -119,7 +131,7 @@
 
             <!-- Login Button for Manual Input -->
             <button
-              v-if="showManualInput || savedAccounts.length === 0"
+              v-if="showManualInput || accountStore.savedAccounts.length === 0"
               type="button"
               class="btn-login btn-login--full"
               @click="handleAccountLogin"
@@ -128,20 +140,22 @@
               <span v-if="loading" class="spinner"></span>
               <span v-else>登 录</span>
             </button>
+
+            <p class="form-hint">只读模式：可查看余额与历史，发送交易需切换密码短语登录</p>
           </div>
         </form>
 
-        <!-- Password Login Form -->
+        <!-- Password Login Form (助记词/密码短语) -->
         <form v-else-if="loginType === 'password'" @submit.prevent="handlePasswordLogin" class="login-form">
           <div class="form-group">
-            <label class="form-label">密码短语</label>
+            <label class="form-label">密码短语 / 助记词</label>
             <div class="input-wrapper">
               <input
                 v-model="secretPhrase"
-                type="password"
+                :type="showPassword ? 'text' : 'password'"
                 class="form-input"
                 :class="{ 'is-focused': isPasswordFocused }"
-                placeholder="输入您的密码短语..."
+                placeholder="输入您的 12 词助记词或密码短语..."
                 @focus="isPasswordFocused = true"
                 @blur="isPasswordFocused = false"
                 @keyup.enter="handlePasswordLogin"
@@ -167,6 +181,14 @@
                 </svg>
               </button>
             </div>
+
+            <!-- Strength Indicator -->
+            <div v-if="secretPhrase" class="strength-indicator">
+              <div class="strength-bar">
+                <div class="strength-fill" :class="strengthLevel" :style="{ width: strength.score + '%' }"></div>
+              </div>
+              <span class="strength-label" :class="strengthLevel">{{ strengthText }}</span>
+            </div>
           </div>
 
           <button
@@ -185,13 +207,13 @@
           <label class="checkbox-wrapper">
             <input type="checkbox" v-model="rememberMe" class="checkbox-input" />
             <span class="checkbox-custom"></span>
-            <span class="checkbox-label">记住我</span>
+            <span class="checkbox-label">记住账户（仅存 RS 地址）</span>
           </label>
         </div>
 
         <!-- Registration Link -->
         <div class="registration-link">
-          <a href="#" @click.prevent="showRegistrationInfo">还没有账号？点击创建新账号！</a>
+          <a href="#" @click.prevent="goToRegister">还没有账号？点击创建新账号！</a>
         </div>
       </div>
 
@@ -206,12 +228,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { useAccountStore } from '@/stores/modules'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import { checkPassphraseStrength } from '@/utils/mnemonic'
 
 const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
+const accountStore = useAccountStore()
 
 const loading = ref(false)
 const rememberMe = ref(false)
@@ -221,10 +246,10 @@ const loginType = ref<'account' | 'password'>('account')
 const accountInput = ref('')
 const secretPhrase = ref('')
 const selectedAccount = ref('')
-const savedAccounts = ref<string[]>([])
 const showManualInput = ref(false)
 
 const errorMessage = ref('')
+const passwordWarning = ref('')
 const connectionStatus = ref<'checking' | 'online' | 'error'>('checking')
 
 const isAccountFocused = ref(false)
@@ -249,18 +274,39 @@ const connectionStatusText = computed(() => {
   }
 })
 
-const switchLoginType = (type: 'account' | 'password') => {
+/** 密码强度评估（对标 nrs.login.js:415-425） */
+const strength = computed(() => checkPassphraseStrength(secretPhrase.value))
+
+const strengthLevel = computed(() => strength.value.level)
+
+const strengthText = computed(() => {
+  switch (strength.value.level) {
+    case 'strong':
+      return '强度：高'
+    case 'medium':
+      return '强度：中'
+    case 'weak':
+      return '强度：弱'
+    default:
+      return '强度：极弱'
+  }
+})
+
+/** 切换登录方式 */
+function switchLoginType(type: 'account' | 'password'): void {
   loginType.value = type
   errorMessage.value = ''
+  passwordWarning.value = ''
 }
 
-const togglePasswordVisibility = () => {
+/** 切换密码可见性 */
+function togglePasswordVisibility(): void {
   showPassword.value = !showPassword.value
 }
 
-const checkNodeConnection = async () => {
+/** 检测节点连接状态 */
+async function checkNodeConnection(): Promise<void> {
   connectionStatus.value = 'checking'
-
   try {
     const status = await nrcsApi.getBlockchainStatus()
     if ((status as any).errorCode) {
@@ -268,61 +314,49 @@ const checkNodeConnection = async () => {
       console.error('Blockchain error:', (status as any).errorDescription)
     } else {
       connectionStatus.value = 'online'
-      console.log('Blockchain connected, height:', (status as any).numberOfBlocks)
+      console.log('[login] 节点已连接, height:', (status as any).numberOfBlocks)
     }
   } catch (error: any) {
     connectionStatus.value = 'error'
-    console.error('Connection failed:', error)
+    console.error('[login] 节点连接失败:', error)
   }
 }
 
-const onAccountSelect = () => {
+/** 选择已保存账户 */
+function onAccountSelect(): void {
   errorMessage.value = ''
-}
-
-const loadSavedAccounts = () => {
-  const accounts = localStorage.getItem('saved_nrcs_accounts')
-  if (accounts) {
-    savedAccounts.value = accounts.split(';').filter(a => a.trim() !== '')
+  if (selectedAccount.value === '__other__') {
+    showManualInput.value = true
+    selectedAccount.value = ''
   }
 }
 
-const saveAccount = (accountRS: string) => {
-  if (!rememberMe.value) return
-
-  let accounts = localStorage.getItem('saved_nrcs_accounts') || ''
-  const accountList = accounts.split(';').filter(a => a.trim() !== '')
-
-  if (!accountList.includes(accountRS)) {
-    accountList.push(accountRS)
-    localStorage.setItem('saved_nrcs_accounts', accountList.join(';'))
-  }
-}
-
-const handleAccountLogin = async () => {
+/**
+ * 账户地址登录（只读模式）
+ *
+ * 对标 nrs.login.js:334-336 的 NRS.login(false, account)：
+ * 调用 store.loginByAccount 仅查询链上信息，不存储 secretPhrase。
+ */
+async function handleAccountLogin(): Promise<void> {
   let account = ''
 
-  if (showManualInput.value || savedAccounts.value.length === 0) {
+  if (showManualInput.value || accountStore.savedAccounts.length === 0) {
+    account = accountInput.value
+  } else if (selectedAccount.value === '__other__' || !selectedAccount.value) {
     account = accountInput.value
   } else {
-    if (selectedAccount.value === '__other__' || !selectedAccount.value) {
-      account = accountInput.value
-    } else {
-      account = selectedAccount.value
-    }
+    account = selectedAccount.value
   }
 
-  console.log('Login attempt with account:', account, 'showManualInput:', showManualInput.value)
-
   if (!account || account.trim() === '') {
-    errorMessage.value = '请输入您的 NRC 账号地址'
+    errorMessage.value = '请输入您的 NRCS 账号地址'
     return
   }
 
   const trimmedAccount = account.trim()
 
-  if (!trimmedAccount.startsWith('NRCS-')) {
-    errorMessage.value = '无效的 NRC 账号格式，应为 NRCS-XXXX-XXXX-XXXX-XXXXX'
+  if (!trimmedAccount.startsWith('NRCS-') && !/^\d+$/.test(trimmedAccount)) {
+    errorMessage.value = '无效的账号格式，应为 NRCS-XXXX-XXXX-XXXX-XXXXX 或数字账户 ID'
     return
   }
 
@@ -330,197 +364,104 @@ const handleAccountLogin = async () => {
     loading.value = true
     errorMessage.value = ''
 
-    console.log('=== 账号登录开始 ===')
-    console.log('账号:', trimmedAccount)
-    console.log('登录模式:', showManualInput.value ? '手动' : '已保存')
+    console.log('[login] 只读账户登录:', trimmedAccount)
 
-    console.log('步骤 1: 调用 getBlockchainStatus...')
+    await accountStore.loginByAccount(trimmedAccount, {
+      rememberMe: rememberMe.value
+    })
 
-    let status
-    try {
-      status = await nrcsApi.getBlockchainStatus()
-      console.log('步骤 1 成功: BlockchainStatus:', JSON.stringify(status).substring(0, 100))
-    } catch (statusError: any) {
-      console.error('步骤 1 失败:', statusError)
-      errorMessage.value = '无法连接到 NRCS 节点，请确保节点在 http://localhost:17976 运行'
-      return
-    }
+    ElMessage.success(`欢迎回来！已登录 ${accountStore.accountRS}`)
 
-    if ((status as any).errorCode) {
-      errorMessage.value = `区块链错误: ${(status as any).errorDescription || '未知错误'} (代码: ${(status as any).errorCode})`
-      console.error('步骤 1 错误:', errorMessage.value)
-      return
-    }
-
-    console.log('步骤 2: 调用 getAccount 查询', trimmedAccount)
-
-    let result
-    try {
-      result = await nrcsApi.getAccount(trimmedAccount)
-      console.log('步骤 2 成功: 账户数据:', JSON.stringify(result).substring(0, 200))
-    } catch (accountError: any) {
-      console.error('步骤 2 失败:', accountError)
-
-      if (accountError.code === 5) {
-        errorMessage.value = '区块链上未找到该账户，请检查地址是否正确'
-      } else if (accountError.message?.includes('Network') || accountError.message?.includes('network')) {
-        errorMessage.value = '网络错误，请检查您的网络连接'
-      } else {
-        errorMessage.value = `API 错误: ${accountError.message || accountError.description || '未知'}`
-        console.error('完整错误对象:', accountError)
-      }
-      return
-    }
-
-    console.log('步骤 3: 处理登录响应...')
-
-    if (result && result.accountRS) {
-      console.log('✅ 账号登录成功:', result.accountRS)
-
-      localStorage.setItem('access_token', 'nrcs_session')
-      localStorage.setItem('nrcs_account_rs', result.accountRS)
-      localStorage.setItem('nrcs_account_id', result.account)
-      localStorage.setItem('nrcs_public_key', result.publicKey || '')
-      localStorage.setItem('logged_in', 'true')
-      localStorage.setItem('login_type', 'account')
-
-      saveAccount(result.accountRS)
-
-      try {
-        if (result.balanceNQT) {
-          localStorage.setItem('nrcs_balance_nqt', result.balanceNQT)
-          console.log('💰 余额已保存:', result.balanceNQT, 'NQT')
-        }
-      } catch {}
-
-      ElMessage.success(`欢迎回来！已登录 ${result.accountRS}`)
-      const redirect = route.query.redirect as string
-
-      console.log('步骤 4: 跳转到', redirect || '/')
-
-      setTimeout(() => {
-        router.push(redirect || '/')
-      }, 500)
-    } else {
-      errorMessage.value = '服务器返回了无效的响应'
-      console.error('❌ 无效的响应:', result)
-    }
+    const redirect = route.query.redirect as string
+    router.push(redirect || '/')
   } catch (error: any) {
-    console.error('❌ handleAccountLogin 发生意外错误:', error)
-    errorMessage.value = `意外错误: ${error.message || '发生了未知错误'}`
+    console.error('[login] 账户登录失败:', error)
+    if (error.code === 5) {
+      errorMessage.value = '区块链上未找到该账户，请检查地址是否正确'
+    } else if (error.message?.includes('网络') || error.message?.includes('Network')) {
+      errorMessage.value = '网络错误，请检查您的网络连接'
+    } else {
+      errorMessage.value = error.message || error.description || '登录失败'
+    }
   } finally {
     loading.value = false
-    console.log('=== 账号登录完成 ===')
   }
 }
 
-const handlePasswordLogin = async () => {
+/**
+ * 密码短语登录（可签名模式）
+ *
+ * 对标 nrs.login.js:292 的 NRS.login(true, id)：
+ *   1. store.login 在本地派生 publicKey/accountId/accountRS（secretPhrase 不出客户端）
+ *   2. 调 getAccountPublicKey 校验账户未被占用（error_account_taken）
+ *   3. 拉取链上信息（余额、名称等）
+ *   4. 评估密码强度并返回警告（passwordNotice）
+ *
+ * 注意：secretPhrase 仅内存暂存，rememberMe 只存 accountRS（阶段 0.5 安全要求）。
+ */
+async function handlePasswordLogin(): Promise<void> {
   if (!secretPhrase.value || secretPhrase.value.trim() === '') {
     errorMessage.value = '密码短语不能为空'
     return
   }
 
+  // 对标 nrs.login.js:306：非测试网下密码短语长度 < 12 拒绝登录
+  // 注意：12 词助记词长度通常 >= 60，此处只做最低长度校验
   const trimmedPhrase = secretPhrase.value.trim()
-
-  if (trimmedPhrase.length < 35) {
-    errorMessage.value = '警告：密码短语应至少包含 35 个字符以保证安全性'
+  if (trimmedPhrase.length < 12) {
+    errorMessage.value = '密码短语过短（最低 12 字符）'
     return
   }
 
   try {
     loading.value = true
     errorMessage.value = ''
+    passwordWarning.value = ''
 
-    console.log('密码登录: 调用 getBlockchainStatus')
+    console.log('[login] 密码短语登录（本地派生）')
 
-    let status
-    try {
-      status = await nrcsApi.getBlockchainStatus()
-    } catch (statusError: any) {
-      console.error('getBlockchainStatus 失败:', statusError)
-      errorMessage.value = '无法连接到 NRCS 节点，请确保节点在 http://localhost:17976 运行'
-      return
+    const result = await accountStore.login(trimmedPhrase, {
+      rememberMe: rememberMe.value
+    })
+
+    // 显示密码强度警告（对标 nrs.login.js:415-425）
+    if (result.warning) {
+      passwordWarning.value = result.warning
+      ElMessage.warning(result.warning)
     }
 
-    if ((status as any).errorCode) {
-      errorMessage.value = `区块链错误: ${(status as any).errorDescription || '未知错误'} (代码: ${(status as any).errorCode})`
-      return
-    }
+    ElMessage.success(`欢迎！已登录 ${accountStore.accountRS}`)
 
-    console.log('区块链状态正常，调用 getAccountId')
+    // 清空密码短语输入框（避免残留）
+    secretPhrase.value = ''
 
-    let result
-    try {
-      result = await nrcsApi.getAccountId(trimmedPhrase)
-    } catch (idError: any) {
-      console.error('getAccountId 失败:', idError)
-      errorMessage.value = idError.message || idError.description || '无法从密码短语生成账号 ID'
-      return
-    }
-
-    console.log('getAccountId 响应:', result)
-
-    if (result && result.accountRS) {
-      console.log('密码登录成功:', result.accountRS)
-
-      localStorage.setItem('access_token', 'nrcs_session')
-      localStorage.setItem('nrcs_account_rs', result.accountRS)
-      localStorage.setItem('nrcs_account_id', result.account)
-      localStorage.setItem('nrcs_public_key', result.publicKey || '')
-      localStorage.setItem('logged_in', 'true')
-      localStorage.setItem('login_type', 'password')
-
-      if (rememberMe.value) {
-        localStorage.setItem('nrcs_remember', 'true')
-        localStorage.setItem('saved_passphrase', trimmedPhrase)
-      } else {
-        localStorage.removeItem('nrcs_remember')
-        localStorage.removeItem('saved_passphrase')
-      }
-
-      saveAccount(result.accountRS)
-
-      try {
-        const account = await nrcsApi.getAccount(result.accountRS)
-        if (account && account.balanceNQT) {
-          localStorage.setItem('nrcs_balance_nqt', account.balanceNQT)
-        }
-      } catch (balanceError: any) {
-        console.warn('获取余额失败:', balanceError)
-      }
-
-      ElMessage.success(`欢迎！账号已创建: ${result.accountRS}`)
-      const redirect = route.query.redirect as string
-
-      setTimeout(() => {
-        router.push(redirect || '/')
-      }, 500)
-    } else {
-      errorMessage.value = '无法从密码短语生成账号 ID，请检查您的密码短语'
-    }
+    const redirect = route.query.redirect as string
+    router.push(redirect || '/')
   } catch (error: any) {
-    console.error('密码登录发生意外错误:', error)
-    errorMessage.value = error.message || '登录过程中发生了未知错误'
+    console.error('[login] 密码短语登录失败:', error)
+    if (error.message?.includes('账户已被其他密码短语占用')) {
+      errorMessage.value = '该账户已被其他密码短语占用（error_account_taken），请检查您的密码短语'
+    } else if (error.code === 5) {
+      errorMessage.value = '账户查询失败，请稍后重试'
+    } else {
+      errorMessage.value = error.message || error.description || '登录失败'
+    }
   } finally {
     loading.value = false
   }
 }
 
-const showRegistrationInfo = () => {
-  ElMessageBox.alert(
-    '要创建新的 NRCS 账号，您需要生成一个安全的密码短语。此密码短语将用于访问您的账号。请务必安全保存！',
-    '创建新账号',
-    {
-      confirmButtonText: '确定',
-      type: 'info',
-    }
-  )
+/** 跳转到注册页 */
+function goToRegister(): void {
+  router.push('/register')
 }
 
 onMounted(() => {
-  loadSavedAccounts()
+  // 从 store 加载已保存账户列表
+  accountStore.listSavedAccounts()
 
-  const remembered = localStorage.getItem('nrcs_remember')
+  // 恢复 rememberMe 勾选状态（若上次登录时记住过账户）
+  const remembered = localStorage.getItem('nrcs-remember-me')
   if (remembered === 'true') {
     rememberMe.value = true
   }
@@ -748,6 +689,27 @@ onMounted(() => {
   }
 }
 
+.login-warning {
+  display: flex;
+  align-items: center;
+  gap: $space-sm;
+  margin-bottom: $space-lg;
+  padding: $space-md;
+  background: $warning-subtle;
+  border: 1px solid rgba($warning, 0.25);
+  border-radius: $radius-md;
+  color: $warning;
+  font-size: $font-size-sm;
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  span {
+    line-height: 1.5;
+  }
+}
+
 .login-card {
   background: linear-gradient(135deg, rgba($card, 0.9), rgba($panel-strong, 0.95));
   backdrop-filter: blur(20px);
@@ -808,6 +770,13 @@ onMounted(() => {
     font-weight: 500;
     color: $text-secondary;
     margin-bottom: $space-sm;
+  }
+
+  .form-hint {
+    margin-top: $space-sm;
+    font-size: $font-size-xs;
+    color: $text-muted;
+    line-height: 1.4;
   }
 
   .input-wrapper {
@@ -892,6 +861,64 @@ onMounted(() => {
 
       &:hover {
         background: rgba($primary, 0.15);
+      }
+    }
+  }
+
+  .strength-indicator {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+    margin-top: $space-sm;
+
+    .strength-bar {
+      flex: 1;
+      height: 4px;
+      background: rgba($bg, 0.6);
+      border-radius: 2px;
+      overflow: hidden;
+
+      .strength-fill {
+        height: 100%;
+        border-radius: 2px;
+        transition: width $duration-normal $ease-out;
+
+        &.strong {
+          background: $success;
+        }
+
+        &.medium {
+          background: $warning;
+        }
+
+        &.weak {
+          background: $danger-muted;
+        }
+
+        &.very_weak {
+          background: $danger;
+        }
+      }
+    }
+
+    .strength-label {
+      font-size: $font-size-xs;
+      white-space: nowrap;
+
+      &.strong {
+        color: $success;
+      }
+
+      &.medium {
+        color: $warning;
+      }
+
+      &.weak {
+        color: $danger-muted;
+      }
+
+      &.very_weak {
+        color: $danger;
       }
     }
   }

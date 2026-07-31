@@ -46,6 +46,12 @@ useConstantsStore().loadServerConstants().catch((err) => {
   console.error('[bootstrap] loadServerConstants failed:', err)
 })
 
+// 6. 设置通知系统集成（对标 nrs.js 中 $.growl 的全局调用）。
+//    注册 account.store 资产变化回调 + node.store 分叉/连接错误 watcher。
+//    必须在 Pinia 安装后调用（app.mount 之前）。
+import { setupNotificationIntegration } from '@/composables/useNotificationIntegration'
+setupNotificationIntegration()
+
 // 开发环境日志
 if (import.meta.env.DEV) {
   console.log(

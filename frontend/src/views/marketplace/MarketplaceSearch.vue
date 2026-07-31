@@ -212,7 +212,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
-import { truncateHash, formatTimestamp } from '@/utils/format'
+import { formatNrc, truncateHash, formatTimestamp } from '@/utils/format'
 import DGSListingModal from '@/components/modals/DGSListingModal.vue'
 import PurchaseProductModal from '@/components/modals/PurchaseProductModal.vue'
 
@@ -240,10 +240,7 @@ const filters = reactive({
 
 let filterTimeout: ReturnType<typeof setTimeout> | null = null
 
-function formatNQT(nqt: string) {
-  if (!nqt) return '0.00'
-  return (Number(nqt) / 1e8).toFixed(2)
-}
+function formatNQT(nqt: string) { return formatNrc(nqt) }
 
 function parseTags(tagsStr: string): string[] {
   if (!tagsStr) return []

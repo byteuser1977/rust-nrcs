@@ -425,7 +425,10 @@ export function byteArrayToWordArrayEx(u8arr: Uint8Array): WordArray {
   for (let i = 0; i < len; i++) {
     const wordIndex = i >>> 2;
     const wordShift = 24 - (i % 4) * 8;
-    words[wordIndex] = (words[wordIndex] || 0) | ((u8arr[i] & 0xff) << wordShift);
+    // >>> 0 converts to unsigned 32-bit, matching the JS converters.byteArrayToWordArray
+    // which uses Uint32Array. Without this, bytes > 127 produce negative signed
+    // values via << 24, causing CryptoJS SHA-256 to compute incorrect hashes.
+    words[wordIndex] = ((words[wordIndex] || 0) | ((u8arr[i] & 0xff) << wordShift)) >>> 0;
   }
 
   return CryptoJS.lib.WordArray.create(words, len) as unknown as WordArray;

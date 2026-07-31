@@ -61,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
@@ -92,8 +92,6 @@ const rules = computed<FormRules>(() => ({
   deadline: [{ required: true, message: t('sendMessage.deadlineRequired'), trigger: 'blur' }],
   secretPhrase: [{ required: true, message: t('sendMessage.secretPhraseRequired'), trigger: 'blur' }]
 }))
-
-import { computed } from 'vue'
 
 const handleSubmit = async () => {
   if (!formRef.value) return

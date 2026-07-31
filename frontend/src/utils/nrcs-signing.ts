@@ -160,6 +160,18 @@ export interface VerifyOptions {
   isVerifyECBlock?: boolean;
   /** 是否测试网，默认 false */
   isTestNet?: boolean;
+  /**
+   * 是否校验 flags 控制的可选附件（普通消息/加密消息/接收方公钥/加密给自己/phasing/可修剪消息）。
+   *
+   * 参考 nrs.server.js 的 verifyTransactionTypes 末尾始终执行可选附件校验，
+   * 此处默认 true 与参考行为一致。设为 false 可跳过可选附件校验，
+   * 适用于：
+   *   - 测试场景：测试向量来自真实交易但缺少表单消息内容
+   *   - 调试场景：仅需校验核心字段（type/version/amount/fee/recipient/publicKey）
+   *
+   * 注意：生产环境应保持 true，确保服务端返回的字节与客户端表单数据完全一致。
+   */
+  isVerifyOptionalAttachments?: boolean;
 }
 
 /** verifyAndSignTransactionBytes 执行结果 */
@@ -363,7 +375,12 @@ export function verifyTransactionBytes(
   attachment: any,
   options: VerifyOptions,
 ): boolean {
-  const { accountPublicKey, isVerifyECBlock = false, isTestNet = false } = options;
+  const {
+    accountPublicKey,
+    isVerifyECBlock = false,
+    isTestNet = false,
+    isVerifyOptionalAttachments = true,
+  } = options;
   const genesis = options.genesis ?? '0';
 
   const transaction: ParsedTransaction = {
@@ -459,7 +476,17 @@ export function verifyTransactionBytes(
     pos = 160;
   }
 
-  return verifyTransactionTypes(byteArray, transaction, requestType, data, pos, attachment);
+  // 调用 verifyTransactionTypes 校验交易类型附件 + 可选附件
+  // 当 isVerifyOptionalAttachments=false 时跳过 flags 控制的可选附件校验
+  return verifyTransactionTypes(
+    byteArray,
+    transaction,
+    requestType,
+    data,
+    pos,
+    attachment,
+    isVerifyOptionalAttachments,
+  );
 }
 
 // ============================================================================
@@ -479,6 +506,7 @@ export function verifyTransactionBytes(
  * @param data 表单数据
  * @param pos 附件起始位置
  * @param attachment 服务端返回的 attachment 对象
+ * @param isVerifyOptionalAttachments 是否校验 flags 控制的可选附件，默认 true
  * @returns 校验通过返回 true，否则 false
  */
 export function verifyTransactionTypes(
@@ -488,6 +516,7 @@ export function verifyTransactionTypes(
   data: TransactionFormData,
   pos: number,
   attachment: any,
+  isVerifyOptionalAttachments = true,
 ): boolean {
   let length = 0;
   let i = 0;
@@ -1281,6 +1310,12 @@ export function verifyTransactionTypes(
     default:
       // 未知 requestType
       return false;
+  }
+
+  // 当 isVerifyOptionalAttachments=false 时跳过 flags 控制的可选附件校验，
+  // 仅返回交易类型附件校验的结果（适用于测试/调试场景）。
+  if (!isVerifyOptionalAttachments) {
+    return true;
   }
 
   return verifyOptionalAttachments(byteArray, transaction, requestType, data, attachment, pos);

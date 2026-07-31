@@ -139,7 +139,7 @@ const formatArgs = (args: Record<string, any>): string => {
 }
 
 const formatDateTime = (timestamp: number): string => {
-  return formatTime(new Date(timestamp * 1000).toISOString())
+  return formatTime(timestamp)
 }
 
 onMounted(() => {

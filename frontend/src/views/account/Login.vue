@@ -1,16 +1,22 @@
 <script setup lang="ts">
+/**
+ * @deprecated 此组件为以太坊风格钱包登录，与 NRCS 安全模型（本地派生 secretPhrase）冲突。
+ * 路由实际使用 `@/views/Login.vue`（NRCS 风格双模式登录）。本文件保留仅供历史参考，
+ * 将在阶段 3.x 统一清理。新代码请勿使用。
+ *
+ * 对标参考：nrs.login.js（NRCS Java 前端）—— secretPhrase 仅在客户端本地派生
+ * publicKey/accountId/accountRS，绝不外发。请使用 useAccountStore.login(password)。
+ */
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { useAccountStore } from '@/stores/modules/account.store'
-import { useUiStore } from '@/stores/modules/ui.store'
 
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const accountStore = useAccountStore()
-const uiStore = useUiStore()
 
 // 表单数据
 const walletAddress = ref('')
@@ -19,38 +25,24 @@ const isConnecting = ref(false)
 // 计算属性
 const redirectPath = computed(() => (route.query.redirect as string) || '/')
 
-// 模拟连接钱包（实际项目中需要集成 Web3 库）
+/**
+ * @deprecated 以太坊钱包连接登录已废弃。
+ * NRCS 使用本地派生的 secretPhrase 登录，请改用：
+ *   await accountStore.login(secretPhrase, { rememberMe: true })
+ * 或只读账户登录：
+ *   await accountStore.loginByAccount(accountRS, { rememberMe: true })
+ */
 async function handleConnectWallet() {
   if (isConnecting.value) return
 
   isConnecting.value = true
-
   try {
-    // TODO: 实际应集成 ethers.js / web3.js
-    // const accounts = await ethereum.request({ method: 'eth_requestAccounts' })
-    // const address = accounts[0]
-    // const signature = await signMessage(address)
-
-    // 模拟延迟
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // 模拟数据（测试用）
-    const mockAddress = '0x' + '1234567890abcdef'.repeat(4)
-    walletAddress.value = mockAddress
-
-    // 生成模拟签名
-    const mockSignature = '0x' + 'abcd1234'.repeat(20)
-    const mockMessage = `Login to NRCS Platform at ${new Date().toISOString()}`
-
-    // 调用登录
-    await accountStore.login({
-      wallet_address: mockAddress,
-      signature: mockSignature,
-      message: mockMessage
-    })
-
-    ElMessage.success(t('common.success'))
-    router.push(redirectPath.value)
+    // ⛔ 已废弃：以太坊钱包连接登录逻辑与 NRCS 模型冲突，已屏蔽。
+    // 原实现调用 accountStore.login({wallet_address, signature, message})，
+    // 但 NRCS accountStore.login 签名为 (password: string, options?)。
+    // 如需钱包登录，请在阶段 3.x 基于 NRCS 模型重新设计。
+    ElMessage.warning('此登录方式已废弃，请使用 NRCS 密码短语登录（/login）')
+    router.push('/login')
   } catch (error: any) {
     ElMessage.error(error.message || t('login.loginFailed'))
   } finally {

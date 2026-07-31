@@ -31,6 +31,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import { formatTimestamp } from '@/utils/format'
 import UploadTaggedDataModal from '@/components/modals/UploadTaggedDataModal.vue'
 
 const { t } = useI18n()
@@ -40,7 +41,7 @@ const total = ref(0)
 const page = ref(1)
 const showUpload = ref(false)
 
-function formatDate(ts?: number) { if (!ts) return ''; return new Date(new Date(Date.UTC(2013, 10, 24, 12, 0, 0)).getTime() + ts * 1000).toLocaleString() }
+function formatDate(ts?: number) { return ts ? formatTimestamp(ts) : '' }
 
 onMounted(() => refreshData())
 

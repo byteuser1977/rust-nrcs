@@ -277,6 +277,7 @@ import { Loading } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import { formatTimestamp as fmtTimestamp, formatNrc, nqtToNxt } from '@/utils/format'
 import type { NrcsTransaction, NrcsUnconfirmedTransaction, NrcsBlockchainStatus, NrcsBlock } from '@/api/modules/nrcs.api'
 import TransactionDetailPanel from '@/components/base/TransactionDetailPanel.vue'
 
@@ -363,7 +364,7 @@ async function loadBlockchainStatus() {
 async function loadAccountInfo() {
   try {
     const account = await nrcsApi.getAccount(accountRS.value || accountId.value)
-    const nrc = Number(BigInt(account.balanceNQT || '0')) / 100000000
+    const nrc = Number(nqtToNxt(account.balanceNQT || '0'))
     accountBalance.value = nrc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     if (account.accountRS) {
       accountRS.value = account.accountRS
@@ -475,20 +476,11 @@ function stopPolling() {
 
 // --- Formatting ---
 function formatTimestamp(nrcsTimestamp?: number): string {
-  if (!nrcsTimestamp) return ''
-  const epochStart = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  const ts = epochStart.getTime() + nrcsTimestamp * 1000
-  return new Date(ts).toLocaleString(undefined, {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  })
+  return nrcsTimestamp ? fmtTimestamp(nrcsTimestamp) : ''
 }
 
 function formatAmount(nqt?: string): string {
-  if (!nqt || nqt === '0') return '0'
-  return (Number(BigInt(nqt)) / 100000000).toLocaleString(undefined, {
-    minimumFractionDigits: 2, maximumFractionDigits: 8
-  })
+  return formatNrc(nqt || '0')
 }
 
 function getTxTypeLabel(type?: number, subtype?: number): string {

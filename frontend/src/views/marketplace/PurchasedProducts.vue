@@ -94,7 +94,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
-import { formatTimestamp, truncateHash } from '@/utils/format'
+import { formatNrc, formatTimestamp, truncateHash } from '@/utils/format'
 import { useAccountStore } from '@/stores/modules/account.store'
 import DGSDeliveryModal from '@/components/modals/DGSDeliveryModal.vue'
 import DGSFeedbackModal from '@/components/modals/DGSFeedbackModal.vue'
@@ -112,10 +112,7 @@ const showFeedback = ref(false)
 const showRefund = ref(false)
 const selectedItem = ref<any>(null)
 
-function formatNQT(nqt: string) {
-  if (!nqt) return '0.00'
-  return (Number(nqt) / 1e8).toFixed(2)
-}
+function formatNQT(nqt: string) { return formatNrc(nqt) }
 
 const filteredItems = computed(() => {
   if (statusFilter.value === 'all') return items.value

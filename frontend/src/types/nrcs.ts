@@ -265,6 +265,22 @@ export interface NrcsBlockchainStatus {
   freeMemory?: number
   /** Total memory (bytes) */
   totalMemory?: number
+  /** Whether the node is currently scanning the blockchain (对标 NRS.state.isScanning) */
+  isScanning?: boolean
+  /** Whether the node is running as a light client (对标 NRS.state.isLightClient) */
+  isLightClient?: boolean
+  /** Whether the node is acting as an API proxy (对标 NRS.state.apiProxy) */
+  apiProxy?: boolean
+  /** Whether the node is in testnet mode (对标 NRS.state.isTestnet) */
+  isTestnet?: boolean
+  /** Name of the last blockchain feeder peer (对标 NRS.state.lastBlockchainFeeder) */
+  lastBlockchainFeeder?: string
+  /** Height of the last blockchain feeder (对标 NRS.state.lastBlockchainFeederHeight) */
+  lastBlockchainFeederHeight?: number
+  /** Number of blocks to trim from ledger (对标 NRS.state.ledgerTrimKeep) */
+  ledgerTrimKeep?: number
+  /** Max number of transactions (对标 NRS.state.maxTransactions) */
+  maxTransactions?: number
 }
 
 // ============================================================================

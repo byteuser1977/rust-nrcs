@@ -182,6 +182,7 @@ import { ElMessage } from 'element-plus'
 import { Cloudy, Upload, Refresh, Search, Download } from '@element-plus/icons-vue'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 import { usePagination } from '@/composables/usePagination'
+import { formatTimestamp } from '@/utils/format'
 import UploadTaggedDataModal from '@/components/modals/UploadTaggedDataModal.vue'
 
 const { t } = useI18n()
@@ -311,11 +312,7 @@ async function downloadData(row: any) {
   }
 }
 
-function formatDate(ts?: number): string {
-  if (!ts) return ''
-  const epoch = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  return new Date(epoch.getTime() + ts * 1000).toLocaleString()
-}
+function formatDate(ts?: number): string { return ts ? formatTimestamp(ts) : '' }
 </script>
 
 <style scoped lang="scss">

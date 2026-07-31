@@ -3,7 +3,7 @@
     <div v-if="goods" class="mb-4"><span class="text-muted">{{ goods.name }}</span></div>
     <el-form ref="formRef" :model="form" label-position="top">
       <el-form-item :label="t('marketplace.quantityDelta')" prop="deltaQuantity">
-        <el-input v-model="form.deltaQuantity" type="number" placeholder="Use negative to decrease" clearable />
+        <el-input v-model="form.deltaQuantity" type="number" :placeholder="t('marketplace.quantityHint')" clearable />
       </el-form-item>
       <el-row :gutter="16">
         <el-col :span="12"><el-form-item :label="t('common.fee')" prop="feeNQT"><el-input v-model="form.feeNQT" placeholder="1" type="number" clearable><template #append>NRC</template></el-input></el-form-item></el-col>

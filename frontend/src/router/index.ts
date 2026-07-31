@@ -627,6 +627,103 @@ const routes: AppRouteRecordRaw[] = [
         ]
       },
 
+      // Transaction routes
+      {
+        path: 'transactions',
+        name: 'TransactionsParent',
+        meta: { title: 'Transactions', icon: 'List', requireAuth: true },
+        children: [
+          { path: '', name: 'TransactionList', component: () => import('@/views/transaction/TransactionList.vue'), meta: { title: 'All Transactions', icon: 'List', requireAuth: true } },
+          { path: 'pending', name: 'PendingTransactions', component: () => import('@/views/transaction/PendingTransactions.vue'), meta: { title: 'Pending Transactions', icon: 'Clock', requireAuth: true } },
+          { path: 'my-pending', name: 'MyPending', component: () => import('@/views/transaction/Pending.vue'), meta: { title: 'My Pending', icon: 'Clock', requireAuth: true } },
+          { path: 'send', name: 'TransactionSend', component: () => import('@/views/transaction/TransactionSend.vue'), meta: { title: 'Send Transaction', icon: 'Promotion', requireAuth: true, isButton: true } },
+          { path: 'detail/:tx?', name: 'TransactionDetail', component: () => import('@/views/transaction/TransactionDetail.vue'), meta: { title: 'Transaction Detail', icon: 'Document', requireAuth: true, hidden: true } },
+          { path: 'send-form', name: 'SendTransactionForm', component: () => import('@/views/transaction/SendTransaction.vue'), meta: { title: 'Send Transaction', icon: 'Promotion', requireAuth: true, hidden: true } },
+        ]
+      },
+      // Node routes
+      {
+        path: 'node',
+        name: 'NodeParent',
+        meta: { title: 'Node', icon: 'Monitor', requireAuth: true },
+        children: [
+          { path: '', name: 'NodeStatus', component: () => import('@/views/node/NodeStatus.vue'), meta: { title: 'Node Status', icon: 'Monitor', requireAuth: true } },
+          { path: 'blocks', name: 'NodeBlocks', component: () => import('@/views/node/NodeBlocks.vue'), meta: { title: 'Recent Blocks', icon: 'Grid', requireAuth: true } },
+          { path: 'peers', name: 'NodePeers', component: () => import('@/views/node/NodePeers.vue'), meta: { title: 'Connected Peers', icon: 'Connection', requireAuth: true } },
+          { path: 'monitor', name: 'NodeMonitor', component: () => import('@/views/node/NodeMonitor.vue'), meta: { title: 'Network Monitor', icon: 'DataAnalysis', requireAuth: true } },
+          { path: 'block-list', name: 'BlockList', component: () => import('@/views/node/BlockList.vue'), meta: { title: 'Block Explorer', icon: 'Search', requireAuth: true } },
+          { path: 'peer-list', name: 'PeerList', component: () => import('@/views/node/PeerList.vue'), meta: { title: 'Peer List', icon: 'List', requireAuth: true } },
+        ]
+      },
+      // Contract routes
+      {
+        path: 'contracts',
+        name: 'ContractsParent',
+        meta: { title: 'Smart Contracts', icon: 'Document', requireAuth: true },
+        children: [
+          { path: '', name: 'ContractList', component: () => import('@/views/contract/ContractList.vue'), meta: { title: 'Contract List', icon: 'List', requireAuth: true } },
+          { path: 'detail/:address?', name: 'ContractDetail', component: () => import('@/views/contract/ContractDetail.vue'), meta: { title: 'Contract Detail', icon: 'Document', requireAuth: true, hidden: true } },
+          { path: 'deploy', name: 'ContractDeploy', component: () => import('@/views/contract/ContractDeploy.vue'), meta: { title: 'Deploy Contract', icon: 'Upload', requireAuth: true } },
+          { path: 'verify', name: 'ContractVerify', component: () => import('@/views/contract/ContractVerify.vue'), meta: { title: 'Verify Contract', icon: 'Checked', requireAuth: true } },
+          { path: 'events/:address?', name: 'EventLogs', component: () => import('@/views/contract/EventLogs.vue'), meta: { title: 'Event Logs', icon: 'Tickets', requireAuth: true, hidden: true } },
+          { path: 'storage/:address?', name: 'StorageViewer', component: () => import('@/views/contract/StorageViewer.vue'), meta: { title: 'Storage Viewer', icon: 'FolderOpened', requireAuth: true, hidden: true } },
+        ]
+      },
+      // Account routes
+      {
+        path: 'accounts',
+        name: 'AccountsParent',
+        meta: { title: 'Accounts', icon: 'User', requireAuth: true },
+        children: [
+          { path: '', name: 'AccountList', component: () => import('@/views/account/AccountList.vue'), meta: { title: 'Account List', icon: 'List', requireAuth: true } },
+          { path: 'detail/:id?', name: 'AccountDetail', component: () => import('@/views/account/AccountDetail.vue'), meta: { title: 'Account Detail', icon: 'UserFilled', requireAuth: true, hidden: true } },
+          { path: 'profile', name: 'Profile', component: () => import('@/views/account/Profile.vue'), meta: { title: 'My Profile', icon: 'User', requireAuth: true } },
+          { path: 'security', name: 'Security', component: () => import('@/views/account/Security.vue'), meta: { title: 'Security', icon: 'Lock', requireAuth: true } },
+          { path: 'wallet', name: 'WalletConnect', component: () => import('@/views/account/WalletConnect.vue'), meta: { title: 'Wallet Connect', icon: 'Link', requireAuth: true } },
+          { path: 'tokens', name: 'TokenBalances', component: () => import('@/views/account/TokenBalances.vue'), meta: { title: 'Token Balances', icon: 'Coin', requireAuth: true } },
+        ]
+      },
+      // News page
+      {
+        path: 'news',
+        name: 'News',
+        component: () => import('@/views/news/News.vue'),
+        meta: { title: 'News', icon: 'Notebook', requireAuth: true }
+      },
+      // User management (admin)
+      {
+        path: 'users',
+        name: 'UserList',
+        component: () => import('@/views/account/UserList.vue'),
+        meta: { title: 'User Management', icon: 'Avatar', requireAuth: true }
+      },
+      {
+        path: 'users/:id',
+        name: 'UserProfile',
+        component: () => import('@/views/account/UserProfile.vue'),
+        meta: { title: 'User Profile', icon: 'Avatar', requireAuth: true, hidden: true }
+      },
+      // Role & Permission management
+      {
+        path: 'roles',
+        name: 'RoleList',
+        component: () => import('@/views/account/RoleList.vue'),
+        meta: { title: 'Role Management', icon: 'Management', requireAuth: true }
+      },
+      {
+        path: 'permissions',
+        name: 'PermissionList',
+        component: () => import('@/views/account/PermissionList.vue'),
+        meta: { title: 'Permission Management', icon: 'Key', requireAuth: true }
+      },
+      // Register
+      {
+        path: 'register',
+        name: 'Register',
+        component: () => import('@/views/account/Register.vue'),
+        meta: { title: 'Register', layout: 'blank', requireAuth: false }
+      },
+
       // Contacts (from header)
       {
         path: 'contacts',

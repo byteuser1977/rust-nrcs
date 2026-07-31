@@ -4,7 +4,7 @@
       <div class="summary-row"><span class="label">{{ t('marketplace.product') }}</span><span class="value">{{ purchase.name }}</span></div>
       <div class="summary-row"><span class="label">{{ t('marketplace.seller') }}</span><span class="value text-mono">{{ purchase.sellerRS }}</span></div>
     </div>
-    <el-form ref="formRef" :model="form" label-position="top">
+    <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
       <el-form-item :label="t('marketplace.feedbackMessage')" prop="message">
         <el-input v-model="form.message" type="textarea" :rows="4" />
       </el-form-item>
@@ -30,9 +30,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, type FormInstance } from 'element-plus'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 
 const { t } = useI18n()
@@ -42,6 +42,11 @@ const emit = defineEmits<{ (e: 'success'): void }>()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 const form = reactive({ message: '', feedbackType: 'public', feeNQT: '1', deadline: '1440', secretPhrase: '' })
+
+const rules = computed<FormRules>(() => ({
+  secretPhrase: [{ required: true, message: t('common.secretPhraseRequired'), trigger: 'blur' }],
+  feeNQT: [{ required: true, message: t('alias.feeRequired'), trigger: 'blur' }]
+}))
 
 async function handleSubmit() {
   if (!formRef.value) return

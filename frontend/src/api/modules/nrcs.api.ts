@@ -12,6 +12,95 @@ export interface NrcsAccount {
   guaranteedBalanceNQT: string
   effectiveBalanceNRCS: number
   requestProcessingTime?: number
+  // === Leasing 相关（对标 nrs.js:1398-1426 updateAccountLeasingStatus） ===
+  /** 当前出租开始高度（对标 NRS.accountInfo.currentLeasingHeightFrom） */
+  currentLeasingHeightFrom?: number
+  /** 当前出租结束高度（对标 NRS.accountInfo.currentLeasingHeightTo） */
+  currentLeasingHeightTo?: number
+  /** 当前承租方账户 ID（对标 NRS.accountInfo.currentLessee） */
+  currentLessee?: string
+  /** 当前承租方 RS 地址（对标 NRS.accountInfo.currentLesseeRS） */
+  currentLesseeRS?: string
+  /** 下一轮出租开始高度（对标 NRS.accountInfo.nextLeasingHeightFrom） */
+  nextLeasingHeightFrom?: number
+  /** 下一轮出租结束高度（对标 NRS.accountInfo.nextLeasingHeightTo） */
+  nextLeasingHeightTo?: number
+  /** 下一轮承租方账户 ID（对标 NRS.accountInfo.nextLessee） */
+  nextLessee?: string
+  /** 出租方列表（对标 NRS.accountInfo.lessors） */
+  lessors?: string[]
+  /** 出租方 RS 列表（对标 NRS.accountInfo.lessorsRS） */
+  lessorsRS?: string[]
+  // === Account Control 相关（对标 nrs.js:1497 updateAccountControlStatus） ===
+  /** 账户控制列表（如 ['PHASING_ONLY']，对标 NRS.accountInfo.accountControls） */
+  accountControls?: string[]
+  /** Phasing Only 控制详情（由 getPhasingOnlyControl 填充） */
+  phasingOnly?: NrcsPhasingOnlyControl
+  // === 资产/货币相关（对标 nrs.js:1167-1200 getAccountInfo） ===
+  /** 资产余额列表（includeAssets=true 时返回） */
+  assetBalances?: NrcsAssetBalance[]
+  /** 账户货币列表（includeCurrencies=true 时返回） */
+  accountCurrencies?: NrcsCurrencyBalance[]
+  /** 未确认资产余额列表 */
+  unconfirmedAssetBalances?: NrcsAssetBalance[]
+}
+
+/** 资产余额（对标 getAccount 响应中的 assetBalances 元素） */
+export interface NrcsAssetBalance {
+  /** 资产 ID */
+  asset: string
+  /** 余额数量 QNT（base units） */
+  balanceQNT: string
+  /** 未确认余额数量 QNT */
+  unconfirmedBalanceQNT?: string
+}
+
+/** 货币余额（对标 getAccount 响应中的 accountCurrencies 元素） */
+export interface NrcsCurrencyBalance {
+  /** 货币 ID */
+  currency: string
+  /** 余额数量 QNT */
+  balanceQNT: string
+  /** 未确认余额数量 QNT */
+  unconfirmedBalanceQNT?: string
+}
+
+/**
+ * Phasing Only 控制详情（对标 getPhasingOnlyControl 响应）。
+ *
+ * 用于 updateAccountControlStatus（nrs.js:1491-1531），描述账户的
+ * 强制审批策略（quorum/whitelist/minBalance/holding 等）。
+ */
+export interface NrcsPhasingOnlyControl {
+  /** 账户 RS 地址 */
+  account?: string
+  /** 账户 ID */
+  accountID?: string
+  /** 投票模型（0=ACCOUNT,1=NQT,5=HASH 等） */
+  votingModel: number
+  /** 法定人数（NXT 数值，对标 NRS.phasingControlObjectToPhasingParams） */
+  quorum?: string
+  /** 白名单账户 ID 列表 */
+  phasingWhitelisted?: string[]
+  /** 最小余额模型 */
+  minBalanceModel?: number
+  /** 最小余额 NQT */
+  minBalance?: string
+  /** 持有类型（0=NXT,1=ASSET,2=CURRENCY） */
+  holding?: number
+  /** 持有资产/货币 ID */
+  holdingId?: string
+  /** 最小持续时间（区块数） */
+  minDuration?: number
+  /** 最大持续时间（区块数） */
+  maxDuration?: number
+  /** 最大手续费 NQT */
+  maxFees?: string
+  /** 交易 ID */
+  transaction?: string
+  /** 区块高度 */
+  height?: number
+  requestProcessingTime?: number
 }
 
 export interface NrcsBalance {
@@ -116,6 +205,26 @@ export interface NrcsBlockchainStatus {
   isTestnet: boolean
   blockchainState: string
   requestProcessingTime?: number
+  /** 是否为轻客户端（对标 NRS.state.isLightClient，nrs.js:1651 用） */
+  isLightClient?: boolean
+  /** 是否作为 API 代理（对标 NRS.state.apiProxy，nrs.js:438/512 用） */
+  apiProxy?: boolean
+  /** 账本裁剪保留数（对标 NRS.state.ledgerTrimKeep，nrs.js:441 用） */
+  ledgerTrimKeep?: number
+  /** 最大交易数（对标 NRS.state.maxTransactions） */
+  maxTransactions?: number
+  /** 当前账户数（对标 NRS.state.numberOfAccounts） */
+  numberOfAccounts?: number
+  /** 当前交易数（对标 NRS.state.numberOfTransactions） */
+  numberOfTransactions?: number
+  /** 当前连接的 peer 数（对标 NRS.state.numberOfPeers） */
+  numberOfPeers?: number
+  /** 当前解锁账户数（对标 NRS.state.numberOfUnlockedAccounts） */
+  numberOfUnlockedAccounts?: number
+  /** 总有效余额 NQT（对标 NRS.state.totalEffectiveBalance） */
+  totalEffectiveBalance?: string
+  /** 平均出块时间（对标 NRS.state.averageBlockGenerationTime） */
+  averageBlockGenerationTime?: number
 }
 
 export interface NrcsAlias {
@@ -215,8 +324,32 @@ export interface NrcsToken {
 }
 
 export const nrcsApi = {
-  getAccount(account: string, includeLessors?: boolean) {
-    return nrcsGet<NrcsAccount>('getAccount', { account, includeLessors })
+  /**
+   * 获取账户信息（对标 nrs.js:1102 getAccount）。
+   *
+   * @param account RS 地址或数字账户 ID
+   * @param options 可选参数：includeLessors/includeAssets/includeCurrencies/includeEffectiveBalance
+   */
+  getAccount(
+    account: string,
+    options?: {
+      includeLessors?: boolean
+      includeAssets?: boolean
+      includeCurrencies?: boolean
+      includeEffectiveBalance?: boolean
+    },
+  ) {
+    // 兼容旧签名：getAccount(account, includeLessors?)
+    const params: Record<string, any> = { account }
+    if (typeof options === 'boolean') {
+      if (options) params.includeLessors = true
+    } else if (options) {
+      if (options.includeLessors) params.includeLessors = true
+      if (options.includeAssets) params.includeAssets = true
+      if (options.includeCurrencies) params.includeCurrencies = true
+      if (options.includeEffectiveBalance) params.includeEffectiveBalance = true
+    }
+    return nrcsGet<NrcsAccount>('getAccount', params)
   },
 
   getBalance(account: string) {
@@ -229,6 +362,17 @@ export const nrcsApi = {
 
   getAccountPublicKey(account: string) {
     return nrcsGet<{ publicKey: string }>('getAccountPublicKey', { account })
+  },
+
+  /**
+   * 获取账户的 Phasing Only 控制详情（对标 nrs.js:1498 getPhasingOnlyControl）。
+   *
+   * 用于 updateAccountControlStatus 检测账户是否设置了强制审批策略。
+   *
+   * @param account RS 地址或数字账户 ID
+   */
+  getPhasingOnlyControl(account: string) {
+    return nrcsGet<NrcsPhasingOnlyControl>('getPhasingOnlyControl', { account })
   },
 
   getEffectiveBalance(account: string) {
@@ -251,14 +395,32 @@ export const nrcsApi = {
     return nrcsGet<{ accounts: any[] }>('searchAccounts', { query, firstIndex, lastIndex })
   },
 
-  getBlockchainTransactions(account: string, firstIndex?: number, lastIndex?: number, type?: number, subtype?: number) {
+  getBlockchainTransactions(
+    account: string,
+    firstIndex?: number,
+    lastIndex?: number,
+    type?: number,
+    subtype?: number,
+    /** 额外参数（timestamp/includePhasingResult 等，对标 nrs.notifications.js:149-153） */
+    extraParams?: { timestamp?: number; includePhasingResult?: boolean },
+  ) {
     return nrcsGet<{ transactions: NrcsTransaction[] }>('getBlockchainTransactions', {
-      account, firstIndex, lastIndex, type, subtype
+      account, firstIndex, lastIndex, type, subtype,
+      ...extraParams,
     })
   },
 
   getUnconfirmedTransactions(account?: string) {
     return nrcsGet<{ unconfirmedTransactions: NrcsUnconfirmedTransaction[] }>('getUnconfirmedTransactions', { account })
+  },
+
+  /**
+   * 获取账户待审批（Phasing）交易数（对标 nrs.notifications.js:229 getAccountPhasedTransactionCount）。
+   *
+   * @param account RS 地址或数字账户 ID
+   */
+  getAccountPhasedTransactionCount(account: string) {
+    return nrcsGet<{ numberOfPhasedTransactions: number }>('getAccountPhasedTransactionCount', { account })
   },
 
   getTransaction(transaction: string) {
@@ -273,8 +435,18 @@ export const nrcsApi = {
     return nrcsPost<any>('sendMessage', data)
   },
 
-  broadcastTransaction(transactionBytes: string) {
-    return nrcsPost<any>('broadcastTransaction', { transactionBytes })
+  /**
+   * 广播交易（对标 nrs.server.js broadcastTransaction）。
+   *
+   * 支持两种模式：
+   *   - transactionBytes：已签名的交易字节十六进制字符串
+   *   - transactionJSON：已签名的交易 JSON（含 signature 字段）
+   *
+   * @param transactionBytes 已签名交易字节（与 transactionJSON 二选一）
+   * @param transactionJSON 已签名交易 JSON 字符串（与 transactionBytes 二选一）
+   */
+  broadcastTransaction(transactionBytes?: string, transactionJSON?: string) {
+    return nrcsPost<any>('broadcastTransaction', { transactionBytes, transactionJSON })
   },
 
   parseTransaction(transactionBytes?: string, transactionJSON?: string) {
@@ -413,6 +585,47 @@ export const nrcsApi = {
     return nrcsGet<{ trades: any[] }>('getTrades', { asset, firstIndex, lastIndex })
   },
 
+  /**
+   * 获取订单成交记录（对标 nrs.modals.transaction.js:1414 getOrderTrades）。
+   *
+   * 用于交易详情 modal 中展示 ask/bid 订单的成交明细。
+   *
+   * @param askOrder ask 订单 ID（与 bidOrder 二选一）
+   * @param bidOrder bid 订单 ID
+   */
+  getOrderTrades(askOrder?: string, bidOrder?: string) {
+    return nrcsGet<{ trades: any[] }>('getOrderTrades', { askOrder, bidOrder })
+  },
+
+  /**
+   * 获取资产的预期买单（对标 nrs.assetexchange.js getExpectedBidOrders）。
+   *
+   * @param asset 资产 ID
+   */
+  getExpectedBidOrders(asset: string) {
+    return nrcsGet<{ bidOrders: any[] }>('getExpectedBidOrders', { asset })
+  },
+
+  /**
+   * 获取资产的预期卖单（对标 nrs.assetexchange.js getExpectedAskOrders）。
+   *
+   * @param asset 资产 ID
+   */
+  getExpectedAskOrders(asset: string) {
+    return nrcsGet<{ askOrders: any[] }>('getExpectedAskOrders', { asset })
+  },
+
+  /**
+   * 获取资产股息历史（对标 nrs.assetexchange.js:777 getAssetDividends）。
+   *
+   * @param asset 资产 ID
+   * @param firstIndex 起始索引
+   * @param lastIndex 结束索引
+   */
+  getAssetDividends(asset: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ dividends: any[] }>('getAssetDividends', { asset, firstIndex, lastIndex })
+  },
+
   getAccountCurrentAskOrders(account: string, firstIndex?: number, lastIndex?: number) {
     return nrcsGet<{ askOrders: any[] }>('getAccountCurrentAskOrders', { account, firstIndex, lastIndex })
   },
@@ -475,6 +688,64 @@ export const nrcsApi = {
 
   getBuyOffers(currency: string, firstIndex?: number, lastIndex?: number) {
     return nrcsGet<{ offers: any[] }>('getBuyOffers', { currency, firstIndex, lastIndex })
+  },
+
+  /**
+   * 获取单个兑换报价（对标 nrs.modals.transaction.js:1502 getOffer）。
+   *
+   * @param offer 报价 ID
+   */
+  getOffer(offer: string) {
+    return nrcsGet<{ buyOffer: any; sellOffer: any }>('getOffer', { offer })
+  },
+
+  /**
+   * 按兑换请求获取成交记录（对标 nrs.modals.transaction.js:1463 getExchangesByExchangeRequest）。
+   *
+   * @param transaction 交易 ID
+   */
+  getExchangesByExchangeRequest(transaction: string) {
+    return nrcsGet<{ exchanges: any[] }>('getExchangesByExchangeRequest', { transaction })
+  },
+
+  /**
+   * 按报价获取成交记录（对标 nrs.modals.transaction.js:1522 getExchangesByOffer）。
+   *
+   * @param offer 报价 ID
+   */
+  getExchangesByOffer(offer: string) {
+    return nrcsGet<{ exchanges: any[] }>('getExchangesByOffer', { offer })
+  },
+
+  /**
+   * 获取货币创始人（对标 nrs.monetarysystem.js:423 getCurrencyFounders）。
+   *
+   * @param currency 货币 ID
+   */
+  getCurrencyFounders(currency: string) {
+    return nrcsGet<{ founders: any[] }>('getCurrencyFounders', { currency })
+  },
+
+  /**
+   * 获取货币持有人（对标 nrs.monetarysystem.js:1327 getCurrencyAccounts）。
+   *
+   * @param currency 货币 ID
+   * @param firstIndex 起始索引
+   * @param lastIndex 结束索引
+   */
+  getCurrencyAccounts(currency: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ accountCurrencies: any[] }>('getCurrencyAccounts', { currency, firstIndex, lastIndex })
+  },
+
+  /**
+   * 获取账户的兑换请求（对标 nrs.monetarysystem.js:615 getAccountExchangeRequests）。
+   *
+   * @param account 账户 ID
+   * @param firstIndex 起始索引
+   * @param lastIndex 结束索引
+   */
+  getAccountExchangeRequests(account: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ exchangeRequests: any[] }>('getAccountExchangeRequests', { account, firstIndex, lastIndex })
   },
 
   getExchanges(currency?: string, account?: string, firstIndex?: number, lastIndex?: number) {
@@ -669,8 +940,14 @@ export const nrcsApi = {
     return nrcsPost<NrcsToken>('generateToken', data)
   },
 
-  decodeToken(token: string) {
-    return nrcsGet<any>('decodeToken', { token })
+  /**
+   * 解码并验证 token（对标 nrs.modals.token.js:39-46 decodeToken）。
+   *
+   * @param website 关联的网站/来源
+   * @param token 待验证的 token 字符串
+   */
+  decodeToken(website: string, token: string) {
+    return nrcsGet<any>('decodeToken', { website, token })
   },
 
   hash(data: { hashAlgorithm: number; secret: string; secretIsText: boolean }) {
@@ -687,6 +964,17 @@ export const nrcsApi = {
 
   getAccountLedger(account: string, firstIndex?: number, lastIndex?: number) {
     return nrcsGet<{ entries: any[] }>('getAccountLedger', { account, firstIndex, lastIndex })
+  },
+
+  /**
+   * 获取账户总账单条目详情（对标 nrs.modals.ledger.js:43 getAccountLedgerEntry）。
+   *
+   * 用于总账详情 modal 中展示单条 ledger entry。
+   *
+   * @param ledgerId 总账条目 ID
+   */
+  getAccountLedgerEntry(ledgerId: string) {
+    return nrcsGet<any>('getAccountLedgerEntry', { ledgerId })
   },
 
   getScheduledTransactions(account: string, firstIndex?: number, lastIndex?: number) {

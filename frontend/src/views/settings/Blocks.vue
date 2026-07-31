@@ -169,7 +169,7 @@ import { useI18n } from 'vue-i18n'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 import { useAccountStore } from '@/stores/modules/account.store'
 import { usePagination } from '@/composables/usePagination'
-import { formatTimestamp, formatNrc, truncateHash } from '@/utils/format'
+import { formatTimestamp, formatNrc, nqtToNxt, truncateHash } from '@/utils/format'
 import type { NrcsBlock, NrcsTransaction } from '@/api/modules/nrcs.api'
 
 const { t } = useI18n()
@@ -200,7 +200,7 @@ const stats = computed(() => {
       { label: t('settings.blockTime'), value: '-' },
     ]
   }
-  const toNrc = (nqt: string) => Number(nqt || '0') / 100_000_000
+  const toNrc = (nqt: string) => Number(nqtToNxt(nqt || '0'))
   const avgAmount = list.reduce((s, b) => s + toNrc(b.totalAmountNQT), 0) / list.length
   const avgFee = list.reduce((s, b) => s + toNrc(b.totalFeeNQT), 0) / list.length
   const totalTx = list.reduce((s, b) => s + (b.numberOfTransactions || 0), 0)

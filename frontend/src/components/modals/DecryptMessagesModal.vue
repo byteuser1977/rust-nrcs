@@ -26,7 +26,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useAccountStore } from '@/stores/modules/account.store'
@@ -42,10 +42,12 @@ const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 const form = reactive({
-  secretPhrase: accountStore.secretPhrase || '',
+  secretPhrase: '',
   sharedKey: '',
   rememberPassword: false
 })
+
+watch(visible, (val) => { if (val) { form.secretPhrase = accountStore.secretPhrase || '' } })
 
 const rules = computed<FormRules>(() => ({
   secretPhrase: [

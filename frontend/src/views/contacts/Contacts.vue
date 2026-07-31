@@ -139,7 +139,7 @@
 
     <SendMoneyModal
       v-model:visible="showSend"
-      :recipient="selectedContact"
+      :recipient="selectedContact?.accountRS"
       @success="onMoneySent"
     />
   </div>

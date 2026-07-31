@@ -26,5 +26,7 @@ export type {
   NrcsAccount, NrcsBalance, NrcsTransaction, NrcsUnconfirmedTransaction,
   NrcsBlock, NrcsPeer, NrcsBlockchainStatus, NrcsAlias, NrcsAsset,
   NrcsCurrency, NrcsPoll, NrcsDGSProduct, NrcsDGSPurchase, NrcsMessage,
-  NrcsGenerator
+  NrcsGenerator,
+  // 阶段 1.2 新增：账户 leasing/control/asset 相关类型
+  NrcsAssetBalance, NrcsCurrencyBalance, NrcsPhasingOnlyControl,
 } from './nrcs.api'

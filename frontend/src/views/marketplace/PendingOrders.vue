@@ -38,6 +38,7 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import { formatNrc, formatTimestamp } from '@/utils/format'
 import DGSDeliveryModal from '@/components/modals/DGSDeliveryModal.vue'
 import DGSRefundModal from '@/components/modals/DGSRefundModal.vue'
 
@@ -50,12 +51,8 @@ const showDelivery = ref(false)
 const showRefund = ref(false)
 const selectedOrder = ref<any>(null)
 
-function formatNQT(nqt: string) { return (Number(nqt || '0') / 1e8).toFixed(2) }
-function formatDate(ts?: number) {
-  if (!ts) return ''
-  const epoch = new Date(Date.UTC(2013, 10, 24, 12, 0, 0))
-  return new Date(epoch.getTime() + ts * 1000).toLocaleString()
-}
+function formatNQT(nqt: string) { return formatNrc(nqt) }
+function formatDate(ts?: number) { return ts ? formatTimestamp(ts) : '' }
 
 onMounted(() => refreshData())
 

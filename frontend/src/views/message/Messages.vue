@@ -156,6 +156,7 @@ import {
 } from '@element-plus/icons-vue'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 import type { NrcsMessage } from '@/api/modules/nrcs.api'
+import { fromEpochTime } from '@/utils/format'
 import { useAccountStore } from '@/stores/modules/account.store'
 import SendMessageModal from '@/components/modals/SendMessageModal.vue'
 
@@ -255,10 +256,6 @@ function isSameDay(ts1: number, ts2: number): boolean {
   return d1.getFullYear() === d2.getFullYear() &&
     d1.getMonth() === d2.getMonth() &&
     d1.getDate() === d2.getDate()
-}
-
-function fromEpochTime(ts: number): number {
-  return new Date(Date.UTC(2013, 10, 24, 12, 0, 0)).getTime() + ts * 1000
 }
 
 function formatShortTime(ts?: number): string {

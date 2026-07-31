@@ -895,6 +895,21 @@ export function formatNqtToNrc(nqt: string): string {
 }
 
 /**
+ * Convert raw NQT to NRC display string (without thousands separators).
+ *
+ * Alias for {@link nqtToNxt}. Use this for inline display where the
+ * raw NQT integer string needs to be converted to a human-readable
+ * NRC value.
+ *
+ * @param nqt  Raw NQT quantity string.
+ * @returns NRC display string (e.g. "1.5" for "150000000").
+ */
+export function formatNrc(nqt: string): string {
+  if (!nqt || nqt === '0') return '0'
+  return nqtToNxt(nqt)
+}
+
+/**
  * Format an account address for compact display.
  *
  * Chain-agnostic convenience wrapper over {@link truncateHash}.

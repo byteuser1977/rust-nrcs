@@ -131,6 +131,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
+import { formatNrc } from '@/utils/format'
 import { useAccountStore } from '@/stores/modules/account.store'
 import DGSListingModal from '@/components/modals/DGSListingModal.vue'
 import DGSPriceChangeModal from '@/components/modals/DGSPriceChangeModal.vue'
@@ -148,10 +149,7 @@ const showQuantityChange = ref(false)
 const selectedGoods = ref<any>(null)
 const pendingOrdersCount = ref(0)
 
-function formatNQT(nqt: string) {
-  if (!nqt) return '0.00'
-  return (Number(nqt) / 1e8).toFixed(2)
-}
+function formatNQT(nqt: string) { return formatNrc(nqt) }
 
 function parseTags(tagsStr: string): string[] {
   if (!tagsStr) return []

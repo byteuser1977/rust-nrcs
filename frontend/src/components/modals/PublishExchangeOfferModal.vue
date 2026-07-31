@@ -62,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { nrcsApi } from '@/api/modules/nrcs.api'
@@ -91,8 +91,10 @@ const form = reactive({
   expirationHeight: '',
   feeNQT: '1',
   deadline: '1440',
-  secretPhrase: accountStore.secretPhrase || ''
+  secretPhrase: ''
 })
+
+watch(visible, (val) => { if (val) { form.secretPhrase = accountStore.secretPhrase || '' } })
 
 const rules = computed<FormRules>(() => ({
   buyRate: [{ required: true, message: t('error.fieldNotANumber', { field: t('monetary.buyRate') }), trigger: 'blur' }],
