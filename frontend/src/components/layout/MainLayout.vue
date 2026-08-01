@@ -1,7 +1,7 @@
 <template>
   <div class="shell" :class="{ 'shell--nav-collapsed': isCollapsed }">
     <Header :show-breadcrumb="true" class="topbar" @toggle-sidebar="toggleSidebar" />
-    <Sidebar class="nav" />
+    <Sidebar class="nav" @open-forging="openForgingModal" />
     <main class="content">
       <router-view v-slot="{ Component }">
         <transition name="dashboard-enter" mode="out-in">
@@ -9,20 +9,45 @@
         </transition>
       </router-view>
     </main>
+
+    <!-- 共享的 ForgingModal（Sidebar 锻造状态点击触发） -->
+    <ForgingModal v-model:visible="showForgingModal" :mode="forgingModalMode" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import Header from './Header.vue'
 import Sidebar from './Sidebar.vue'
+import ForgingModal from '@/components/modals/ForgingModal.vue'
+import { useForging } from '@/composables/useForging'
 import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()
 const isCollapsed = computed(() => appStore.isSidebarCollapsed)
 
+const { forgingStatus, checkForgingPreconditions } = useForging()
+
+/** 共享 ForgingModal 显示状态（由 Sidebar 锻造状态点击触发） */
+const showForgingModal = ref(false)
+const forgingModalMode = ref<'start' | 'stop'>('start')
+
 const toggleSidebar = () => {
   appStore.toggleSidebar()
+}
+
+/**
+ * 打开锻造 Modal（由 Sidebar 锻造状态指示器点击触发）。
+ * 先执行前置校验，通过后根据当前状态显示 start/stop modal。
+ */
+function openForgingModal(): void {
+  const error = checkForgingPreconditions()
+  if (error) {
+    // 前置校验失败时不打开 modal，由调用方（Sidebar）处理提示
+    return
+  }
+  forgingModalMode.value = forgingStatus.value === 'forging' ? 'stop' : 'start'
+  showForgingModal.value = true
 }
 </script>
 

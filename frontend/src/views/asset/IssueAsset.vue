@@ -92,7 +92,7 @@ function onIssueSuccess() {
         text-align: left;
         margin: 0 0 24px 0;
         padding: 0 20px;
-        color: $text-regular;
+        color: $text-secondary;
 
         li {
           margin-bottom: 6px;

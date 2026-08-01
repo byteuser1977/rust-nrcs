@@ -25,7 +25,7 @@ import type {
   NrcsPhasingOnlyControl,
 } from '@/api/modules';
 import { passphraseToAccount, checkPassphraseStrength } from '@/utils/mnemonic';
-import { storageSelect, storageInsert, storageUpdate } from '@/utils/nrcs-storage';
+import { storageSelect, storageInsert, storageUpdate, initUserDB } from '@/utils/nrcs-storage';
 
 // localStorage 键（对标参考命名，同时与现有数据兼容）
 const STORAGE_KEY_ACCOUNT_RS = 'nrcs-accountRS';
@@ -266,10 +266,13 @@ export const useAccountStore = defineStore('account', () => {
     loginType.value = 'password';
     loginWarning.value = evaluatePassphraseWarning(trimmed);
 
-    // 第 4 步：检测测试网 + 拉取链上信息（并行，失败不阻断）
+    // 第 4 步：初始化账户级 IndexedDB（账户隔离，对标 nrs.localstorage.js initUserDB）
+    await initUserDB(derived.accountId);
+
+    // 第 5 步：检测测试网 + 拉取链上信息（并行，失败不阻断）
     await Promise.all([detectTestNet(), fetchAccountInfo(derived.accountRS)]);
 
-    // 第 5 步：持久化只读状态（不持久化 secretPhrase）
+    // 第 6 步：持久化只读状态（不持久化 secretPhrase）
     persistReadOnlyState();
 
     if (options?.rememberMe) {
@@ -326,6 +329,9 @@ export const useAccountStore = defineStore('account', () => {
     secretPhrase.value = ''; // 只读模式无 secretPhrase
     loginType.value = 'account';
     loginWarning.value = '';
+
+    // 初始化账户级 IndexedDB（账户隔离，对标 nrs.localstorage.js initUserDB）
+    await initUserDB(accountInfo.account);
 
     await detectTestNet();
 
@@ -900,9 +906,15 @@ export const useAccountStore = defineStore('account', () => {
 
     listSavedAccounts();
 
-    // 若有已保存会话，尝试刷新余额
+    // 若有已保存会话，尝试刷新余额 + 初始化 IndexedDB
     if (savedRS) {
       refreshAccount();
+      // 初始化账户级 IndexedDB（账户隔离，对标 nrs.localstorage.js initUserDB）
+      if (savedId) {
+        initUserDB(savedId).catch(() => {
+          // IndexedDB 不可用时静默失败，storage 层会回退到 localStorage
+        });
+      }
     }
   }
 

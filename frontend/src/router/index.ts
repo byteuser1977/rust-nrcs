@@ -112,6 +112,16 @@ const routes: AppRouteRecordRaw[] = [
               icon: 'Finished',
               requireAuth: true
             }
+          },
+          {
+            path: 'account-control',
+            name: 'AccountControl',
+            component: () => import('@/views/dashboard/AccountControl.vue'),
+            meta: {
+              title: '账户控制',
+              icon: 'Lock',
+              requireAuth: true
+            }
           }
         ]
       },
@@ -621,6 +631,26 @@ const routes: AppRouteRecordRaw[] = [
             meta: {
               title: '交易操作',
               icon: 'Operation',
+              requireAuth: true
+            }
+          },
+          {
+            path: 'debug-console',
+            name: 'DebugConsole',
+            component: () => import('@/views/settings/DebugConsole.vue'),
+            meta: {
+              title: '调试控制台',
+              icon: 'Monitor',
+              requireAuth: true
+            }
+          },
+          {
+            path: 'api-console',
+            name: 'ApiConsole',
+            component: () => import('@/views/settings/ApiConsole.vue'),
+            meta: {
+              title: 'API 控制台',
+              icon: 'Cpu',
               requireAuth: true
             }
           }

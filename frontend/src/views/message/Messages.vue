@@ -147,7 +147,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+/**
+ * Messages 页面 —— 消息模块。
+ *
+ * 对标 nrs.messages.js（645 行）的核心功能：
+ *   - getAccountMessages 拉取消息列表
+ *   - 客户端本地解密加密消息（NRS.tryToDecryptMessage，:259）
+ *     安全模型：secretPhrase 不出客户端，使用 decryptNote 本地解密
+ *   - 可修剪消息 getPrunableMessage（:296）
+ *   - 二进制消息识别（:111）
+ *   - 发送消息通过 useNrcsForm 三步本地签名流程
+ */
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import {
@@ -158,10 +169,14 @@ import { nrcsApi } from '@/api/modules/nrcs.api'
 import type { NrcsMessage } from '@/api/modules/nrcs.api'
 import { fromEpochTime } from '@/utils/format'
 import { useAccountStore } from '@/stores/modules/account.store'
+import { useNrcsForm } from '@/composables/useNrcsForm'
+import { decryptNote, getPrivateKey } from '@/utils/nrcs-crypto'
+import { hexStringToByteArray } from '@/utils/converters'
 import SendMessageModal from '@/components/modals/SendMessageModal.vue'
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
+const { submitForm } = useNrcsForm()
 
 const messages = ref<NrcsMessage[]>([])
 const selectedPartner = ref<string>('')
@@ -174,7 +189,8 @@ const decryptingTx = ref<string | null>(null)
 const decryptedMessages = ref<Record<string, string | null>>({})
 const threadContainer = ref<HTMLElement | null>(null)
 
-const accountRS = ref(accountStore.accountRS || localStorage.getItem('nrcs_account_rs') || '')
+/** 当前账户 RS（直接从 store 读取，不使用 localStorage） */
+const accountRS = computed(() => accountStore.accountRS)
 
 interface Partner {
   accountRS: string
@@ -275,28 +291,121 @@ function formatShortDate(ts?: number): string {
   return `${yyyy}/${M.toString().padStart(2, '0')}/${dd.toString().padStart(2, '0')}`
 }
 
+/**
+ * 拉取消息列表（对标 nrs.messages.js loadPage）。
+ *
+ * 同时拉取普通消息和可修剪消息，合并后按时间排序。
+ */
 async function refreshData() {
   try {
     const acct = accountRS.value
     if (!acct) return
+
+    // 拉取普通消息（对标 getAccountMessages）
     const result = await nrcsApi.getAccountMessages(acct, 0, 99)
-    const list = (result as any).messages || (result as any).transactions || []
+    const list: NrcsMessage[] = (result as any).messages || (result as any).transactions || []
+
+    // 拉取可修剪消息（对标 getPrunableMessages，:296）
+    try {
+      const prunableResult = await nrcsApi.getPrunableMessages(acct, 0, 99)
+      const prunableList: NrcsMessage[] = ((prunableResult as any).prunableMessages || []).map((m: any) => ({
+        transaction: m.transaction,
+        sender: m.sender,
+        senderRS: m.senderRS,
+        recipient: m.recipient,
+        recipientRS: m.recipientRS,
+        timestamp: m.timestamp,
+        attachment: m.encryptedMessage
+          ? { encryptedMessage: m.encryptedMessage, 'version.PrunableEncryptedMessage': 1 }
+          : { message: m.message, messageIsText: true, 'version.PrunablePlainMessage': 1 },
+        senderPublicKey: m.senderPublicKey,
+      }))
+      list.push(...prunableList)
+    } catch {
+      // 可修剪消息拉取失败不影响主流程
+    }
+
+    // 按时间排序
+    list.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
     messages.value = list
   } catch (e: any) {
     ElMessage.error(e?.message || t('common.loadError'))
   }
 }
 
+/**
+ * 客户端本地解密加密消息（对标 nrs.messages.js:259 NRS.tryToDecryptMessage）。
+ *
+ * 安全模型：secretPhrase 不出客户端，使用 decryptNote 本地解密。
+ *
+ * 流程：
+ *   1. 从 accountStore 获取 secretPhrase（内存暂存，不持久化）
+ *   2. 从消息中获取对方公钥（senderPublicKey / recipientPublicKey）
+ *   3. 调用 decryptNote 本地解密
+ *   4. 若公钥缺失，尝试通过 getAccountPublicKey 拉取
+ *
+ * @param msg 待解密的消息
+ */
 async function decryptMessage(msg: NrcsMessage) {
-  const secretPhrase = accountStore.secretPhrase || localStorage.getItem('nrcs-secretPhrase') || ''
+  // 安全模型：secretPhrase 仅从 accountStore 内存获取，不读 localStorage
+  const secretPhrase = accountStore.secretPhrase
   if (!secretPhrase) {
     ElMessage.warning(t('dashboard.enterSecretPhrase'))
     return
   }
+
+  const attachment = msg.attachment
+  if (!attachment || !attachment.encryptedMessage) {
+    decryptedMessages.value[msg.transaction!] = t('messages.cannotDecrypt')
+    return
+  }
+
   decryptingTx.value = msg.transaction || null
   try {
-    const result = await nrcsApi.readMessage(msg.transaction || '', secretPhrase)
-    const text = (result as any).message || (result as any).decryptedMessage || t('messages.cannotDecrypt')
+    const encryptedMsg = attachment.encryptedMessage
+    const dataHex = encryptedMsg.data ?? encryptedMsg.encryptedMessageData
+    const nonceHex = encryptedMsg.nonce ?? encryptedMsg.encryptedMessageNonce
+    const isText = encryptedMsg.isText !== false
+    const isCompressed = encryptedMsg.isCompressed !== false
+
+    if (!dataHex || !nonceHex) {
+      decryptedMessages.value[msg.transaction!] = t('messages.cannotDecrypt')
+      return
+    }
+
+    // 决定对方公钥：若我是发送方，用接收方公钥；否则用发送方公钥
+    let otherPublicKey = isSentByMe(msg)
+      ? msg.recipientPublicKey
+      : msg.senderPublicKey
+
+    // 公钥缺失时尝试通过 API 拉取（对标 NRS.getAccountPublicKey）
+    if (!otherPublicKey) {
+      const otherAccount = isSentByMe(msg) ? msg.recipient : msg.sender
+      if (otherAccount) {
+        try {
+          const pkResult = await nrcsApi.getAccountPublicKey(otherAccount)
+          otherPublicKey = (pkResult as any).publicKey
+        } catch {
+          // 拉取失败时继续，解密会失败但不会崩溃
+        }
+      }
+    }
+
+    if (!otherPublicKey) {
+      decryptedMessages.value[msg.transaction!] = t('messages.cannotDecrypt')
+      return
+    }
+
+    // 客户端本地解密（对标 NRS.decryptNote）
+    const result = decryptNote(dataHex, {
+      nonce: hexStringToByteArray(nonceHex),
+      publicKey: hexStringToByteArray(otherPublicKey),
+      privateKey: hexStringToByteArray(getPrivateKey(secretPhrase)),
+      isText,
+      isCompressed,
+    }, secretPhrase)
+
+    const text = result.message || t('messages.cannotDecrypt')
     decryptedMessages.value[msg.transaction!] = text
   } catch (e: any) {
     ElMessage.error(e?.message || t('messages.decryptError'))
@@ -306,10 +415,18 @@ async function decryptMessage(msg: NrcsMessage) {
   }
 }
 
+/**
+ * 发送回复消息（通过 useNrcsForm 三步本地签名流程）。
+ *
+ * 安全模型：secretPhrase 不随请求外发，由 useNrcsForm 在本地签名。
+ *
+ * 对标 nrs.messages.js 的 sendMessage 表单提交。
+ */
 async function sendReply() {
   if (!selectedPartner.value || !replyText.value.trim()) return
 
-  const secretPhrase = accountStore.secretPhrase || localStorage.getItem('nrcs-secretPhrase') || ''
+  // secretPhrase 仅从 accountStore 内存获取
+  const secretPhrase = accountStore.secretPhrase
   if (!secretPhrase) {
     ElMessage.warning(t('dashboard.enterSecretPhrase'))
     return
@@ -317,24 +434,35 @@ async function sendReply() {
 
   sendingReply.value = true
   try {
-    const data: any = {
-      secretPhrase,
+    // 构造表单数据（对标 nrs.forms.js sendMessage 表单）
+    const data: Record<string, any> = {
       recipient: selectedPartner.value,
       feeNQT: '100000000',
       deadline: 1440,
-      message: replyText.value,
-      messageIsText: true
+      secretPhrase,
     }
+
     if (replyEncrypt.value) {
+      // 加密消息：使用 messageToEncrypt（服务端会加密后返回 unsignedTransactionBytes）
       data.messageToEncrypt = replyText.value
+      data.messageToEncryptIsText = true
+    } else {
+      // 普通文本消息
+      data.message = replyText.value
+      data.messageIsText = true
     }
-    await nrcsApi.sendMessage(data)
-    ElMessage.success(t('common.operationSuccess'))
+
+    // 通过 useNrcsForm 三步本地签名流程提交（secretPhrase 不外发）
+    await submitForm('sendMessage', data, {
+      successMessage: t('common.operationSuccess'),
+    })
+
     replyText.value = ''
     await refreshData()
     nextTick(() => scrollToBottom())
   } catch (e: any) {
-    ElMessage.error(e?.message || t('common.loadError'))
+    // useNrcsForm 已通过 ElMessage 显示错误，此处仅记录日志
+    console.error('Send reply failed:', e)
   } finally {
     sendingReply.value = false
   }

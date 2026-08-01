@@ -142,17 +142,28 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * SendMoneyModal 组件 —— 发送 NRC 转账弹窗。
+ *
+ * 对标 nrs.forms.js 的 sendMoney 表单提交 + nrs.recipient.js 的收款人实时校验。
+ *
+ * 安全模型：secretPhrase 不随请求外发，通过 useNrcsForm 三步本地签名流程提交：
+ *   1. 发送 doNotSign 请求获取 unsignedTransactionBytes
+ *   2. 本地验证 + 签名（verifyAndSignTransactionBytes）
+ *   3. 广播已签名交易（broadcastTransactionBytes）
+ */
 import { ref, reactive, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock, Key } from '@element-plus/icons-vue'
-import { nrcsApi } from '@/api/modules/nrcs.api'
 import { useAccountStore } from '@/stores/modules/account.store'
+import { useNrcsForm } from '@/composables/useNrcsForm'
 import { useRecipientCheck } from '@/composables/useRecipientCheck'
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
 const recipientCheck = useRecipientCheck()
+const { submitForm } = useNrcsForm()
 
 const visible = defineModel<boolean>('visible', { default: false })
 
@@ -187,6 +198,14 @@ const recipientInfoClass = computed(() => {
   return `is-${type}`
 })
 
+/**
+ * 是否需要显示 secretPhrase 输入框。
+ *
+ * 当 accountStore 已有 secretPhrase（password 登录模式）时隐藏输入框，
+ * 直接使用内存中的值；否则显示输入框让用户手动输入。
+ */
+const needsSecretPhrase = computed(() => !accountStore.hasSecretPhrase)
+
 const rules = computed<FormRules>(() => ({
   recipient: [{ required: true, message: t('sendMoney.recipientRequired'), trigger: 'blur' }],
   amountNQT: [
@@ -202,7 +221,9 @@ const rules = computed<FormRules>(() => ({
   ],
   feeNQT: [{ required: true, message: t('sendMoney.feeRequired'), trigger: 'blur' }],
   deadline: [{ required: true, message: t('sendMoney.deadlineRequired'), trigger: 'blur' }],
-  secretPhrase: [{ required: true, message: t('sendMoney.secretPhraseRequired'), trigger: 'blur' }]
+  secretPhrase: needsSecretPhrase.value
+    ? [{ required: true, message: t('sendMoney.secretPhraseRequired'), trigger: 'blur' }]
+    : [],
 }))
 
 /**
@@ -285,14 +306,23 @@ const handleSubmit = async () => {
     }
     isSubmitting.value = true
     try {
-      const amountNQT = String(Math.round(Number(form.amountNQT) * 1e8))
-      const feeNQT = String(Math.round(Number(form.feeNQT) * 1e8))
-      const data: any = {
-        secretPhrase: form.secretPhrase,
+      // 获取 secretPhrase：优先 accountStore 内存值，否则用用户输入
+      const secretPhrase = accountStore.hasSecretPhrase
+        ? accountStore.secretPhrase
+        : form.secretPhrase
+
+      if (!secretPhrase) {
+        ElMessage.warning(t('sendMoney.secretPhraseRequired'))
+        return
+      }
+
+      // 构造表单数据（amountNQT/feeNQT 由 useNrcsForm 自动转换 NXT→NQT）
+      const data: Record<string, any> = {
+        secretPhrase,
         recipient: form.recipient,
-        amountNQT,
-        feeNQT,
-        deadline: Number(form.deadline)
+        amountNXT: form.amountNQT,
+        feeNXT: form.feeNQT,
+        deadline: form.deadline,
       }
       // 若收款方无公钥且用户提供了公钥，附加到请求
       if (recipientCheck.result.value?.noPublicKey && form.recipientPublicKey) {
@@ -302,12 +332,17 @@ const handleSubmit = async () => {
         data.message = form.message
         data.messageIsText = form.messageIsText
       }
-      await nrcsApi.sendMoney(data)
-      ElMessage.success(t('sendMoney.success'))
+
+      // 通过 useNrcsForm 三步本地签名流程提交（secretPhrase 不外发）
+      await submitForm('sendMoney', data, {
+        successMessage: t('sendMoney.success'),
+      })
+
       emit('success')
       handleClose()
     } catch (err: any) {
-      ElMessage.error(err?.message || t('sendMoney.error'))
+      // useNrcsForm 已通过 ElMessage 显示错误，此处仅记录日志
+      console.error('Send money failed:', err)
     } finally {
       isSubmitting.value = false
     }

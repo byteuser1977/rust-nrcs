@@ -12,6 +12,7 @@
  */
 import axios, { type AxiosInstance } from 'axios'
 import { ElMessage } from 'element-plus'
+import { logger } from '@/utils/logger'
 
 const NRCS_BASE_URL = '/nrcs'
 
@@ -34,6 +35,15 @@ nrcsClient.interceptors.request.use((config) => {
 nrcsClient.interceptors.response.use(
   (response) => {
     const data = response.data
+    // 记录到调试控制台（对标 nrs.server.js 的 NRS.addToConsole 调用）
+    logger.addToConsole(
+      response.config.url || '',
+      response.config.method?.toUpperCase() || 'GET',
+      response.config.params || response.config.data || null,
+      data,
+      !!(data && data.errorCode !== undefined && data.errorCode !== 0)
+    )
+
     if (data && data.errorCode !== undefined && data.errorCode !== 0) {
       const error = new Error(data.errorDescription || '请求失败') as any
       error.code = data.errorCode
@@ -43,6 +53,17 @@ nrcsClient.interceptors.response.use(
     return data
   },
   (error) => {
+    // 记录错误响应到调试控制台
+    const config = error.config
+    if (config) {
+      logger.addToConsole(
+        config.url || '',
+        config.method?.toUpperCase() || 'GET',
+        config.params || config.data || null,
+        error.response?.data || error.message,
+        true
+      )
+    }
     if (!error.response) {
       ElMessage.error('网络连接失败')
     }

@@ -308,6 +308,10 @@ export interface NrcsMessage {
   timestamp: number
   attachment?: Record<string, any>
   requestProcessingTime?: number
+  /** 发送方公钥（hex，getAccountMessages 返回，用于加密消息解密） */
+  senderPublicKey?: string
+  /** 接收方公钥（hex，部分场景返回） */
+  recipientPublicKey?: string
 }
 
 export interface NrcsGenerator {
@@ -387,8 +391,27 @@ export const nrcsApi = {
     return nrcsPost<any>('setAccountProperty', data)
   },
 
-  getAccountProperties(account: string) {
-    return nrcsGet<{ properties: any[] }>('getAccountProperties', { recipient: account })
+  /**
+   * 删除账户属性（对标 deleteAccountProperty API）。
+   *
+   * 用于资金监控模块移除被监控账户（nrs.monitors.js:231 remove_monitored_account_modal）。
+   */
+  deleteAccountProperty(data: { secretPhrase: string; recipient?: string; property: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('deleteAccountProperty', data)
+  },
+
+  /**
+   * 查询账户属性（对标 getAccountProperties API）。
+   *
+   * @param options.recipient 查询指定账户的属性
+   * @param options.setter 属性设置者（资金监控模块按 setter 查询被监控账户，nrs.monitors.js:162）
+   * @param options.property 属性名（资金监控模块按 property 过滤，nrs.monitors.js:163）
+   * @param options.firstIndex 分页起始索引
+   * @param options.lastIndex 分页结束索引
+   */
+  getAccountProperties(options: { recipient?: string; setter?: string; property?: string; firstIndex?: number; lastIndex?: number } | string) {
+    const params = typeof options === 'string' ? { recipient: options } : options
+    return nrcsGet<{ properties: any[] }>('getAccountProperties', params)
   },
 
   searchAccounts(query: string, firstIndex?: number, lastIndex?: number) {
@@ -465,6 +488,23 @@ export const nrcsApi = {
     return nrcsGet<{ blocks: NrcsBlock[] }>('getBlocks', { firstIndex, lastIndex, includeTransactions })
   },
 
+  /**
+   * 获取指定账户锻造的区块列表（对标 nrs.blocks.js:224 getAccountBlocks+）。
+   * 用于"我的锻造区块"视图。
+   */
+  getAccountBlocks(account: string, firstIndex?: number, lastIndex?: number, includeTransactions?: boolean) {
+    return nrcsGet<{ blocks: NrcsBlock[] }>('getAccountBlocks', {
+      account, firstIndex, lastIndex, includeTransactions,
+    })
+  },
+
+  /**
+   * 获取指定账户锻造的区块总数（对标 nrs.blocks.js:289 getAccountBlockCount+）。
+   */
+  getAccountBlockCount(account: string) {
+    return nrcsGet<{ numberOfBlocks: number }>('getAccountBlockCount', { account })
+  },
+
   getBlockchainStatus() {
     return nrcsGet<NrcsBlockchainStatus>('getBlockchainStatus')
   },
@@ -505,6 +545,25 @@ export const nrcsApi = {
     return nrcsGet<{ generators: NrcsGenerator[] }>('getNextBlockGenerators', { limit })
   },
 
+  /**
+   * 设置 API 代理节点（对标 nrs.header.js NRS.forms.setAPIProxyPeer）。
+   *
+   * @param data.peer 远程节点地址
+   * @param data.adminPassword 管理员密码
+   */
+  setAPIProxyPeer(data: { peer: string; adminPassword?: string }) {
+    return nrcsPost<any>('setAPIProxyPeer', data)
+  },
+
+  /**
+   * 黑名单 API 代理节点（对标 nrs.header.js NRS.forms.blacklistAPIProxyPeer）。
+   *
+   * @param data.adminPassword 管理员密码
+   */
+  blacklistAPIProxyPeer(data: { adminPassword?: string }) {
+    return nrcsPost<any>('blacklistAPIProxyPeer', data)
+  },
+
   getAlias(alias?: string, aliasName?: string) {
     return nrcsGet<NrcsAlias>('getAlias', { alias, aliasName })
   },
@@ -543,6 +602,19 @@ export const nrcsApi = {
 
   getAllAssets(firstIndex?: number, lastIndex?: number) {
     return nrcsGet<{ assets: NrcsAsset[] }>('getAllAssets', { firstIndex, lastIndex })
+  },
+
+  /**
+   * 按发行方账户查询其发行的所有资产（对标 nrs.assetexchange.js:169 getAssetsByIssuer）。
+   *
+   * 响应结构为 `assets` 数组的数组（每个账户一组），通常取 `response.assets[0]`。
+   *
+   * @param account 发行方账户 RS 或数字 ID
+   * @param firstIndex 起始索引
+   * @param lastIndex 结束索引
+   */
+  getAssetsByIssuer(account: string, firstIndex?: number, lastIndex?: number) {
+    return nrcsGet<{ assets: NrcsAsset[][] }>('getAssetsByIssuer', { account, firstIndex, lastIndex })
   },
 
   getAccountAssets(account: string) {
@@ -688,6 +760,29 @@ export const nrcsApi = {
 
   getBuyOffers(currency: string, firstIndex?: number, lastIndex?: number) {
     return nrcsGet<{ offers: any[] }>('getBuyOffers', { currency, firstIndex, lastIndex })
+  },
+
+  /**
+   * 获取预期卖单报价（对标 nrs.monetarysystem.js:374 getExpectedSellOffers）。
+   * 返回由未确认交易产生的预期卖单，与真实卖单合并展示。
+   */
+  getExpectedSellOffers(currency: string) {
+    return nrcsGet<{ offers: any[] }>('getExpectedSellOffers', { currency })
+  },
+
+  /**
+   * 获取预期买单报价（对标 nrs.monetarysystem.js:374 getExpectedBuyOffers）。
+   * 返回由未确认交易产生的预期买单，与真实买单合并展示。
+   */
+  getExpectedBuyOffers(currency: string) {
+    return nrcsGet<{ offers: any[] }>('getExpectedBuyOffers', { currency })
+  },
+
+  /**
+   * 取消兑换报价（对标 nrs.monetarysystem.js cancelOffer）。
+   */
+  cancelOffer(data: { secretPhrase: string; offer: string; feeNQT: string; deadline: number }) {
+    return nrcsPost<any>('cancelOffer', data)
   },
 
   /**
@@ -981,15 +1076,68 @@ export const nrcsApi = {
     return nrcsGet<{ transactions: NrcsTransaction[] }>('getScheduledTransactions', { account, firstIndex, lastIndex })
   },
 
-  getFundingMonitor(secretPhrase?: string) {
-    return nrcsGet<{ monitors: any[] }>('getFundingMonitor', { secretPhrase })
+  /**
+   * 获取资金监控列表（对标 nrs.monitors.js:86 getFundingMonitor）。
+   *
+   * @param options.account 查询指定账户的监控（管理员可查任意账户）
+   * @param options.adminPassword 管理员密码（本地节点操作时需要）
+   * @param options.secretPhrase 签名密钥（可选）
+   * @param options.firstIndex 分页起始索引
+   * @param options.lastIndex 分页结束索引
+   */
+  getFundingMonitor(options?: {
+    account?: string
+    adminPassword?: string
+    secretPhrase?: string
+    firstIndex?: number
+    lastIndex?: number
+  }) {
+    return nrcsGet<{ monitors: any[] }>('getFundingMonitor', options)
   },
 
-  startFundingMonitor(data: { secretPhrase: string; property: string; amount: string; feeNQT: string; deadline: number }) {
+  /**
+   * 启动资金监控（对标 nrs.monitors.js:115 startFundingMonitor）。
+   *
+   * @param data.secretPhrase 签名密钥
+   * @param data.adminPassword 管理员密码（本地节点操作时需要）
+   * @param data.property 监控属性名
+   * @param data.amount 单次注资金额 NQT
+   * @param data.threshold 触发阈值 NQT
+   * @param data.interval 监控间隔（区块数）
+   * @param data.feeNQT 手续费 NQT
+   * @param data.deadline 截止时间（分钟）
+   */
+  startFundingMonitor(data: {
+    secretPhrase: string
+    adminPassword?: string
+    property: string
+    amount: string
+    threshold?: string
+    interval?: number
+    feeNQT: string
+    deadline: number
+  }) {
     return nrcsPost<any>('startFundingMonitor', data)
   },
 
-  stopFundingMonitor(data: { secretPhrase: string; property: string; feeNQT: string; deadline: number }) {
+  /**
+   * 停止资金监控（对标 nrs.monitors.js:135 stopFundingMonitor）。
+   *
+   * @param data.secretPhrase 签名密钥
+   * @param data.adminPassword 管理员密码（本地节点操作时需要）
+   * @param data.property 监控属性名
+   * @param data.account 停止指定账户的监控（管理员可指定）
+   * @param data.feeNQT 手续费 NQT
+   * @param data.deadline 截止时间（分钟）
+   */
+  stopFundingMonitor(data: {
+    secretPhrase: string
+    adminPassword?: string
+    property: string
+    account?: string
+    feeNQT: string
+    deadline: number
+  }) {
     return nrcsPost<any>('stopFundingMonitor', data)
   },
 
@@ -1003,6 +1151,21 @@ export const nrcsApi = {
 
   getAccountPhasedTransactions(account: string, firstIndex?: number, lastIndex?: number) {
     return nrcsGet<{ transactions: NrcsTransaction[] }>('getAccountPhasedTransactions', { account, firstIndex, lastIndex })
+  },
+
+  /**
+   * 获取 phased 交易的投票轮询状态（对标 nrs.transactions.js:278 getPhasingPoll）。
+   * 返回 result（0=pending/1=approved/2=rejected）、yesVotes、noVotes 等。
+   */
+  getPhasingPoll(transaction: string, countVotes?: boolean) {
+    return nrcsGet<any>('getPhasingPoll', { transaction, countVotes })
+  },
+
+  /**
+   * 获取当前账户对指定 phased 交易的投票记录（对标 nrs.transactions.js:283 getPhasingPollVote）。
+   */
+  getPhasingPollVote(transaction: string, account: string) {
+    return nrcsGet<any>('getPhasingPollVote', { transaction, account })
   },
 
   approveTransaction(data: { secretPhrase: string; transaction: string; feeNQT: string; deadline: number }) {

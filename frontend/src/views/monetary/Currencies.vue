@@ -100,15 +100,10 @@
     </el-card>
 
     <!-- Modals -->
-    <CurrencyOrderModal
-      v-model:visible="showOrderModal"
-      :order-type="orderType"
-      :currency-id="selectedCurrency?.currency || ''"
-      :currency-code="selectedCurrency?.code || ''"
-      :decimals="selectedCurrency?.decimals || 0"
-      :units="orderUnits"
-      :rate="orderRate"
-      @success="onOrderSuccess"
+    <CurrencyExchangeModal
+      v-model:visible="showExchangeModal"
+      :currency="selectedCurrency"
+      @success="refreshData"
     />
     <CurrencyTransferModal
       v-model:visible="showTransferModal"
@@ -127,7 +122,7 @@ import { nrcsApi } from '@/api/modules/nrcs.api'
 import { useAccountStore } from '@/stores/modules/account.store'
 import { usePolling } from '@/composables/usePolling'
 import { qntToQntf, truncateHash } from '@/utils/format'
-import CurrencyOrderModal from '@/components/modals/CurrencyOrderModal.vue'
+import CurrencyExchangeModal from '@/components/modals/CurrencyExchangeModal.vue'
 import CurrencyTransferModal from '@/components/modals/CurrencyTransferModal.vue'
 import IssueCurrencyModal from '@/components/modals/IssueCurrencyModal.vue'
 
@@ -144,12 +139,9 @@ const viewMode = ref<'my' | 'all'>('all')
 const showIssue = ref(false)
 
 // Order/Transfer modals
-const showOrderModal = ref(false)
+const showExchangeModal = ref(false)
 const showTransferModal = ref(false)
 const selectedCurrency = ref<any>(null)
-const orderType = ref<'buy' | 'sell'>('buy')
-const orderUnits = ref('0')
-const orderRate = ref('0')
 
 // --- Computed ---
 const filteredCurrencies = computed(() => {
@@ -221,19 +213,12 @@ function onViewModeChange() {
 
 function openExchange(currency: any) {
   selectedCurrency.value = currency
-  orderType.value = 'buy'
-  orderUnits.value = '0'
-  orderRate.value = '0'
-  showOrderModal.value = true
+  showExchangeModal.value = true
 }
 
 function openTransfer(currency: any) {
   selectedCurrency.value = currency
   showTransferModal.value = true
-}
-
-function onOrderSuccess() {
-  refreshData()
 }
 
 async function refreshData() {

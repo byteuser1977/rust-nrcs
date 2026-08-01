@@ -1,4 +1,15 @@
 <template>
+  <!--
+    Transactions —— 我的交易页面（完整版）。
+    对标 nrs.transactions.js（1118 行）。
+
+    功能：
+      1. 交易列表（确认 + 未确认合并 + 去重 + 排序）
+      2. 类型导航过滤（all/phased/payment/messaging/asset/marketplace/currency/voting/data）
+      3. Phased 交易状态徽章（pending/approved/rejected）+ 审批按钮
+      4. 交易详情（复用 TransactionDetailPanel 组件，支持附件/加密消息/phasing 详情）
+      5. 分页
+  -->
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">
@@ -6,6 +17,16 @@
         {{ t('dashboard.transactions') }}
       </h2>
       <div class="header-actions">
+        <el-badge :value="phasedCount" :hidden="phasedCount === 0" type="warning">
+          <el-button
+            :type="activeFilter === 'phased' ? 'primary' : 'default'"
+            size="small"
+            @click="setFilter('phased')"
+          >
+            <el-icon><Finished /></el-icon>
+            {{ t('transaction.phased') }}
+          </el-button>
+        </el-badge>
         <el-button size="small" @click="refreshData">
           <el-icon><Refresh /></el-icon>
           {{ t('common.refresh') }}
@@ -30,9 +51,9 @@
 
     <el-card shadow="hover" v-loading="pagination.isLoading.value" class="tx-card">
       <el-table
-        :data="transactions"
+        :data="displayedTransactions"
         style="width: 100%"
-        :empty-text="t('common.noData')"
+        :empty-text="emptyText"
         :row-class-name="txRowClassName"
         @row-click="showTransactionDetail"
         row-key="transaction"
@@ -68,6 +89,20 @@
             </span>
           </template>
         </el-table-column>
+        <!-- Phasing 状态列（对标 nrs.transactions.js:272 addPhasedTransactionHTML） -->
+        <el-table-column :label="t('transaction.phasingStatus')" width="120" align="center">
+          <template #default="{ row }">
+            <el-tag
+              v-if="isPhased(row)"
+              :type="phasingTagType(row)"
+              size="small"
+              effect="dark"
+            >
+              {{ phasingStatusLabel(row) }}
+            </el-tag>
+            <span v-else class="text-muted text-sm">-</span>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('dashboard.height')" width="90" align="center">
           <template #default="{ row }">
             <span v-if="row.height" class="text-muted text-sm text-mono">#{{ row.height }}</span>
@@ -86,11 +121,19 @@
             <span v-else class="conf-tag conf-tag--unconfirmed">{{ t('dashboard.unconfirmed') }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('common.status')" width="80" align="center">
+        <el-table-column :label="t('common.actions')" width="120" align="center" fixed="right">
           <template #default="{ row }">
-            <el-icon v-if="!row.height" class="status-icon status-unconfirmed"><Clock /></el-icon>
-            <el-icon v-else-if="row.confirmations && row.confirmations >= 10" class="status-icon status-confirmed"><CircleCheck /></el-icon>
-            <el-icon v-else class="status-icon status-pending"><Loading /></el-icon>
+            <!-- 审批按钮（对标 nrs.transactions.js:292-312 approve_transaction_btn） -->
+            <el-button
+              v-if="isPhased(row) && canApprove(row)"
+              size="small"
+              type="success"
+              text
+              @click.stop="approveTransaction(row)"
+            >
+              <el-icon><Check /></el-icon>
+              {{ t('transaction.approve') }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -107,66 +150,104 @@
       </div>
     </el-card>
 
+    <!-- 交易详情弹窗（复用 TransactionDetailPanel） -->
     <el-dialog
       v-model="txDetailVisible"
       :title="t('dashboard.transactionDetails')"
-      width="700px"
+      width="800px"
       destroy-on-close
+      class="nrcs-modal"
     >
-      <div class="tx-detail" v-if="selectedTransaction">
-        <el-descriptions :column="2" border size="small">
-          <el-descriptions-item
-            v-for="key in detailKeys"
-            :key="key"
-            :label="key"
-          >
-            {{ formatDetailValue((selectedTransaction as any)[key]) }}
-          </el-descriptions-item>
-        </el-descriptions>
-      </div>
-      <el-empty v-else :description="t('dashboard.noTransactionSelected')" />
+      <TransactionDetailPanel
+        :transaction="selectedTransaction"
+        @approve-transaction="onApproveFromDetail"
+        @send-money="onSendMoney"
+        @send-message="onSendMessage"
+        @add-contact="onAddContact"
+      />
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+/**
+ * Transactions 组件 —— 我的交易页面（完整版）。
+ *
+ * 对标 nrs.transactions.js（1118 行）的核心功能：
+ *   - handleIncomingTransactions：确认 + 未确认交易合并 + 去重 + 排序
+ *   - buildTransactionsTypeNavi：类型导航过滤
+ *   - addPhasingInfoToTransactionRows + addPhasedTransactionHTML：phased 交易状态展示
+ *   - displayPhasedTransactions：phased 交易过滤视图
+ *   - updateApprovalRequests：审批请求计数
+ *
+ * phasing 状态来源：对 phased 交易调用 getPhasingPoll API 获取 result（0=pending/1=approved/2=rejected）。
+ */
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { List, Refresh, Clock, CircleCheck, Loading } from '@element-plus/icons-vue'
+import { List, Refresh, Finished, Check } from '@element-plus/icons-vue'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 import type { NrcsTransaction, NrcsUnconfirmedTransaction } from '@/api/modules/nrcs.api'
 import { usePagination } from '@/composables/usePagination'
 import { formatTimestamp, formatAmount } from '@/utils/format'
 import { useAccountStore } from '@/stores/modules/account.store'
+import TransactionDetailPanel from '@/components/base/TransactionDetailPanel.vue'
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
 
+/** 全部交易（确认 + 未确认合并） */
 const transactions = ref<(NrcsTransaction | NrcsUnconfirmedTransaction)[]>([])
+/** 分页 */
 const pagination = usePagination(15)
+/** 当前激活的过滤器 */
 const activeFilter = ref('all')
+/** 交易详情弹窗可见性 */
 const txDetailVisible = ref(false)
+/** 选中的交易 */
 const selectedTransaction = ref<NrcsTransaction | NrcsUnconfirmedTransaction | null>(null)
+
+/** phased 交易的轮询状态缓存：transactionId → poll result */
+const phasingPolls = ref<Record<string, { result: number; yesVotes: number; noVotes: number }>>({})
+
+/** 当前账户已投票的 phased 交易集合 */
+const votedTransactions = ref<Set<string>>(new Set())
+
+/** phased 交易数量（用于徽章） */
+const phasedCount = computed(() =>
+  transactions.value.filter((tx: any) => isPhased(tx)).length
+)
 
 const accountRS = computed(() => accountStore.accountRS || localStorage.getItem('nrcs_account_rs') || '')
 
+/** 类型过滤器（对标 buildTransactionsTypeNavi） */
 const typeFilters = computed(() => [
   { value: 'all', label: t('common.all') },
   { value: '0', label: t('txType.payment') || 'Payment' },
-  { value: '2', label: t('txType.asset') || 'Asset' },
-  { value: '5', label: t('txType.currency') || 'Currency' },
-  { value: '3', label: t('txType.marketplace') || 'Marketplace' },
-  { value: '7', label: t('txType.voting') || 'Voting' },
   { value: '1', label: t('txType.messaging') || 'Messaging' },
-  { value: '6', label: t('txType.taggedData') || 'Data Cloud' },
+  { value: '2', label: t('txType.coloredCoins') || 'Asset' },
+  { value: '3', label: t('txType.marketplace') || 'Marketplace' },
+  { value: '5', label: t('txType.accountProperty') || 'Property' },
+  { value: '6', label: t('txType.monetarySystem') || 'Currency' },
+  { value: '7', label: t('txType.voting') || 'Voting' },
+  { value: '20', label: t('txType.taggedData') || 'Data Cloud' },
 ])
 
-const detailKeys = [
-  'transaction', 'type', 'subtype', 'senderRS', 'recipientRS',
-  'amountNQT', 'feeNQT', 'height', 'confirmations', 'timestamp',
-  'block', 'signature', 'fullHash'
-]
+/** 空状态文本 */
+const emptyText = computed(() => {
+  if (activeFilter.value === 'phased') return t('transaction.noPhasedTransactions')
+  return t('common.noData')
+})
+
+/** 根据过滤器筛选显示的交易 */
+const displayedTransactions = computed(() => {
+  if (activeFilter.value === 'all') return transactions.value
+  if (activeFilter.value === 'phased') {
+    return transactions.value.filter((tx: any) => isPhased(tx))
+  }
+  const typeNum = Number(activeFilter.value)
+  return transactions.value.filter((tx: any) => tx.type === typeNum)
+})
 
 onMounted(() => {
   refreshData()
@@ -174,8 +255,10 @@ onMounted(() => {
 
 function setFilter(value: string) {
   activeFilter.value = value
-  pagination.reset()
-  refreshData()
+  if (value !== 'phased') {
+    pagination.reset()
+    refreshData()
+  }
 }
 
 function handlePageChange(page: number) {
@@ -183,7 +266,11 @@ function handlePageChange(page: number) {
   refreshData()
 }
 
-async function refreshData() {
+/**
+ * 刷新数据：拉取确认 + 未确认交易（对标 handleIncomingTransactions）。
+ * 合并、去重、排序，并为 phased 交易拉取轮询状态。
+ */
+async function refreshData(): Promise<void> {
   pagination.isLoading.value = true
   try {
     const acct = accountRS.value
@@ -192,7 +279,9 @@ async function refreshData() {
       return
     }
 
-    const typeParam = activeFilter.value !== 'all' ? Number(activeFilter.value) : undefined
+    const typeParam = activeFilter.value !== 'all' && activeFilter.value !== 'phased'
+      ? Number(activeFilter.value)
+      : undefined
 
     const [confirmedResult, unconfirmedResult] = await Promise.allSettled([
       nrcsApi.getBlockchainTransactions(
@@ -211,6 +300,7 @@ async function refreshData() {
       ? (unconfirmedResult.value?.unconfirmedTransactions || [])
       : []
 
+    // 合并 + 标记未确认（对标 handleIncomingTransactions）
     const combined: any[] = [
       ...(unconfirmedTxs.map((tx: any) => ({
         ...tx,
@@ -221,8 +311,20 @@ async function refreshData() {
       ...confirmedTxs
     ]
 
-    transactions.value = combined
+    // 去重（按 transaction ID）
+    const seen = new Set<string>()
+    const deduped = combined.filter((tx) => {
+      const id = tx.transaction
+      if (id && seen.has(id)) return false
+      if (id) seen.add(id)
+      return true
+    })
+
+    transactions.value = deduped
     pagination.setTotalFromList(confirmedTxs.length)
+
+    // 为 phased 交易拉取轮询状态（对标 addPhasingInfoToTransactionRows）
+    await loadPhasingPolls(deduped)
   } catch (e: any) {
     ElMessage.error(e?.message || t('common.loadError'))
   } finally {
@@ -230,29 +332,111 @@ async function refreshData() {
   }
 }
 
+/**
+ * 为 phased 交易批量拉取轮询状态（对标 addPhasingInfoToTransactionRows）。
+ * 仅对包含 phasing 附件的交易调用 getPhasingPoll。
+ */
+async function loadPhasingPolls(txs: any[]): Promise<void> {
+  const phasedTxIds: string[] = []
+  for (const tx of txs) {
+    if (isPhased(tx) && tx.transaction) {
+      phasedTxIds.push(tx.transaction)
+    }
+  }
+
+  if (phasedTxIds.length === 0) return
+
+  // 并行拉取所有 phased 交易的轮询状态
+  const promises = phasedTxIds.map(async (txId) => {
+    try {
+      const [pollResult, voteResult] = await Promise.allSettled([
+        nrcsApi.getPhasingPoll(txId, true),
+        nrcsApi.getPhasingPollVote(txId, accountRS.value),
+      ])
+
+      if (pollResult.status === 'fulfilled' && pollResult.value?.transaction) {
+        phasingPolls.value[txId] = {
+          result: pollResult.value.result || 0,
+          yesVotes: pollResult.value.yesVotes || 0,
+          noVotes: pollResult.value.noVotes || 0,
+        }
+      }
+
+      // 如果当前账户已投票，记录到 votedTransactions
+      if (voteResult.status === 'fulfilled' && voteResult.value?.transaction) {
+        votedTransactions.value.add(txId)
+      }
+    } catch {
+      // 忽略单个交易的状态拉取失败
+    }
+  })
+
+  await Promise.allSettled(promises)
+}
+
+/**
+ * 判断交易是否为 phased 交易（对标 nrs.transactions.js:277 附件检测）。
+ */
+function isPhased(tx: any): boolean {
+  return !!(
+    tx.attachment &&
+    tx.attachment['version.Phasing'] &&
+    tx.attachment.phasingVotingModel !== undefined
+  )
+}
+
+/**
+ * 获取 phased 交易的状态标签类型。
+ */
+function phasingTagType(tx: any): 'info' | 'success' | 'danger' | 'warning' {
+  const poll = tx.transaction ? phasingPolls.value[tx.transaction] : undefined
+  if (!poll) return 'info'
+  // result: 0=pending, 1=approved, 2=rejected
+  if (poll.result === 1) return 'success'
+  if (poll.result === 2) return 'danger'
+  return 'warning'
+}
+
+/**
+ * 获取 phased 交易的状态标签文本。
+ */
+function phasingStatusLabel(tx: any): string {
+  const poll = tx.transaction ? phasingPolls.value[tx.transaction] : undefined
+  if (!poll) return t('transaction.phasingPending')
+  if (poll.result === 1) return t('transaction.phasingApproved')
+  if (poll.result === 2) return t('transaction.phasingRejected')
+  return t('transaction.phasingPending')
+}
+
+/**
+ * 判断当前账户是否可以审批该 phased 交易。
+ * 条件：phased 交易 + 轮询存在 + result 为 pending + 当前账户未投票。
+ */
+function canApprove(tx: any): boolean {
+  if (!isPhased(tx) || !tx.transaction) return false
+  if (votedTransactions.value.has(tx.transaction)) return false
+  const poll = phasingPolls.value[tx.transaction]
+  if (!poll) return false
+  return poll.result === 0 // pending
+}
+
 function formatNrcAmount(nqt?: string): string {
   if (!nqt || nqt === '0') return '0'
   return formatAmount(nqt)
 }
 
-function formatDetailValue(val: any): string {
-  if (val === undefined || val === null) return '-'
-  if (typeof val === 'object') return JSON.stringify(val)
-  return String(val)
-}
-
 function getTxTypeLabel(type?: number, subtype?: number): string {
   if (type === undefined || type === null) return t('txType.unknown')
   const keyMap: Record<number, Record<number, string>> = {
-    0: { 0: 'txType.payment' },
-    1: { 0: 'txType.messaging', 1: 'txType.aliasAssignment', 2: 'txType.pollCreation', 3: 'txType.voteCasting', 4: 'txType.accountInfo' },
-    2: { 0: 'txType.assetIssuance', 1: 'txType.assetTransfer', 2: 'txType.askOrder', 3: 'txType.bidOrder', 4: 'txType.assetAskCancel', 5: 'txType.assetBidCancel' },
-    3: { 0: 'txType.marketListing', 1: 'txType.marketDelisting', 2: 'txType.marketPriceChange', 3: 'txType.marketQtyChange', 4: 'txType.marketPurchase', 5: 'txType.marketDelivery', 6: 'txType.marketFeedback', 7: 'txType.marketRefund' },
-    4: { 0: 'txType.accountInfo', 1: 'txType.aliasAssignment', 2: 'txType.aliasSell', 3: 'txType.aliasBuy' },
-    5: { 0: 'txType.accountProperty', 1: 'txType.accountPropertyDelete' },
-    6: { 0: 'txType.currencyIssuance', 1: 'txType.reserveIncrease', 2: 'txType.reserveClaim', 3: 'txType.currencyTransfer', 4: 'txType.publishOffer', 5: 'txType.exchangeBuy', 6: 'txType.exchangeSell', 7: 'txType.currencyMint', 8: 'txType.currencyDelete' },
+    0: { 0: 'txType.ordinaryPayment' },
+    1: { 0: 'txType.arbitraryMessage', 1: 'txType.aliasAssignment', 2: 'txType.pollCreation', 3: 'txType.voteCasting', 4: 'txType.accountInfo', 5: 'txType.aliasSell', 6: 'txType.aliasBuy', 7: 'txType.aliasDeletion', 8: 'txType.aliasTransfer' },
+    2: { 0: 'txType.assetIssuance', 1: 'txType.assetTransfer', 2: 'txType.askOrderPlacement', 3: 'txType.bidOrderPlacement', 4: 'txType.askOrderCancellation', 5: 'txType.bidOrderCancellation', 6: 'txType.dividendPayment' },
+    3: { 0: 'txType.digitalGoodsListing', 1: 'txType.digitalGoodsDelisting', 2: 'txType.digitalGoodsPriceChange', 3: 'txType.digitalGoodsQuantityChange', 4: 'txType.digitalGoodsPurchase', 5: 'txType.digitalGoodsDelivery', 6: 'txType.digitalGoodsFeedback', 7: 'txType.digitalGoodsRefund' },
+    4: { 0: 'txType.accountControlBalanceLeasing', 1: 'txType.accountControlPhasingOnly' },
+    5: { 0: 'txType.setAccountProperty', 1: 'txType.deleteAccountProperty' },
+    6: { 0: 'txType.currencyIssuance', 1: 'txType.reserveIncrease', 2: 'txType.reserveClaim', 3: 'txType.currencyTransfer', 4: 'txType.publishExchangeOffer', 5: 'txType.currencyBuy', 6: 'txType.currencySell', 7: 'txType.currencyMint', 8: 'txType.currencyDeletion' },
     7: { 0: 'txType.pollCreation', 1: 'txType.voteCasting' },
-    8: { 0: 'txType.phasingVote' },
+    8: { 0: 'txType.phasingVoteCasting' },
     20: { 0: 'txType.taggedData' }
   }
   const subKeyMap = keyMap[type ?? -1]
@@ -290,13 +474,78 @@ function getCounterparty(tx: any): string {
 }
 
 function txRowClassName({ row }: { row: any }): string {
-  return row._isUnconfirmed ? 'tx-row-unconfirmed' : ''
+  const classes: string[] = []
+  if (row._isUnconfirmed) classes.push('tx-row-unconfirmed')
+  if (isPhased(row)) classes.push('tx-row-phased')
+  return classes.join(' ')
 }
 
-function showTransactionDetail(row: NrcsTransaction | NrcsUnconfirmedTransaction) {
+/**
+ * 点击交易行 → 展示详情（对标 showTransactionModal）。
+ */
+function showTransactionDetail(row: NrcsTransaction | NrcsUnconfirmedTransaction): void {
   selectedTransaction.value = row
   txDetailVisible.value = true
 }
+
+/**
+ * 审批 phased 交易（对标 approve_transaction_btn 点击）。
+ */
+async function approveTransaction(tx: any): Promise<void> {
+  if (!tx.transaction) return
+  const secretPhrase = accountStore.secretPhrase
+  if (!secretPhrase) {
+    ElMessage.warning(t('common.secretPhraseRequired'))
+    return
+  }
+
+  try {
+    await nrcsApi.approveTransaction({
+      secretPhrase,
+      transaction: tx.transaction,
+      feeNQT: '10000000', // 0.1 NRC default fee
+      deadline: 1440,
+    })
+    ElMessage.success(t('transaction.approveSuccess'))
+    votedTransactions.value.add(tx.transaction)
+    // 刷新 phasing 状态
+    refreshData()
+  } catch (e: any) {
+    ElMessage.error(e?.message || t('transaction.approveError'))
+  }
+}
+
+/**
+ * TransactionDetailPanel 审批交易回调。
+ */
+function onApproveFromDetail(transactionId: string, _fullHash: string): void {
+  const tx = transactions.value.find((t: any) => t.transaction === transactionId)
+  if (tx) {
+    approveTransaction(tx)
+  }
+}
+
+function onSendMoney(recipient: string): void {
+  // 导航到发送资金页面/弹窗
+  console.log('[Transactions] sendMoney:', recipient)
+}
+
+function onSendMessage(recipient: string): void {
+  // 导航到发送消息页面/弹窗
+  console.log('[Transactions] sendMessage:', recipient)
+}
+
+function onAddContact(account: string): void {
+  // 导航到联系人页面
+  console.log('[Transactions] addContact:', account)
+}
+
+// 当过滤器变化且为 phased 时，不需要重新拉取（已在 transactions 中过滤）
+watch(activeFilter, (val) => {
+  if (val === 'phased') {
+    // phased 过滤仅在前端进行，不重新拉取
+  }
+})
 </script>
 
 <style scoped lang="scss">
@@ -320,6 +569,7 @@ function showTransactionDetail(row: NrcsTransaction | NrcsUnconfirmedTransaction
     .header-actions {
       display: flex;
       gap: $space-sm;
+      align-items: center;
     }
   }
 }
@@ -376,6 +626,10 @@ function showTransactionDetail(row: NrcsTransaction | NrcsUnconfirmedTransaction
 
   :deep(.tx-row-unconfirmed) > td {
     background: rgba($warning, 0.04) !important;
+  }
+
+  :deep(.tx-row-phased) > td {
+    border-left: 3px solid rgba($warning, 0.5);
   }
 }
 
@@ -440,17 +694,5 @@ function showTransactionDetail(row: NrcsTransaction | NrcsUnconfirmedTransaction
   &--confirmed   { background: $success-subtle; color: $success; }
   &--pending     { background: $warning-subtle; color: $warning; }
   &--unconfirmed { background: rgba(100, 116, 139, 0.15); color: $text-muted; }
-}
-
-.status-icon {
-  &.status-confirmed { color: $success; }
-  &.status-pending   { color: $warning; }
-  &.status-unconfirmed { color: $text-muted; }
-}
-
-.tx-detail {
-  :deep(.el-descriptions__label) {
-    font-weight: 600;
-  }
 }
 </style>

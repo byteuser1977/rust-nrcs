@@ -1080,3 +1080,46 @@ export function deepClone<T>(obj: T): T {
   }
   return JSON.parse(JSON.stringify(obj))
 }
+
+/**
+ * @deprecated Ethereum 风格的 wei → ETH 格式化函数。
+ *
+ * 仅为兼容尚未重写为 NRCS 风格的旧模块（如 `transaction.store.ts`）保留，
+ * 新代码请使用 NRCS 风格的 `formatAmount` / `nqtToNxt` 等函数。
+ *
+ * 1 ETH = 10^18 wei。使用 BigInt 精确计算，避免 Number 精度丢失。
+ *
+ * @param wei  wei 数量的字符串表示（避免 Number 精度丢失）。
+ * @returns    ETH 数量的字符串表示（保留 6 位小数）。
+ */
+export function formatWeiToEth(wei: string | number): string {
+  if (!wei && wei !== 0) return '0'
+  try {
+    const weiBig = BigInt(wei)
+    // 整数部分：wei / 10^18
+    const ETH_DIVISOR = BigInt(10) ** BigInt(18)
+    const intPart = weiBig / ETH_DIVISOR
+    // 小数部分：wei % 10^18，补齐 18 位后取前 6 位
+    const fracBig = weiBig % ETH_DIVISOR
+    const fracStr = fracBig.toString().padStart(18, '0').slice(0, 6)
+    return `${intPart}.${fracStr}`
+  } catch {
+    return '0'
+  }
+}
+
+/**
+ * @deprecated Ethereum 风格的 wei 格式化（带单位）函数。
+ *
+ * 仅为兼容尚未重写为 NRCS 风格的旧视图（如 `SendTransaction.vue`）保留，
+ * 新代码请使用 NRCS 风格的 `formatAmount` / `formatNrc` 等函数。
+ *
+ * 与 `formatWeiToEth` 的区别：本函数在数值后追加 " ETH" 单位后缀，
+ * 适合直接用于 UI 展示（如 Gas 费用总览）。
+ *
+ * @param wei  wei 数量的字符串表示。
+ * @returns    形如 "0.001234 ETH" 的展示字符串。
+ */
+export function formatWei(wei: string | number): string {
+  return `${formatWeiToEth(wei)} ETH`
+}
