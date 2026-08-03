@@ -58,6 +58,9 @@
           <span class="forging-label">{{ forgingStatusLabel }}</span>
         </div>
 
+        <!-- 远程节点响应确认率指示器（对标 nrs.remote.nodes.js updateConfirmationsIndicator） -->
+        <ConfirmationIndicator v-if="showConfirmationIndicator" />
+
         <div class="divider-v"></div>
 
         <div class="action-group">
@@ -312,8 +315,9 @@ import Breadcrumb from './Breadcrumb.vue'
 import SendMoneyModal from '@/components/modals/SendMoneyModal.vue'
 import SendMessageModal from '@/components/modals/SendMessageModal.vue'
 import ForgingModal from '@/components/modals/ForgingModal.vue'
+import ConfirmationIndicator from '@/components/remote-nodes/ConfirmationIndicator.vue'
 import { nrcsApi } from '@/api/modules'
-import { getAdminPassword } from '@/utils/feature-detection'
+import { getAdminPassword, isMobileApp } from '@/utils/feature-detection'
 
 interface Props { showBreadcrumb?: boolean }
 withDefaults(defineProps<Props>(), { showBreadcrumb: true })
@@ -365,6 +369,14 @@ const nodeVersion = computed(() => nodeStore.nodeVersion)
 const application = computed(() => nodeStore.application)
 /** 是否测试网 */
 const isTestnet = computed(() => nodeStore.isTestnet || accountStore.isTestNet)
+
+/**
+ * 是否显示远程节点响应确认率指示器。
+ *
+ * 对标 `nrs.remote.nodes.js` 中指示器仅在启用远程节点验证时可见：
+ * 移动端模拟（isMobileApp）或 API 代理（isApiProxy）场景。
+ */
+const showConfirmationIndicator = computed(() => isMobileApp() || isApiProxy.value)
 /** 是否轻客户端 */
 const isLightClient = computed(() => nodeStore.isLightClient)
 /** 是否 API 代理 */

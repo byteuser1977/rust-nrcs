@@ -822,6 +822,26 @@ export const nrcsApi = {
   },
 
   /**
+   * 获取铸造目标（对标 GetMintingTarget.java + CurrencyMinting.getNumericTarget）。
+   *
+   * 客户端使用返回的 targetBytes 和 counter 进行工作量证明计算：
+   * 循环递增 counter，计算 hash(nonce || currencyId || units || counter || accountId)，
+   * 直到 hash <= target（从高位字节比较）。
+   *
+   * @param currency 货币 ID
+   * @param account 账户 RS 地址
+   * @param units 铸造单位数（QNT）
+   */
+  getMintingTarget(currency: string, account: string, units: string) {
+    return nrcsGet<{
+      currency: string
+      difficulty: string
+      targetBytes: string
+      counter: string
+    }>('getMintingTarget', { currency, account, units })
+  },
+
+  /**
    * 获取货币持有人（对标 nrs.monetarysystem.js:1327 getCurrencyAccounts）。
    *
    * @param currency 货币 ID

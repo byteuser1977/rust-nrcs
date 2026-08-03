@@ -86,13 +86,62 @@
           </template>
         </el-table-column>
         <el-table-column prop="decimals" :label="t('monetary.decimals')" width="80" align="center" />
-        <el-table-column :label="t('common.actions')" width="160" fixed="right">
+        <el-table-column :label="t('common.actions')" width="280" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.type & 1" size="small" type="primary" link @click="openExchange(row)">
               <el-icon><TrendCharts /></el-icon> {{ t('monetary.exchange') || 'Exchange' }}
             </el-button>
             <el-button size="small" type="success" link @click="openTransfer(row)">
               <el-icon><Sort /></el-icon> {{ t('monetary.transfer') || 'Transfer' }}
+            </el-button>
+            <!-- 储备按钮（对标 reserve_currency_modal，仅 reservable 且未到发行高度） -->
+            <el-button
+              v-if="isReservable(row.type) && row.issuanceHeight > lastBlockHeight"
+              size="small"
+              type="info"
+              link
+              @click="openReserve(row)"
+            >
+              <el-icon><Wallet /></el-icon> {{ t('monetary.reserve') }}
+            </el-button>
+            <!-- 领取按钮（对标 claim_currency_modal，仅 claimable 且已到发行高度） -->
+            <el-button
+              v-if="isClaimable(row.type) && row.issuanceHeight <= lastBlockHeight"
+              size="small"
+              type="warning"
+              link
+              @click="openClaim(row)"
+            >
+              <el-icon><Download /></el-icon> {{ t('monetary.claim') }}
+            </el-button>
+            <!-- 铸造按钮（对标 mint_currency_modal，仅 mintable） -->
+            <el-button
+              v-if="isMintable(row.type)"
+              size="small"
+              type="primary"
+              link
+              @click="openMint(row)"
+            >
+              <el-icon><Coin /></el-icon> {{ t('monetary.mint') }}
+            </el-button>
+            <!-- 删除按钮（对标 delete_currency_modal，仅发行者可操作） -->
+            <el-button
+              v-if="isIssuer(row)"
+              size="small"
+              type="danger"
+              link
+              @click="openDelete(row)"
+            >
+              <el-icon><Delete /></el-icon> {{ t('monetary.delete') }}
+            </el-button>
+            <!-- 查看创建者按钮（对标 currency_founders_modal，仅 reservable 且未到发行高度） -->
+            <el-button
+              v-if="isReservable(row.type) && row.issuanceHeight > lastBlockHeight"
+              size="small"
+              link
+              @click="openFounders(row)"
+            >
+              <el-icon><User /></el-icon> {{ t('monetary.viewFounders') }}
             </el-button>
           </template>
         </el-table-column>
@@ -110,6 +159,31 @@
       @success="refreshData"
     />
     <IssueCurrencyModal v-model:visible="showIssue" @success="refreshData" />
+    <!-- 货币二级操作弹窗（对标 nrs.monetarysystem.js reserve/claim/mint/delete/founders） -->
+    <CurrencyReserveModal
+      v-model:visible="showReserveModal"
+      :currency="selectedCurrency"
+      @success="refreshData"
+    />
+    <CurrencyClaimModal
+      v-model:visible="showClaimModal"
+      :currency="selectedCurrency"
+      @success="refreshData"
+    />
+    <CurrencyMintModal
+      v-model:visible="showMintModal"
+      :currency="selectedCurrency"
+      @success="refreshData"
+    />
+    <CurrencyDeleteModal
+      v-model:visible="showDeleteModal"
+      :currency="selectedCurrency"
+      @success="refreshData"
+    />
+    <CurrencyFoundersModal
+      v-model:visible="showFoundersModal"
+      :currency="selectedCurrency"
+    />
   </div>
 </template>
 
@@ -117,19 +191,29 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { Coin, Plus, Refresh, Search, TrendCharts, Sort } from '@element-plus/icons-vue'
+import { Coin, Plus, Refresh, Search, TrendCharts, Sort, Wallet, Download, Delete, User } from '@element-plus/icons-vue'
 import { nrcsApi } from '@/api/modules/nrcs.api'
 import { useAccountStore } from '@/stores/modules/account.store'
+import { useNodeStore } from '@/stores/modules/node.store'
 import { usePolling } from '@/composables/usePolling'
 import { qntToQntf, truncateHash } from '@/utils/format'
 import CurrencyExchangeModal from '@/components/modals/CurrencyExchangeModal.vue'
 import CurrencyTransferModal from '@/components/modals/CurrencyTransferModal.vue'
 import IssueCurrencyModal from '@/components/modals/IssueCurrencyModal.vue'
+// 货币二级操作弹窗（对标 nrs.monetarysystem.js）
+import CurrencyReserveModal from '@/components/modals/CurrencyReserveModal.vue'
+import CurrencyClaimModal from '@/components/modals/CurrencyClaimModal.vue'
+import CurrencyMintModal from '@/components/modals/CurrencyMintModal.vue'
+import CurrencyDeleteModal from '@/components/modals/CurrencyDeleteModal.vue'
+import CurrencyFoundersModal from '@/components/modals/CurrencyFoundersModal.vue'
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
+const nodeStore = useNodeStore()
 
 const accountRS = computed(() => accountStore.accountRS)
+/** 最新区块高度（对标 NRS.lastBlockHeight，用于判断 issuanceHeight 是否已到） */
+const lastBlockHeight = computed(() => nodeStore.lastBlockHeight || 0)
 
 // --- State ---
 const loading = ref(false)
@@ -142,6 +226,13 @@ const showIssue = ref(false)
 const showExchangeModal = ref(false)
 const showTransferModal = ref(false)
 const selectedCurrency = ref<any>(null)
+
+// 货币二级操作弹窗状态
+const showReserveModal = ref(false)
+const showClaimModal = ref(false)
+const showMintModal = ref(false)
+const showDeleteModal = ref(false)
+const showFoundersModal = ref(false)
 
 // --- Computed ---
 const filteredCurrencies = computed(() => {
@@ -219,6 +310,54 @@ function openExchange(currency: any) {
 function openTransfer(currency: any) {
   selectedCurrency.value = currency
   showTransferModal.value = true
+}
+
+// ── 货币类型判断（对标 nrs.monetarysystem.js NRS.isReservable/isClaimable/isMintable） ──
+/** 是否可储备（对标 NRS.isReservable，type & 4） */
+function isReservable(type: number): boolean {
+  return (type & 4) !== 0
+}
+
+/** 是否可领取（对标 NRS.isClaimable，type & 8） */
+function isClaimable(type: number): boolean {
+  return (type & 8) !== 0
+}
+
+/** 是否可铸造（对标 NRS.isMintable，type & 16） */
+function isMintable(type: number): boolean {
+  return (type & 16) !== 0
+}
+
+/** 是否为发行者（对标参考 only issuer can delete，issuerRS === 当前账户） */
+function isIssuer(row: any): boolean {
+  const issuerRS = row.issuerRS || row.issuer
+  return !!accountRS.value && !!issuerRS && issuerRS === accountRS.value
+}
+
+// ── 二级操作入口（对标参考 data-toggle='modal' data-target='..._modal'） ──
+function openReserve(currency: any): void {
+  selectedCurrency.value = currency
+  showReserveModal.value = true
+}
+
+function openClaim(currency: any): void {
+  selectedCurrency.value = currency
+  showClaimModal.value = true
+}
+
+function openMint(currency: any): void {
+  selectedCurrency.value = currency
+  showMintModal.value = true
+}
+
+function openDelete(currency: any): void {
+  selectedCurrency.value = currency
+  showDeleteModal.value = true
+}
+
+function openFounders(currency: any): void {
+  selectedCurrency.value = currency
+  showFoundersModal.value = true
 }
 
 async function refreshData() {

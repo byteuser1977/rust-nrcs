@@ -52,6 +52,19 @@ useConstantsStore().loadServerConstants().catch((err) => {
 import { setupNotificationIntegration } from '@/composables/useNotificationIntegration'
 setupNotificationIntegration()
 
+// 7. 初始化远程节点管理器（对标 nrs.remote.nodes.js:35 的 NRS.initRemoteNodesMgr）。
+//    仅在移动端模拟或 API 代理场景启用 bootstrap/updateRemoteNodes；
+//    Web 端直连本地节点时无操作。confirmResponse 钩子在此注册，
+//    但仅当 requestNeedsConfirmation 返回 true 时才触发远程验证。
+//    非阻塞：失败不阻断渲染。
+import { initRemoteNodesMgr } from '@/utils/remote-nodes'
+import { getMobileSettings } from '@/utils/remote-nodes'
+import { getFeatureContext } from '@/utils/feature-detection'
+const isTestnet = getMobileSettings().is_testnet || !!getFeatureContext().isTestNet
+initRemoteNodesMgr(isTestnet).catch((err) => {
+  console.warn('[bootstrap] initRemoteNodesMgr failed:', err)
+})
+
 // 开发环境日志
 if (import.meta.env.DEV) {
   console.log(
