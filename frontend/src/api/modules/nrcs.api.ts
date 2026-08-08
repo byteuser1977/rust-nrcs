@@ -256,6 +256,22 @@ export interface NrcsCurrency {
   decimals: number
   issuer: string
   issuerRS: string
+  type?: number
+  algorithm?: number
+  /** 发行高度（对标参考 issuanceHeight） */
+  issuanceHeight?: number
+  /** 最小每单位储备 NQT（对标参考 minReservePerUnitNQT） */
+  minReservePerUnitNQT?: string
+  /** 当前每单位储备 NQT（对标参考 currentReservePerUnitNQT） */
+  currentReservePerUnitNQT?: string
+  /** 储备供应量 QNT（对标参考 reserveSupply） */
+  reserveSupply?: string
+  /** 初始供应量 QNT（对标参考 initialSupply） */
+  initialSupply?: string
+  /** 最大供应量 QNT（对标参考 maxSupply） */
+  maxSupply?: string
+  /** 当前供应量 QNT（对标参考 currentSupply） */
+  currentSupply?: string
   requestProcessingTime?: number
 }
 

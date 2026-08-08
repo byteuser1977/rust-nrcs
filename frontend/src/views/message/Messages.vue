@@ -10,6 +10,10 @@
           <el-icon><EditPen /></el-icon>
           {{ t('messages.send') }}
         </el-button>
+        <el-button size="small" @click="showDecryptModal = true">
+          <el-icon><Lock /></el-icon>
+          {{ t('messages.decryptAll') }}
+        </el-button>
         <el-button size="small" @click="refreshData">
           <el-icon><Refresh /></el-icon>
           {{ t('common.refresh') }}
@@ -143,6 +147,7 @@
     </div>
 
     <SendMessageModal v-model:visible="showSend" @success="refreshData" />
+    <DecryptMessagesModal v-model:visible="showDecryptModal" @decrypt="handleBatchDecrypt" />
   </div>
 </template>
 
@@ -173,6 +178,8 @@ import { useNrcsForm } from '@/composables/useNrcsForm'
 import { decryptNote, getPrivateKey } from '@/utils/nrcs-crypto'
 import { hexStringToByteArray } from '@/utils/converters'
 import SendMessageModal from '@/components/modals/SendMessageModal.vue'
+import DecryptMessagesModal from '@/components/modals/DecryptMessagesModal.vue'
+import { getAccountId } from '@/utils/nrcs-crypto'
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
@@ -182,6 +189,7 @@ const messages = ref<NrcsMessage[]>([])
 const selectedPartner = ref<string>('')
 const partnerFilter = ref('')
 const showSend = ref(false)
+const showDecryptModal = ref(false)
 const replyText = ref('')
 const replyEncrypt = ref(true)
 const sendingReply = ref(false)
@@ -465,6 +473,113 @@ async function sendReply() {
     console.error('Send reply failed:', e)
   } finally {
     sendingReply.value = false
+  }
+}
+
+/**
+ * 批量解密所有加密消息（对标 nrs.encryption.js:550-612 NRS.decryptAllMessages）。
+ *
+ * 安全模型：secretPhrase 不出客户端，本地逐条解密。
+ *
+ * 流程：
+ *   1. 验证 secretPhrase 对应的账户 ID 与当前账户匹配
+ *   2. 遍历所有消息，跳过已解密的和无 encryptedMessage 的
+ *   3. 逐条调用 decryptNote 解密，存入 decryptedMessages
+ *   4. 汇总成功/失败数量并提示
+ *
+ * @param payload 包含 secretPhrase 和可选 sharedKey
+ */
+async function handleBatchDecrypt(payload: { secretPhrase: string; sharedKey: string }) {
+  const { secretPhrase, sharedKey } = payload
+  const useSharedKey = !secretPhrase && !!sharedKey
+
+  // 验证 secretPhrase（对标参考 :561-567）
+  if (!useSharedKey) {
+    try {
+      const accountId = getAccountId(secretPhrase)
+      const currentAccountId = accountStore.accountId?.toString()
+      if (currentAccountId && accountId !== currentAccountId) {
+        ElMessage.error(t('messages.incorrectPassphrase'))
+        return
+      }
+    } catch {
+      ElMessage.error(t('messages.incorrectPassphrase'))
+      return
+    }
+  }
+
+  let success = 0
+  let error = 0
+
+  for (const msg of messages.value) {
+    // 跳过已解密的和无加密消息的（对标 :574）
+    if (!msg.attachment?.encryptedMessage) continue
+    if (decryptedMessages.value[msg.transaction!] !== undefined) continue
+
+    try {
+      const encryptedMsg = msg.attachment.encryptedMessage
+      const dataHex = encryptedMsg.data ?? encryptedMsg.encryptedMessageData
+      const nonceHex = encryptedMsg.nonce ?? encryptedMsg.encryptedMessageNonce
+      const isText = encryptedMsg.isText !== false
+      const isCompressed = encryptedMsg.isCompressed !== false
+
+      if (!dataHex || !nonceHex) {
+        error++
+        continue
+      }
+
+      let options: any = {}
+      if (useSharedKey) {
+        // 使用 sharedKey 解密（对标 :578-580）
+        options.sharedKey = hexStringToByteArray(sharedKey)
+      } else {
+        // 使用 secretPhrase 解密（对标 :581-583）
+        options.nonce = hexStringToByteArray(nonceHex)
+        const otherUser = msg.sender === accountStore.accountId?.toString()
+          ? msg.recipient
+          : msg.sender
+        if (otherUser) {
+          // 尝试获取对方公钥
+          let otherPublicKey = msg.sender === accountStore.accountId?.toString()
+            ? msg.recipientPublicKey
+            : msg.senderPublicKey
+          if (!otherPublicKey) {
+            try {
+              const pkResult = await nrcsApi.getAccountPublicKey(otherUser)
+              otherPublicKey = (pkResult as any).publicKey
+            } catch {
+              // 获取公钥失败
+            }
+          }
+          if (otherPublicKey) {
+            options.publicKey = hexStringToByteArray(otherPublicKey)
+          }
+        }
+        options.privateKey = hexStringToByteArray(getPrivateKey(secretPhrase))
+      }
+
+      options.isText = isText
+      options.isCompressed = isCompressed
+
+      // 客户端本地解密（对标 :590）
+      const result = decryptNote(dataHex, options, secretPhrase)
+      decryptedMessages.value[msg.transaction!] = result.message || t('messages.cannotDecrypt')
+      success++
+    } catch {
+      if (!useSharedKey) {
+        decryptedMessages.value[msg.transaction!] = t('messages.cannotDecrypt')
+      }
+      error++
+    }
+  }
+
+  // 结果提示（对标 :607-611）
+  if (success > 0) {
+    ElMessage.success(t('messages.batchDecryptResult', { success, error }))
+  } else if (error > 0) {
+    ElMessage.error(t('messages.batchDecryptFailed'))
+  } else {
+    ElMessage.info(t('messages.noEncryptedMessages'))
   }
 }
 </script>

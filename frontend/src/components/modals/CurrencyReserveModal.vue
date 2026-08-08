@@ -79,7 +79,7 @@ import { nrcsApi } from '@/api/modules/nrcs.api'
 import { useAccountStore } from '@/stores/modules/account.store'
 import { useNodeStore } from '@/stores/modules/node.store'
 import { useNrcsForm } from '@/composables/useNrcsForm'
-import { formatNqtToNrc, qntToQntf } from '@/utils/format'
+import { formatNqtToNrc, qntToQntf, nxtToNqt, nqtToNxt, amountToPrecision } from '@/utils/format'
 
 const props = defineProps<{ currency: any }>()
 const visible = defineModel<boolean>('visible', { default: false })
@@ -142,14 +142,17 @@ const perUnitDisplay = computed(() => {
   }
 })
 
-/** 每 whole unit 的 NQT（对标参考 unitAmountNQT） */
+/** 每 whole unit 的 NQT（对标参考 unitAmountNQT = amountNQT / resSupplyWhole） */
 const perUnitNqt = computed(() => {
   if (!form.amountNXT) return '0'
   try {
-    const totalNqt = BigInt(Math.round(Number(form.amountNXT) * 1e8))
-    const resSupplyWhole = BigInt(Math.round(Number(qntToQntf(currencyInfo.reserveSupply, currencyInfo.decimals))))
-    if (resSupplyWhole === 0n) return '0'
-    return (totalNqt / resSupplyWhole).toString()
+    // 对标 NRS.convertToNQT(amountNXT) — 字符串运算，无浮点精度损失
+    const amountNqt = nxtToNqt(form.amountNXT)
+    // 对标 NRS.convertToQNTf(reserveSupplyQNT, decimals) — 获取 whole QNT 数
+    const resSupplyWhole = qntToQntf(currencyInfo.reserveSupply, currencyInfo.decimals)
+    if (!resSupplyWhole || resSupplyWhole === '0') return '0'
+    // 对标 BigInteger(amountNQT).divide(BigInteger(resSupply))
+    return (BigInt(amountNqt) / BigInt(resSupplyWhole)).toString()
   } catch {
     return '0'
   }
@@ -192,10 +195,14 @@ function recalculate(): void {
 }
 
 /**
- * 提交增加储备（对标 NRS.forms.currencyReserveIncrease）。
+ * 提交增加储备（对标 NRS.forms.currencyReserveIncrease + reserve_currency_amount.blur）。
  *
- * amountPerUnitNQT = (totalNQT / resSupply) / 10^decimals
- * 对标 `calculatePricePerWholeQNT(convertToNQT(amount), decimals)`。
+ * 参考 JS 流程：
+ *   1. amountNQT = NRS.convertToNQT(amountNXT)
+ *   2. resSupply = NRS.convertToQNTf(reserveSupplyQNT, decimals)
+ *   3. unitAmountNQT = BigInteger(amountNQT) / BigInteger(resSupply)
+ *   4. roundUnitAmountNQT = convertToNQT(amountToPrecision(convertToNXT(unitAmountNQT), decimals))
+ *   5. amountPerUnitNQT = calculatePricePerWholeQNT(convertToNQT(roundUnitAmountNQT), decimals)
  */
 async function handleSubmit(): Promise<void> {
   if (!formRef.value) return
@@ -203,12 +210,23 @@ async function handleSubmit(): Promise<void> {
     if (!valid) return
     loading.value = true
     try {
-      const totalNqt = BigInt(Math.round(Number(form.amountNXT) * 1e8))
-      const resSupplyWhole = BigInt(Math.round(Number(qntToQntf(currencyInfo.reserveSupply, currencyInfo.decimals))))
-      if (resSupplyWhole === 0n) throw new Error(t('monetary.invalidReserveSupply'))
-      const unitAmountNqt = totalNqt / resSupplyWhole
-      const divisor = 10n ** BigInt(currencyInfo.decimals)
-      const amountPerUnitNQT = (unitAmountNqt / divisor).toString()
+      // ── 对标 reserve_currency_amount.blur 计算 ──
+      // Step 1: NXT → NQT（字符串运算，无浮点精度损失）
+      const amountNqt = nxtToNqt(form.amountNXT)
+      // Step 2: reserveSupplyQNT → whole QNT 数
+      const resSupplyWhole = qntToQntf(currencyInfo.reserveSupply, currencyInfo.decimals)
+      if (!resSupplyWhole || resSupplyWhole === '0') throw new Error(t('monetary.invalidReserveSupply'))
+      // Step 3: unitAmountNQT = amountNQT / resSupplyWhole
+      const unitAmountNqt = BigInt(amountNqt) / BigInt(resSupplyWhole)
+      // Step 4: round to decimals precision（对标 amountToPrecision + convertToNQT 往返）
+      const unitAmountNrc = nqtToNxt(unitAmountNqt.toString())
+      const roundedUnitAmountNrc = amountToPrecision(unitAmountNrc, currencyInfo.decimals)
+      const roundUnitAmountNqt = nxtToNqt(roundedUnitAmountNrc)
+      // Step 5: amountPerUnitNQT = calculatePricePerWholeQNT(roundUnitAmountNQT, decimals)
+      // 对标参考：strip last `decimals` digits from NQT string
+      const amountPerUnitNQT = currencyInfo.decimals > 0 && roundUnitAmountNqt.length > currencyInfo.decimals
+        ? roundUnitAmountNqt.slice(0, -currencyInfo.decimals)
+        : roundUnitAmountNqt
 
       await submitForm('currencyReserveIncrease', {
         currency: currencyInfo.currency,

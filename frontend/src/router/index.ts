@@ -595,6 +595,16 @@ const routes: AppRouteRecordRaw[] = [
             }
           },
           {
+            path: 'general',
+            name: 'GeneralSettings',
+            component: () => import('@/views/settings/Settings.vue'),
+            meta: {
+              title: '全局设置',
+              icon: 'Setting',
+              requireAuth: true
+            }
+          },
+          {
             path: 'token',
             name: 'TokenGenerator',
             component: () => import('@/views/settings/TokenGenerator.vue'),

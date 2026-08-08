@@ -36,10 +36,10 @@
       <el-descriptions :column="5" border size="small" class="mt-16">
         <el-descriptions-item :label="t('monetary.foundersTotals')"></el-descriptions-item>
         <el-descriptions-item :label="''">
-          <b>{{ formatNqtToNrc(totalAmountReservedNqt) }} NRC</b>
+          <b>{{ formatNqtToNrc(totalAmountReservedNqt.toString()) }} NRC</b>
         </el-descriptions-item>
         <el-descriptions-item :label="''">
-          <b>{{ formatNqtToNrc(totalAmountReservedNqt * reserveSupplyWhole) }} NRC</b>
+          <b>{{ formatNqtToNrc((totalAmountReservedNqt * reserveSupplyWhole).toString()) }} NRC</b>
         </el-descriptions-item>
         <el-descriptions-item :label="''">
           <b>{{ formatQNT(reserveSupplyMinusInitial, decimals) }}</b>
