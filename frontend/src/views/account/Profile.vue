@@ -1,67 +1,125 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+/**
+ * 账户资料页面
+ *
+ * 展示当前登录账户的链上信息（对标 NRCS getAccount 返回的字段）：
+ * 账户名 / 描述 / RS 地址 / 数字账户 ID / 公钥 / 余额 / 有效余额。
+ * 数据全部来自 account store，可手动刷新。
+ */
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
 import { useAccountStore } from '@/stores/modules/account.store'
-import { ElCard, ElDescriptions, ElDescriptionsItem, ElTag } from 'element-plus'
-import { formatAddress } from '@/utils/format'
+import { formatNrc, truncateHash } from '@/utils/format'
 
 const { t } = useI18n()
 const accountStore = useAccountStore()
 
-const user = computed(() => accountStore.userInfo)
+const loading = ref(false)
+
 const isLoggedIn = computed(() => accountStore.isLoggedIn)
+const name = computed(() => accountStore.name || '—')
+const description = computed(() => accountStore.description || '—')
+const accountRS = computed(() => accountStore.accountRS)
+const accountId = computed(() => accountStore.accountId)
+const publicKey = computed(() => accountStore.publicKey)
+const balanceNQT = computed(() => accountStore.balanceNQT)
+const effectiveBalance = computed(() => accountStore.effectiveBalance)
+
+// 挂载时拉取一次完整账户信息（失败不阻断，展示已有状态）
+onMounted(() => {
+  if (accountStore.isLoggedIn) {
+    refresh()
+  }
+})
+
+/**
+ * 刷新账户链上信息（完整模式：含租赁/控制/资产状态）
+ */
+async function refresh() {
+  if (!accountStore.accountRS) return
+  loading.value = true
+  try {
+    await accountStore.getAccountInfo(accountStore.accountRS)
+  } catch (e: any) {
+    ElMessage.error(e?.message || t('common.loadError'))
+  } finally {
+    loading.value = false
+  }
+}
 </script>
 
 <template>
   <div class="profile">
-    <h1 class="page-title">{{ t('account.profile') }}</h1>
+    <div class="page-header">
+      <h1 class="page-title">{{ t('account.profile') }}</h1>
+      <div class="header-actions">
+        <el-button size="small" :loading="loading" @click="refresh">
+          <el-icon><Refresh /></el-icon> {{ t('common.refresh') }}
+        </el-button>
+      </div>
+    </div>
 
-    <el-card shadow="never" v-if="isLoggedIn && user">
+    <el-card shadow="never" v-if="isLoggedIn" v-loading="loading">
       <el-descriptions :column="2" border>
         <el-descriptions-item :label="t('account.name')">
-          {{ user.name }}
+          {{ name }}
         </el-descriptions-item>
 
-        <el-descriptions-item :label="t('account.email')">
-          {{ user.email }}
+        <el-descriptions-item :label="t('account.balance')">
+          {{ formatNrc(balanceNQT) }} NRC
         </el-descriptions-item>
 
-        <el-descriptions-item :label="t('account.address')">
-          <div class="address-cell">
-            <code>{{ formatAddress(user.wallet_address, 8) }}</code>
-          </div>
+        <el-descriptions-item :label="t('account.rsAddress')" :span="2">
+          <code class="mono">{{ accountRS }}</code>
         </el-descriptions-item>
 
-        <el-descriptions-item :label="t('account.role')">
-          <el-tag>{{ user.role }}</el-tag>
+        <el-descriptions-item :label="t('account.accountId')">
+          <code class="mono">{{ accountId }}</code>
         </el-descriptions-item>
 
-        <el-descriptions-item :label="t('account.createdAt')" :span="2">
-          {{ user.created_at }}
+        <el-descriptions-item :label="t('account.effectiveBalance')">
+          {{ effectiveBalance }} NRC
+        </el-descriptions-item>
+
+        <el-descriptions-item :label="t('account.publicKey')" :span="2">
+          <code class="mono">{{ truncateHash(publicKey, 16) }}</code>
+        </el-descriptions-item>
+
+        <el-descriptions-item :label="t('account.description')" :span="2">
+          {{ description }}
         </el-descriptions-item>
       </el-descriptions>
     </el-card>
 
-    <el-empty v-else description="未登录" />
+    <el-empty v-else :description="t('account.notLoggedIn')" />
   </div>
 </template>
 
 <style lang="scss" scoped>
 .profile {
-  .page-title {
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 24px;
-    font-size: 24px;
-    font-weight: 600;
+
+    .page-title {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
   }
 
-  .address-cell {
-    code {
-      font-family: 'Monaco', 'Consolas', monospace;
-      background: #f5f5f5;
-      padding: 2px 6px;
-      border-radius: 4px;
-      color: #409eff;
-    }
+  .mono {
+    font-family: 'Monaco', 'Consolas', monospace;
+    word-break: break-all;
   }
 }
 </style>
